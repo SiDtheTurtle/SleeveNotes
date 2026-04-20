@@ -106,6 +106,7 @@
     border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
   }
+  .toolbar.collapsed { display: none; }
 
   .search-wrap {
     position: relative;
@@ -452,6 +453,7 @@
     max-width: 700px;
     max-height: 90vh;
     overflow-y: auto;
+    overflow-x: hidden;
     transform: translateY(16px);
     transition: transform 0.2s;
     border: 1px solid var(--border);
@@ -853,6 +855,10 @@
 
   @media (max-width: 599px) {
     .stats-bar { gap: 0.5rem; }
+    .modal-backdrop { padding: 0.5rem; }
+    .modal-body { padding: 1rem; }
+    .modal-header { padding: 1rem; }
+    .modal-footer { padding: 0.75rem 1rem; }
   }
 </style>
 </head>
@@ -864,8 +870,7 @@
     SleeveNotes
   </div>
   <div class="header-actions">
-    <button class="btn btn-secondary btn-sm" onclick="openImport()" style="color:white;border-color:rgba(255,255,255,0.4)">⬆ Import</button>
-    <button class="btn btn-secondary btn-sm" onclick="doExport()" style="color:white;border-color:rgba(255,255,255,0.4)">⬇ Export</button>
+    <button class="btn btn-ghost btn-sm" id="toolbar-toggle-btn" onclick="toggleToolbar()"><span id="toolbar-toggle-icon">▾</span> Options</button>
     <button class="btn btn-primary btn-sm" onclick="openAdd()">+ Add Record</button>
     <button class="btn btn-ghost btn-icon" onclick="openSettings()" title="Settings" style="color:var(--groove)">⚙</button>
   </div>
@@ -878,7 +883,7 @@
   <div class="stat-item"><span class="stat-label">Collection Value</span><span class="stat-value" id="s-valuation">—</span></div>
 </div>
 
-<div class="toolbar">
+<div class="toolbar" id="toolbar">
   <div class="view-toggle">
     <button class="btn btn-ghost active" id="btn-table" onclick="setView('table')">▤ Table</button>
     <button class="btn btn-ghost" id="btn-tile" onclick="setView('tile')">⊞ Tiles</button>
@@ -902,7 +907,7 @@
 
   <label class="toggle-row" id="group-by-wrapper" style="cursor:pointer">
     <label class="toggle">
-      <input type="checkbox" id="group-by-artist" onchange="renderView()">
+      <input type="checkbox" id="group-by-artist" onchange="onGroupByArtistToggle()">
       <div class="toggle-track"></div>
       <div class="toggle-thumb"></div>
     </label>
@@ -920,7 +925,16 @@
 
   <label class="toggle-row" style="cursor:pointer">
     <label class="toggle">
-      <input type="checkbox" id="show-returned" onchange="loadRecords()">
+      <input type="checkbox" id="show-tags" onchange="onShowTagsToggle()">
+      <div class="toggle-track"></div>
+      <div class="toggle-thumb"></div>
+    </label>
+    <span style="font-size:12px;color:var(--ink-light)">Show tags</span>
+  </label>
+
+  <label class="toggle-row" style="cursor:pointer">
+    <label class="toggle">
+      <input type="checkbox" id="show-returned" onchange="onShowReturnedToggle()">
       <div class="toggle-track"></div>
       <div class="toggle-thumb"></div>
     </label>
@@ -1178,6 +1192,14 @@
       </div>
 
       <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Data</div>
+        <div style="display:flex;gap:0.5rem;">
+          <button class="btn btn-secondary btn-sm" onclick="closeModal('modal-settings');openImport()">Import from CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="doExport()">Export to CSV</button>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
         <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Fetch All from Discogs</div>
         <div style="font-size:12px;color:var(--ink-light)">Re-fetches metadata and valuations for existing records. Preserves purchase details. Runs 5 records concurrently (2 API calls each), ~30 records per minute.</div>
         <div id="fetch-range-btns" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
@@ -1253,9 +1275,46 @@ const OBVIOUS_FORMATS = new Set(['Album', 'LP', 'Stereo', 'Vinyl']);
 let filterFormat = null; // active format tag string, or null
 let selectedTileId = null;
 let showValuations = false;
+let showTags = false;
+
+// ── localStorage helpers ────────────────────────────────────────────────────
+function lsGet(key, fallback) {
+  try { const v = localStorage.getItem('sn_' + key); return v !== null ? JSON.parse(v) : fallback; }
+  catch { return fallback; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem('sn_' + key, JSON.stringify(val)); } catch {}
+}
+
+function restoreLocalState() {
+  // View
+  currentView = lsGet('view', 'table');
+  document.getElementById('btn-table').classList.toggle('active', currentView === 'table');
+  document.getElementById('btn-tile').classList.toggle('active', currentView === 'tile');
+  document.getElementById('group-by-wrapper').style.display = currentView === 'table' ? '' : 'none';
+
+  // Toggles
+  showValuations = lsGet('showValuations', false);
+  document.getElementById('show-valuations').checked = showValuations;
+
+  showTags = lsGet('showTags', false);
+  document.getElementById('show-tags').checked = showTags;
+
+  const showReturned = lsGet('showReturned', false);
+  document.getElementById('show-returned').checked = showReturned;
+
+  const groupByArtist = lsGet('groupByArtist', false);
+  document.getElementById('group-by-artist').checked = groupByArtist;
+
+  // Toolbar
+  const defaultExpanded = window.innerWidth >= 768;
+  const toolbarExpanded = lsGet('toolbarExpanded', defaultExpanded);
+  applyToolbarState(toolbarExpanded);
+}
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  restoreLocalState();
   await loadSettings();
   loadRecords();
   document.getElementById('modal-detail').addEventListener('click', e => {
@@ -1329,6 +1388,7 @@ function updateStats() {
 
 function onShowValuationsToggle() {
   showValuations = document.getElementById('show-valuations').checked;
+  lsSet('showValuations', showValuations);
   updateStats();
 }
 
@@ -1402,6 +1462,34 @@ function setView(v) {
   document.getElementById('btn-table').classList.toggle('active', v === 'table');
   document.getElementById('btn-tile').classList.toggle('active', v === 'tile');
   document.getElementById('group-by-wrapper').style.display = v === 'table' ? '' : 'none';
+  lsSet('view', v);
+  renderView();
+}
+
+function applyToolbarState(expanded) {
+  document.getElementById('toolbar').classList.toggle('collapsed', !expanded);
+  document.getElementById('toolbar-toggle-icon').textContent = expanded ? '▾' : '▸';
+}
+
+function toggleToolbar() {
+  const expanded = document.getElementById('toolbar').classList.contains('collapsed');
+  applyToolbarState(expanded);
+  lsSet('toolbarExpanded', expanded);
+}
+
+function onShowTagsToggle() {
+  showTags = document.getElementById('show-tags').checked;
+  lsSet('showTags', showTags);
+  updateFormatFilterBar();
+}
+
+function onShowReturnedToggle() {
+  lsSet('showReturned', document.getElementById('show-returned').checked);
+  loadRecords();
+}
+
+function onGroupByArtistToggle() {
+  lsSet('groupByArtist', document.getElementById('group-by-artist').checked);
   renderView();
 }
 
@@ -2120,7 +2208,7 @@ function fmtTagsCell(s) {
 function updateFormatFilterBar() {
   const bar = document.getElementById('format-filter-bar');
   const allTags = [...new Set(records.flatMap(r => formatTags(r.format)))].sort();
-  if (!allTags.length) { bar.style.display = 'none'; return; }
+  if (!allTags.length || !showTags) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
   bar.innerHTML = allTags.map(t =>
     `<span class="fmt-tag-filter${filterFormat === t ? ' active' : ''}" data-tag="${esc(t)}">${esc(t)}</span>`
