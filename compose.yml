@@ -1,0 +1,15 @@
+services:
+  sleevenotes:
+    build: .
+    container_name: sleevenotes
+    ports:
+      - "2026:2026"
+    volumes:
+      - data:/data
+    env_file:
+      - sleevenotes.env
+    restart: unless-stopped
+
+volumes:
+  data:
+    name: sleevenotes_data

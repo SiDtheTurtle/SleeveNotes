@@ -1,0 +1,2174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SleeveNotes</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1a1a'/><circle cx='50' cy='50' r='14' fill='%23B8962E'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #F5F0E8;
+    --warm-white: #FAFAF7;
+    --ink: #1A1814;
+    --ink-mid: #3D3830;
+    --ink-light: #7A7268;
+    --groove: #C8B89A;
+    --groove-dark: #9E8E78;
+    --red: #C0392B;
+    --green: #2E6B45;
+    --blue: #1A4A7A;
+    --gold: #B8962E;
+    --surface: #EDEAE2;
+    --border: #D8D2C8;
+    --shadow: rgba(26,24,20,0.12);
+    --radius: 4px;
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--ink);
+    color: var(--cream);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 2px solid var(--gold);
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    letter-spacing: 0.02em;
+    color: var(--cream);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .logo-dot {
+    width: 10px; height: 10px;
+    background: var(--gold);
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 4s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  /* ── Stats bar ── */
+  .stats-bar {
+    background: var(--ink-mid);
+    color: var(--cream);
+    padding: 0.5rem 2rem;
+    display: flex;
+    gap: 2.5rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .stat-item { display: flex; gap: 0.5rem; align-items: baseline; }
+  .stat-label { color: var(--groove); text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat-value { font-weight: 500; color: var(--cream); }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    padding: 0.875rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--warm-white);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 360px;
+  }
+
+  .search-wrap input {
+    width: 100%;
+    padding: 7px 10px 7px 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--cream);
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+  }
+
+  .search-wrap input:focus { border-color: var(--groove-dark); }
+
+  .search-icon {
+    position: absolute;
+    left: 10px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-light);
+    font-size: 13px;
+    pointer-events: none;
+  }
+
+  select.filter {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--cream);
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+    cursor: pointer;
+  }
+
+  select.filter:focus { border-color: var(--groove-dark); }
+
+  .toolbar-sep { width: 1px; height: 24px; background: var(--border); margin: 0 0.25rem; }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+  }
+
+  .btn-primary { background: var(--ink); color: var(--cream); }
+  .btn-primary:hover { background: var(--ink-mid); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--ink-mid);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: var(--surface); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink-light);
+    border: none;
+    padding: 7px 10px;
+  }
+  .btn-ghost:hover { color: var(--ink); background: var(--surface); }
+
+  .btn-danger { background: var(--red); color: white; }
+  .btn-danger:hover { opacity: 0.9; }
+
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  .btn-icon {
+    width: 32px; height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius);
+  }
+
+  .btn-nav {
+    width: 44px; height: 44px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+  .btn-nav:hover { background: var(--border); }
+  .btn-nav:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .view-toggle .btn { border-radius: 0; border: none; }
+  .view-toggle .btn.active { background: var(--ink); color: var(--cream); }
+
+  /* ── Main content ── */
+  main { padding: 1.5rem 2rem; }
+
+  /* ── Table view ── */
+  .table-wrap { overflow-x: auto; background: var(--warm-white); border-radius: 6px; border: 1px solid var(--border); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+
+  th {
+    text-align: left;
+    padding: 9px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ink-light);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    background: var(--surface);
+  }
+
+  th:hover { color: var(--ink); }
+  th .sort-arrow { margin-left: 4px; opacity: 0.4; }
+  th.sorted .sort-arrow { opacity: 1; color: var(--gold); }
+
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface); }
+
+  .cover-thumb {
+    width: 36px; height: 36px;
+    object-fit: cover;
+    border-radius: 2px;
+    display: block;
+    background: var(--surface);
+  }
+
+  .cover-placeholder {
+    width: 36px; height: 36px;
+    background: var(--surface);
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--groove);
+    font-size: 16px;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .badge-ic { background: #D4EDDA; color: var(--green); }
+  .badge-p { background: #D0E4F7; color: var(--blue); }
+  .badge-r { background: #F5D5D0; color: var(--red); }
+  .badge-new { background: #EDEAE5; color: #6B6560; font-size: 9px; padding: 1px 5px; border: 1px solid #C8C3BC; }
+  .badge-used { background: var(--surface); color: var(--ink-light); font-size: 9px; padding: 1px 5px; border: 1px solid var(--border); }
+
+  .discogs-link { color: var(--blue); text-decoration: none; font-family: var(--font-mono); font-size: 11px; }
+  .discogs-link:hover { text-decoration: underline; }
+
+  .fmt-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    background: var(--surface);
+    color: var(--ink-mid);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .fmt-tag-filter {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    background: var(--surface);
+    color: var(--ink-mid);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.1s, color 0.1s;
+  }
+  .fmt-tag-filter:hover { background: var(--border); }
+  .fmt-tag-filter.active { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+
+  .format-filter-bar {
+    padding: 0.5rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    background: var(--warm-white);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .text-mono { font-family: var(--font-mono); font-size: 11px; color: var(--ink-light); }
+  .text-right { text-align: right; }
+  .overflow { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+  .note-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--ink-light); }
+
+  .row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+  tbody tr:hover .row-actions { opacity: 1; }
+
+  .group-header td {
+    background: var(--surface);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    padding: 10px 10px 6px;
+    border-bottom: 2px solid var(--groove);
+    letter-spacing: 0.01em;
+  }
+
+  /* ── Tile view ── */
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .tile {
+    cursor: pointer;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--surface);
+    position: relative;
+  }
+
+  .tile-img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
+  }
+
+  .tile-placeholder {
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 4rem;
+    color: var(--groove);
+  }
+
+  .tile-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.72);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .tile.active .tile-overlay {
+    opacity: 1;
+  }
+
+  .tile-overlay-artist {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .tile-overlay-title {
+    font-size: 16px;
+    color: rgba(255,255,255,0.8);
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(26,24,20,0.6);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  .modal-backdrop.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .modal {
+    background: var(--warm-white);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+    transform: translateY(16px);
+    transition: transform 0.2s;
+    border: 1px solid var(--border);
+  }
+
+  .modal-backdrop.open .modal { transform: translateY(0); }
+
+  .modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: var(--warm-white);
+    z-index: 1;
+  }
+
+  .modal-title {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    color: var(--ink);
+  }
+
+  .modal-body { padding: 1.5rem; }
+  .modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    background: var(--surface);
+    border-radius: 0 0 8px 8px;
+  }
+
+  /* ── Detail view (tile click) ── */
+  .detail-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.25rem;
+  }
+  .detail-tab-btn {
+    padding: 8px 18px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    color: var(--ink-light);
+    font-size: 14px;
+  }
+  .detail-tab-btn.active {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+  .detail-tab-panel { display: none; }
+  .detail-tab-panel.active { display: block; }
+
+  .tracklist-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .tracklist-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .tracklist-table td:first-child { color: var(--ink-light); width: 3rem; white-space: nowrap; }
+  .tracklist-table td:last-child  { color: var(--ink-light); text-align: right; white-space: nowrap; }
+  .tracklist-heading td {
+    font-weight: 600;
+    color: var(--ink-light);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding-top: 12px;
+    border-bottom: none;
+    background: none;
+  }
+
+  .detail-layout {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .detail-cover {
+    width: 200px;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  .detail-cover-placeholder {
+    width: 200px;
+    aspect-ratio: 1;
+    background: var(--surface);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 4rem;
+    color: var(--groove);
+    border: 1px solid var(--border);
+  }
+
+  .carousel-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    width: 200px;
+  }
+
+  .carousel-img-wrap {
+    position: relative;
+    width: 200px;
+    aspect-ratio: 1;
+  }
+
+  .carousel-img-wrap img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    display: block;
+  }
+
+  .carousel-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .carousel-arrow:hover { background: rgba(0,0,0,0.8); }
+  .carousel-arrow.prev { left: 6px; }
+  .carousel-arrow.next { right: 6px; }
+
+  .carousel-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 11px;
+    color: var(--ink-light);
+    font-family: var(--font-mono);
+  }
+
+  .detail-fields { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  .detail-artist {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--ink);
+  }
+
+  .detail-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--ink-mid);
+    font-style: italic;
+    margin-bottom: 0.5rem;
+  }
+
+  .detail-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+
+  .detail-row {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 12.5px;
+    align-items: baseline;
+  }
+
+  .detail-key {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-light);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    min-width: 100px;
+    flex-shrink: 0;
+  }
+
+  .detail-val { color: var(--ink); }
+
+  /* ── Form ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .form-full { grid-column: 1 / -1; }
+
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+
+  .form-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-light);
+    font-weight: 500;
+  }
+
+  .form-control {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--cream);
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+    width: 100%;
+    transition: border-color 0.15s;
+  }
+
+  .form-control:focus { border-color: var(--groove-dark); }
+
+  .form-control[readonly] { background: var(--surface); color: var(--ink-light); cursor: default; }
+
+  .input-prefix-wrap {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--cream);
+    transition: border-color 0.15s;
+  }
+  .input-prefix-wrap:focus-within { border-color: var(--groove-dark); }
+  .input-prefix {
+    padding: 8px 8px 8px 10px;
+    background: var(--surface);
+    color: var(--ink-light);
+    font-size: 13px;
+    border-right: 1px solid var(--border);
+    user-select: none;
+  }
+  .input-prefix-wrap .form-control {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+  }
+  .input-prefix-wrap .form-control:focus { border-color: transparent; }
+
+  .form-section {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--groove-dark);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
+    grid-column: 1 / -1;
+  }
+
+  .toggle-row { display: flex; align-items: center; gap: 0.75rem; }
+
+  .toggle {
+    position: relative;
+    width: 36px; height: 20px;
+    cursor: pointer;
+  }
+
+  .toggle input { display: none; }
+
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--border);
+    border-radius: 10px;
+    transition: background 0.2s;
+  }
+
+  .toggle input:checked + .toggle-track { background: var(--green); }
+
+  .toggle-thumb {
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 14px; height: 14px;
+    background: white;
+    border-radius: 50%;
+    transition: left 0.2s;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .toggle input:checked ~ .toggle-thumb { left: 19px; }
+
+  /* ── Discogs fetch UI ── */
+  .discogs-fetch-row { display: flex; gap: 0.5rem; }
+  .discogs-fetch-row .form-control { flex: 1; }
+
+  .discogs-preview {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-top: 0.5rem;
+  }
+
+  .discogs-preview img { width: 60px; height: 60px; object-fit: cover; border-radius: 2px; }
+  .discogs-preview-info { flex: 1; }
+  .discogs-preview-artist { font-weight: 500; font-size: 13px; }
+  .discogs-preview-title { font-size: 12px; color: var(--ink-mid); font-style: italic; }
+  .discogs-preview-meta { font-size: 11px; color: var(--ink-light); font-family: var(--font-mono); margin-top: 4px; }
+
+  /* ── Empty state ── */
+  .empty {
+    padding: 4rem 2rem;
+    text-align: center;
+    color: var(--ink-light);
+  }
+
+  .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+  .empty-text { font-family: var(--font-display); font-size: 1.1rem; color: var(--ink-mid); }
+  .empty-sub { font-size: 12px; margin-top: 0.5rem; }
+
+  /* ── Toast ── */
+  .toast-container {
+    position: fixed;
+    bottom: 1.5rem; right: 1.5rem;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .toast {
+    background: var(--ink);
+    color: var(--cream);
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    border-left: 3px solid var(--gold);
+    animation: slideIn 0.2s ease;
+    box-shadow: 0 4px 12px var(--shadow);
+  }
+
+  .toast.error { border-left-color: var(--red); }
+  .toast.success { border-left-color: var(--green); }
+
+  @keyframes slideIn {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* ── Misc ── */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--ink);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+
+  .hidden { display: none !important; }
+
+  /* ── Responsive column visibility ── */
+  @media (max-width: 899px) {
+    .col-md { display: none !important; }
+  }
+  @media (max-width: 599px) {
+    .col-sm { display: none !important; }
+  }
+
+  @media (max-width: 899px) {
+    header { padding: 0 1rem; }
+    .stats-bar { padding: 0.5rem 1rem; gap: 0.75rem; flex-wrap: wrap; }
+    .stat-label { font-size: 9px; }
+    .toolbar { padding: 0.75rem 1rem; gap: 0.5rem; }
+    .search-wrap { flex: 1 1 100%; order: -1; }
+    main { padding: 1rem; }
+    .form-grid { grid-template-columns: 1fr; }
+    .detail-layout { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 599px) {
+    .stats-bar { gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-dot"></span>
+    SleeveNotes
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-secondary btn-sm" onclick="openImport()" style="color:white;border-color:rgba(255,255,255,0.4)">⬆ Import</button>
+    <button class="btn btn-secondary btn-sm" onclick="doExport()" style="color:white;border-color:rgba(255,255,255,0.4)">⬇ Export</button>
+    <button class="btn btn-primary btn-sm" onclick="openAdd()">+ Add Record</button>
+    <button class="btn btn-ghost btn-icon" onclick="openSettings()" title="Settings" style="color:var(--groove)">⚙</button>
+  </div>
+</header>
+
+<div class="stats-bar" id="stats-bar">
+  <div class="stat-item"><span class="stat-label">Total Entries</span><span class="stat-value" id="s-total">—</span></div>
+  <div class="stat-item"><span class="stat-label">In Collection</span><span class="stat-value" id="s-col">—</span></div>
+  <div class="stat-item"><span class="stat-label">Collection Cost</span><span class="stat-value" id="s-cost">—</span></div>
+  <div class="stat-item"><span class="stat-label">Collection Value</span><span class="stat-value" id="s-valuation">—</span></div>
+</div>
+
+<div class="toolbar">
+  <div class="view-toggle">
+    <button class="btn btn-ghost active" id="btn-table" onclick="setView('table')">▤ Table</button>
+    <button class="btn btn-ghost" id="btn-tile" onclick="setView('tile')">⊞ Tiles</button>
+  </div>
+
+  <div class="toolbar-sep"></div>
+
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input type="text" id="search" placeholder="Search artist, title, label…" oninput="renderView()">
+  </div>
+
+  <select class="filter" id="filter-status" onchange="renderView()">
+    <option value="">All Statuses</option>
+    <option value="In Collection">In Collection</option>
+    <option value="Purchased">Purchased</option>
+    <option value="Returned">Returned</option>
+  </select>
+
+  <div class="toolbar-sep"></div>
+
+  <label class="toggle-row" id="group-by-wrapper" style="cursor:pointer">
+    <label class="toggle">
+      <input type="checkbox" id="group-by-artist" onchange="renderView()">
+      <div class="toggle-track"></div>
+      <div class="toggle-thumb"></div>
+    </label>
+    <span style="font-size:12px;color:var(--ink-light)">Group by artist</span>
+  </label>
+
+  <label class="toggle-row" style="cursor:pointer">
+    <label class="toggle">
+      <input type="checkbox" id="show-valuations" onchange="onShowValuationsToggle()">
+      <div class="toggle-track"></div>
+      <div class="toggle-thumb"></div>
+    </label>
+    <span style="font-size:12px;color:var(--ink-light)">Show valuations</span>
+  </label>
+
+  <label class="toggle-row" style="cursor:pointer">
+    <label class="toggle">
+      <input type="checkbox" id="show-returned" onchange="loadRecords()">
+      <div class="toggle-track"></div>
+      <div class="toggle-thumb"></div>
+    </label>
+    <span style="font-size:12px;color:var(--ink-light)">Show returned</span>
+  </label>
+
+  <div class="toolbar-sep"></div>
+
+  <button class="btn btn-ghost" title="Pick a random record from your collection" onclick="openRandom()">Surprise Me</button>
+</div>
+
+<div class="format-filter-bar" id="format-filter-bar" style="display:none"></div>
+
+<main id="main-content"></main>
+
+<!-- ── Detail Modal (tile click) ── -->
+<div class="modal-backdrop" id="modal-detail">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="detail-modal-title">Record Detail</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-detail')">✕</button>
+    </div>
+    <div class="modal-body" id="detail-modal-body"></div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-nav" id="detail-prev-btn" title="Previous">&#8249;</button>
+        <button class="btn btn-nav" id="detail-next-btn" title="Next">&#8250;</button>
+      </div>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-secondary" onclick="closeModal('modal-detail')">Close</button>
+        <button class="btn btn-primary" id="detail-edit-btn">Edit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add / Edit Modal ── -->
+<div class="modal-backdrop" id="modal-form">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="form-modal-title">Add Record</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-form')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="discogs-section">
+        <div class="form-group form-full" style="margin-bottom:1rem">
+          <label class="form-label">Discogs Release ID</label>
+          <div class="discogs-fetch-row">
+            <input class="form-control" id="f-discogs-id" placeholder="e.g. r36875179 or 36875179">
+            <button class="btn btn-secondary" onclick="fetchDiscogs()" id="fetch-btn">Fetch</button>
+          </div>
+          <div id="discogs-preview" class="hidden"></div>
+        </div>
+      </div>
+
+      <div class="form-grid" id="form-fields">
+        <div class="form-section">From Discogs</div>
+
+        <div class="form-group">
+          <label class="form-label">Artist</label>
+          <input class="form-control" id="f-artist" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input class="form-control" id="f-title" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Label</label>
+          <input class="form-control" id="f-label" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cat No.</label>
+          <input class="form-control" id="f-cat-no" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Year</label>
+          <input class="form-control" id="f-year" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Format</label>
+          <input class="form-control" id="f-format" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valuation — lowest listing</label>
+          <div class="input-prefix-wrap">
+            <span class="input-prefix">£</span>
+            <input class="form-control" type="number" step="0.01" min="0" id="f-valuation" value="0.00">
+          </div>
+        </div>
+
+        <div class="form-section">Purchase Details</div>
+
+        <div class="form-group">
+          <label class="form-label">Purchase Condition</label>
+          <select class="form-control" id="f-is-new">
+            <option value="0">Pre-Owned</option>
+            <option value="1">New</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Original Grade</label>
+          <select class="form-control" id="f-orig-cond">
+            <option value="S">S — Sealed</option>
+            <option value="M">M — Mint</option>
+            <option value="NM">NM — Near Mint</option>
+            <option value="VG+">VG+ — Very Good Plus</option>
+            <option value="VG">VG — Very Good</option>
+            <option value="G+">G+ — Good Plus</option>
+            <option value="G">G — Good</option>
+            <option value="F">F — Fair</option>
+            <option value="P">P — Poor</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Current Grade</label>
+          <select class="form-control" id="f-curr-cond">
+            <option value="S">S — Sealed</option>
+            <option value="M">M — Mint</option>
+            <option value="NM">NM — Near Mint</option>
+            <option value="VG+">VG+ — Very Good Plus</option>
+            <option value="VG">VG — Very Good</option>
+            <option value="G+">G+ — Good Plus</option>
+            <option value="G">G — Good</option>
+            <option value="F">F — Fair</option>
+            <option value="P">P — Poor</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="f-status">
+            <option value="In Collection">In Collection</option>
+            <option value="Purchased">Purchased</option>
+            <option value="Returned">Returned</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Retailer</label>
+          <input class="form-control" id="f-retailer" list="retailers-list" autocomplete="off">
+          <datalist id="retailers-list"></datalist>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Order Ref</label>
+          <input class="form-control" id="f-order-ref">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Purchase Date</label>
+          <input class="form-control" type="date" id="f-purchase-date">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Price</label>
+          <div class="input-prefix-wrap">
+            <span class="input-prefix">£</span>
+            <input class="form-control" type="number" step="0.01" min="0" id="f-price" value="0">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">P&amp;P</label>
+          <div class="input-prefix-wrap">
+            <span class="input-prefix">£</span>
+            <input class="form-control" type="number" step="0.01" min="0" id="f-pp" value="0">
+          </div>
+        </div>
+
+        <div class="form-group form-full">
+          <label class="form-label">Notes</label>
+          <input class="form-control" id="f-notes">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-form')">Cancel</button>
+      <button class="btn btn-danger btn-sm hidden" id="delete-btn" onclick="deleteRecord()">Delete</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveRecord()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Import Modal ── -->
+<div class="modal-backdrop" id="modal-import">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <span class="modal-title">Import CSV</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-import')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-mid);margin-bottom:1rem">
+        Upload a pipe-delimited CSV. Rows whose Discogs ID already exists in the collection are skipped.
+      </p>
+      <div class="form-group">
+        <label class="form-label">CSV File</label>
+        <input class="form-control" type="file" id="import-file" accept=".csv,.txt">
+      </div>
+      <div id="import-result" style="margin-top:1rem;font-size:13px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="import-cancel-btn" onclick="closeModal('modal-import')">Cancel</button>
+      <button class="btn btn-primary" id="import-submit-btn" onclick="doImport()">Import</button>
+      <button class="btn btn-primary hidden" id="import-close-btn" onclick="closeModal('modal-import')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Settings Modal ── -->
+<div class="modal-backdrop" id="modal-settings">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <span class="modal-title">Advanced Settings</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-settings')">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:1rem;">
+
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Display Settings</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Clean artist names</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Hide Discogs disambiguation numbers — "Raye (2)" → "Raye". Grouping still uses the full name so Raye (2) and Raye (3) remain separate.</div>
+          </div>
+          <label class="toggle" style="flex-shrink:0" title="Clean artist names">
+            <input type="checkbox" id="clean-artists-toggle" onchange="onCleanArtistsToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Include P&amp;P in Collection Cost</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">When on, postage &amp; packaging is added to the Collection Cost KPI. Returned records are always excluded.</div>
+          </div>
+          <label class="toggle" style="flex-shrink:0" title="Include P&P in Collection Cost">
+            <input type="checkbox" id="include-pp-toggle" onchange="onIncludePPToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Hide obvious format tags</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Removes Album, LP, Stereo and Vinyl from format tag display and filters.</div>
+          </div>
+          <label class="toggle" style="flex-shrink:0" title="Hide obvious format tags">
+            <input type="checkbox" id="hide-obvious-formats-toggle" onchange="onHideObviousFormatsToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Fetch All from Discogs</div>
+        <div style="font-size:12px;color:var(--ink-light)">Re-fetches metadata and valuations for existing records. Preserves purchase details. Runs 5 records concurrently (2 API calls each), ~30 records per minute.</div>
+        <div id="fetch-range-btns" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
+        <div id="fetch-progress" class="hidden" style="display:flex;flex-direction:column;gap:0.4rem;">
+          <div style="font-size:12px;color:var(--ink-mid)" id="fetch-progress-label">Fetching…</div>
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div id="fetch-progress-bar" style="height:100%;background:var(--green);width:0%;transition:width 0.3s"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <span style="color:var(--red);font-size:1rem">⚠</span>
+          <span style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--red);font-weight:500">Danger Zone</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Format Database</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Permanently deletes all records. Cannot be undone.</div>
+          </div>
+          <label class="toggle" title="Enable to unlock">
+            <input type="checkbox" id="format-safety-toggle" onchange="onFormatToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+
+        <button class="btn btn-danger" id="format-db-btn" disabled onclick="doFormatDb()" style="align-self:flex-start;opacity:0.4;cursor:not-allowed">
+          Format Database
+        </button>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Clear Image Cache</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Deletes all cached cover images from disk. Cannot be undone.</div>
+          </div>
+          <label class="toggle" title="Enable to unlock">
+            <input type="checkbox" id="clear-images-safety-toggle" onchange="onClearImagesToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+
+        <button class="btn btn-danger" id="clear-images-btn" disabled onclick="doClearImages()" style="align-self:flex-start;opacity:0.4;cursor:not-allowed">
+          Clear Image Cache
+        </button>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-settings')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast container ── -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let records = [];
+let currentView = 'table';
+let editingId = null;
+let fetchedMeta = {};
+let sortCol = null;
+let sortDir = null;
+let cleanArtists = true;
+let includePP = false;
+let hideObviousFormats = true;
+const OBVIOUS_FORMATS = new Set(['Album', 'LP', 'Stereo', 'Vinyl']);
+let filterFormat = null; // active format tag string, or null
+let selectedTileId = null;
+let showValuations = false;
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadSettings();
+  loadRecords();
+  document.getElementById('modal-detail').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-detail');
+  });
+  document.getElementById('modal-form').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-form');
+  });
+  document.getElementById('modal-import').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-import');
+  });
+  document.getElementById('modal-settings').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-settings');
+  });
+  document.getElementById('main-content').addEventListener('click', e => {
+    if (e.target.closest('a, button, .fmt-tag-filter')) return;
+    const row = e.target.closest('tr.data-row');
+    if (row) openDetail(Number(row.dataset.id));
+  });
+});
+
+// ── Data ───────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const r = await fetch('/api/settings');
+    if (r.ok) {
+      const s = await r.json();
+      if (s.clean_artists !== undefined) cleanArtists = s.clean_artists === 'true';
+      if (s.include_pp !== undefined) includePP = s.include_pp === 'true';
+      if (s.hide_obvious_formats !== undefined) hideObviousFormats = s.hide_obvious_formats === 'true';
+    }
+  } catch {}
+}
+
+async function loadRecords() {
+  const showReturned = document.getElementById('show-returned').checked;
+  try {
+    const r = await fetch(`/api/records?show_returned=${showReturned}`);
+    if (!r.ok) throw new Error(r.status);
+    records = await r.json();
+    renderView();
+    updateStats();
+    updateRetailersList();
+    updateFormatFilterBar();
+  } catch(e) {
+    records = [];
+    renderView();
+    toast('Failed to load records', 'error');
+  }
+}
+
+function updateRetailersList() {
+  const dl = document.getElementById('retailers-list');
+  if (!dl) return;
+  dl.innerHTML =[...new Set(records.map(r => r.retailer).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+    .map(v => `<option value="${esc(v)}">`)
+    .join('');
+}
+
+function updateStats() {
+  const inCol = records.filter(r => r.status === 'In Collection').length;
+  const notReturned = records.filter(r => r.status !== 'Returned');
+  const cost = notReturned.reduce((s,r) => s + (r.price||0) + (includePP ? (r.pp||0) : 0), 0);
+  const valuation = records.reduce((s,r) => s + (r.valuation||0), 0);
+  document.getElementById('s-total').textContent = records.length;
+  document.getElementById('s-col').textContent = inCol;
+  document.getElementById('s-cost').textContent = showValuations ? '£' + cost.toFixed(2) : '—';
+  document.getElementById('s-valuation').textContent = showValuations && valuation ? '£' + valuation.toFixed(2) : '—';
+}
+
+function onShowValuationsToggle() {
+  showValuations = document.getElementById('show-valuations').checked;
+  updateStats();
+}
+
+// ── Filtering & sorting ────────────────────────────────────────────────────
+function getFiltered() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  const fs = document.getElementById('filter-status').value;
+  return records.filter(r => {
+    if (fs && r.status !== fs) return false;
+    if (filterFormat && !formatTags(r.format, false).includes(filterFormat)) return false;
+    if (q) {
+      const hay = `${r.artist} ${r.title} ${r.label} ${r.cat_no} ${r.retailer}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function applySortCol(rows) {
+  if (!sortCol) return rows;
+  return [...rows].sort((a, b) => {
+    let v = 0;
+    switch (sortCol) {
+      case 'id':        v = cmpN(a.id, b.id); break;
+      case 'artist':    v = cmp(a.artist, b.artist); break;
+      case 'title':     v = cmp(a.title, b.title); break;
+      case 'label':     v = cmp(a.label, b.label); break;
+      case 'year':      v = cmpN(a.year, b.year); break;
+      case 'status':    v = cmp(a.status, b.status); break;
+      case 'retailer':  v = cmp(a.retailer, b.retailer); break;
+      case 'purchase_date': {
+        const da = a.purchase_date || '', db = b.purchase_date || '';
+        if (!da && !db) { v = 0; break; }
+        if (!da) { v = 1; break; }
+        if (!db) { v = -1; break; }
+        v = da < db ? -1 : da > db ? 1 : 0; break;
+      }
+      case 'price':     v = cmpN(a.price, b.price); break;
+      case 'pp':        v = cmpN(a.pp, b.pp); break;
+      case 'valuation': v = cmpN(a.valuation, b.valuation); break;
+    }
+    return sortDir === 'desc' ? -v : v;
+  });
+}
+
+function headerSort(col) {
+  if (sortCol === col) {
+    if (sortDir === 'asc') { sortDir = 'desc'; }
+    else { sortCol = null; sortDir = null; }
+  } else {
+    sortCol = col;
+    sortDir = 'asc';
+  }
+  renderView();
+}
+
+const cmp = (a, b) => String(a||'').localeCompare(String(b||''));
+const cmpN = (a, b) => (a||0) - (b||0);
+
+// ── View switching ─────────────────────────────────────────────────────────
+function openRandom() {
+  const pool = records.filter(r => r.status === 'In Collection');
+  if (!pool.length) { toast('No records in collection', 'error'); return; }
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  openDetail(pick.id);
+}
+
+function setView(v) {
+  currentView = v;
+  selectedTileId = null;
+  document.getElementById('btn-table').classList.toggle('active', v === 'table');
+  document.getElementById('btn-tile').classList.toggle('active', v === 'tile');
+  document.getElementById('group-by-wrapper').style.display = v === 'table' ? '' : 'none';
+  renderView();
+}
+
+function renderView() {
+  if (currentView === 'table') renderTable();
+  else renderTiles();
+}
+
+// ── Table view ─────────────────────────────────────────────────────────────
+function rowHtml(r) {
+  return `<tr class="data-row" data-id="${r.id}" style="cursor:pointer">
+    <td>${coverThumb(r)}</td>
+    <td title="${esc(displayArtist(r.artist))}">${esc(truncate(displayArtist(r.artist), 32))}</td>
+    <td class="overflow" title="${esc(r.title)}">${esc(r.title)}</td>
+    <td class="text-mono col-sm">${r.year||''}</td>
+    <td class="col-sm" style="white-space:nowrap">${fmtTagsCell(r.format)}</td>
+    <td class="col-sm">
+      <span class="${r.is_new ? 'badge badge-new' : 'badge badge-used'}">${r.is_new ? 'New' : 'Pre-Owned'}</span>
+      <span style="font-size:10px;color:var(--ink-light);margin-left:4px">${esc(r.orig_cond)}/${esc(r.curr_cond)}</span>
+    </td>
+    <td class="col-sm"><span class="badge ${statusClass(r.status)}">${esc(r.status)}</span></td>
+    <td class="col-md">${esc(r.retailer)}</td>
+    <td class="text-mono col-md">${fmtDate(r.purchase_date)}</td>
+    <td class="text-mono text-right col-sm">£${(r.price||0).toFixed(2)}</td>
+    <td class="text-mono text-right col-md">${r.valuation ? '£' + (r.valuation).toFixed(2) : '—'}</td>
+    <td class="col-md"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></td>
+    <td class="note-cell col-md" title="${esc(r.notes)}">${esc(r.notes)}</td>
+    <td>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-icon btn-sm" onclick="openEdit(${r.id})" title="Edit">✎</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function th(col, label, extraClass = '') {
+  const active = sortCol === col;
+  const arrow = active ? (sortDir === 'asc' ? '▲' : '▼') : '▲';
+  const sep = label ? ' ' : '';
+  return `<th class="${active ? 'sorted' : ''} ${extraClass}" onclick="headerSort('${col}')">${label}${sep}<span class="sort-arrow">${arrow}</span></th>`;
+}
+
+function renderTable() {
+  const grouped = document.getElementById('group-by-artist').checked;
+  let rows = getFiltered();
+  const el = document.getElementById('main-content');
+
+  if (!rows.length) {
+    el.innerHTML = emptyState();
+    return;
+  }
+
+  rows = grouped
+    ? [...rows].sort((a, b) => cmp(a.artist, b.artist) || cmpN(a.year, b.year))
+    : applySortCol(rows);
+
+  let bodyHtml = '';
+  let lastArtist = null;
+  for (const r of rows) {
+    if (grouped && r.artist !== lastArtist) {
+      lastArtist = r.artist;
+      bodyHtml += `<tr class="group-header"><td colspan="15">${esc(displayArtist(r.artist))}</td></tr>`;
+    }
+    bodyHtml += rowHtml(r);
+  }
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            ${th('id', '', '')}
+            ${th('artist',        'Artist')}
+            ${th('title',         'Title')}
+            ${th('year',          'Year',          'col-sm')}
+            <th class="col-sm">Format</th>
+            <th class="col-sm">Cond.</th>
+            ${th('status',        'Status',        'col-sm')}
+            ${th('retailer',      'Retailer',      'col-md')}
+            ${th('purchase_date', 'Purchase Date', 'col-md')}
+            ${th('price',         'Price',         'col-sm text-right')}
+            ${th('valuation',     'Valuation',     'col-md text-right')}
+            <th class="col-md">Discogs</th>
+            <th class="col-md">Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${bodyHtml}</tbody>
+      </table>
+    </div>`;
+}
+
+// ── Tile view ──────────────────────────────────────────────────────────────
+function renderTiles() {
+  const rows = [...getFiltered()].sort((a, b) => cmp(a.artist, b.artist) || cmpN(a.year, b.year));
+  const el = document.getElementById('main-content');
+
+  if (!rows.length) {
+    el.innerHTML = emptyState();
+    return;
+  }
+
+  el.innerHTML = `<div class="tile-grid">${rows.map(r => `
+    <div class="tile${selectedTileId === r.id ? ' active' : ''}" data-id="${r.id}" onclick="tileClick(event,${r.id})">
+      ${r.cover_file
+        ? `<img class="tile-img" src="/images/${r.cover_file}" alt="${esc(displayArtist(r.artist))} - ${esc(r.title)}" loading="lazy">`
+        : `<div class="tile-placeholder">♪</div>`}
+      <div class="tile-overlay">
+        <div class="tile-overlay-artist">${esc(displayArtist(r.artist))}</div>
+        <div class="tile-overlay-title">${esc(r.title)}</div>
+        <button class="btn btn-primary" style="font-size:16px;padding:0.6rem 2rem;margin-top:0.25rem" onclick="openDetail(${r.id})">View</button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+// ── Detail modal ───────────────────────────────────────────────────────────
+function tileClick(e, id) {
+  // If the click was on the View button let it bubble to openDetail normally
+  if (e.target.closest('button')) return;
+  e.stopPropagation();
+  if (selectedTileId === id) {
+    // second tap on same tile — dismiss
+    selectedTileId = null;
+  } else {
+    selectedTileId = id;
+  }
+  // Re-render tiles in place without a full reload
+  document.querySelectorAll('.tile').forEach(t => {
+    t.classList.toggle('active', Number(t.dataset.id) === selectedTileId);
+  });
+}
+
+// Tapping outside any tile clears the selection
+document.addEventListener('click', e => {
+  if (currentView === 'tile' && !e.target.closest('.tile')) {
+    selectedTileId = null;
+    document.querySelectorAll('.tile').forEach(t => t.classList.remove('active'));
+  }
+});
+
+async function openDetail(id) {
+  const r = records.find(x => x.id === id);
+  if (!r) return;
+
+  document.getElementById('detail-modal-title').textContent = displayArtist(r.artist);
+  document.getElementById('detail-modal-body').innerHTML = `
+    <div class="detail-tabs">
+      <button class="detail-tab-btn active" data-panel="detail-panel-main">Details</button>
+      <button class="detail-tab-btn" data-panel="detail-panel-tracklist">Tracklist</button>
+    </div>
+    <div id="detail-panel-main" class="detail-tab-panel active">
+      <div class="detail-layout">
+        <div id="detail-cover-wrap">
+          ${r.cover_file
+            ? `<img class="detail-cover" src="/images/${r.cover_file}" alt="cover">`
+            : `<div class="detail-cover-placeholder">♪</div>`}
+        </div>
+        <div class="detail-fields">
+          <div class="detail-artist">${esc(displayArtist(r.artist))}</div>
+          <div class="detail-title">${esc(r.title)}</div>
+          <div class="detail-meta">
+            <span class="badge ${statusClass(r.status)}">${esc(r.status)}</span>
+            <span class="${r.is_new ? 'badge badge-new' : 'badge badge-used'}">${r.is_new ? 'New' : 'Pre-Owned'}</span>
+          </div>
+          <div class="detail-row"><span class="detail-key">Label</span><span class="detail-val">${esc(r.label)||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Cat No.</span><span class="detail-val">${esc(r.cat_no)||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${r.year||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Format</span><span class="detail-val">${fmtTagsHtml(r.format)||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Purchased</span><span class="detail-val">${esc(condLabel(r.orig_cond))}</span></div>
+          <div class="detail-row"><span class="detail-key">Current</span><span class="detail-val">${esc(condLabel(r.curr_cond))}</span></div>
+          <div class="detail-row"><span class="detail-key">Retailer</span><span class="detail-val">${esc(r.retailer)||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Order Ref</span><span class="detail-val">${esc(r.order_ref)||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Purchase Date</span><span class="detail-val">${fmtDate(r.purchase_date)||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Price</span><span class="detail-val">£${(r.price||0).toFixed(2)}</span></div>
+          <div class="detail-row"><span class="detail-key">P&amp;P</span><span class="detail-val">£${(r.pp||0).toFixed(2)}</span></div>
+          <div class="detail-row"><span class="detail-key">Valuation</span><span class="detail-val">${r.valuation ? `£${r.valuation.toFixed(2)} <span style="font-size:10px;color:var(--ink-light)">(lowest listing)</span>` : '—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Discogs</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></span></div>
+          <div class="detail-row"><span class="detail-key">Notes</span><span class="detail-val" style="white-space:pre-wrap">${esc(r.notes)||'—'}</span></div>
+        </div>
+      </div>
+    </div>
+    <div id="detail-panel-tracklist" class="detail-tab-panel">
+      <div id="tracklist-content" style="color:var(--ink-light);font-size:13px">Loading…</div>
+    </div>`;
+
+  // Tab switching
+  let tracklistLoaded = false;
+  document.querySelectorAll('.detail-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.detail-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.detail-tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.panel).classList.add('active');
+      if (btn.dataset.panel === 'detail-panel-tracklist' && !tracklistLoaded) {
+        tracklistLoaded = true;
+        loadTracklist(id);
+      }
+    });
+  });
+
+  document.getElementById('detail-edit-btn').onclick = () => {
+    closeModal('modal-detail');
+    openEdit(id);
+  };
+
+  // Navigation through current filtered+sorted list
+  const navList = currentView === 'tile'
+    ? [...getFiltered()].sort((a, b) => cmp(a.artist, b.artist) || cmpN(a.year, b.year))
+    : applySortCol(getFiltered());
+  const navIdx = navList.findIndex(r => r.id === id);
+  const prevId = navIdx > 0 ? navList[navIdx - 1].id : null;
+  const nextId = navIdx < navList.length - 1 ? navList[navIdx + 1].id : null;
+  const prevBtn = document.getElementById('detail-prev-btn');
+  const nextBtn = document.getElementById('detail-next-btn');
+  prevBtn.disabled = !prevId;
+  nextBtn.disabled = !nextId;
+  prevBtn.onclick = () => prevId && openDetail(prevId);
+  nextBtn.onclick = () => nextId && openDetail(nextId);
+
+  openModal('modal-detail');
+
+  // Async: fetch images and upgrade cover slot to carousel if multiple exist
+  try {
+    const resp = await fetch(`/api/records/${id}/images`);
+    if (resp.ok) {
+      const images = await resp.json();
+      if (images.length > 1) setupCarousel(id, images, r.cover_file);
+    }
+  } catch {}
+}
+
+async function loadTracklist(id) {
+  const el = document.getElementById('tracklist-content');
+  if (!el) return;
+  try {
+    const resp = await fetch(`/api/records/${id}/tracklist`);
+    if (!resp.ok) throw new Error();
+    const tracks = await resp.json();
+    if (!tracks.length) {
+      el.textContent = 'No tracklist available.';
+      return;
+    }
+    const rows = tracks.map(t => {
+      if (t.type === 'heading') {
+        return `<tr class="tracklist-heading"><td colspan="3">${esc(t.title)}</td></tr>`;
+      }
+      return `<tr>
+        <td>${esc(t.position)}</td>
+        <td>${esc(t.title)}</td>
+        <td>${esc(t.duration)}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<table class="tracklist-table"><tbody>${rows}</tbody></table>`;
+  } catch {
+    el.textContent = 'Could not load tracklist.';
+  }
+}
+
+function setupCarousel(recordId, images, currentCover) {
+  const flaggedIdx = images.findIndex(i => i.is_cover === 1);
+  let idx = flaggedIdx >= 0 ? flaggedIdx : 0;
+  const wrap = document.getElementById('detail-cover-wrap');
+  if (!wrap) return;
+
+  function render() {
+    const img = images[idx];
+    const anyFlagged = images.some(i => i.is_cover === 1);
+    const isCover = anyFlagged ? img.is_cover === 1 : idx === 0;
+    wrap.innerHTML = `
+      <div class="carousel-wrap">
+        <div class="carousel-img-wrap">
+          <img src="/images/${esc(img.filename)}" alt="cover ${idx+1}">
+          ${images.length > 1 ? `
+            <button class="carousel-arrow prev" onclick="carouselStep(-1)">&#8249;</button>
+            <button class="carousel-arrow next" onclick="carouselStep(1)">&#8250;</button>` : ''}
+        </div>
+        <div class="carousel-meta">
+          <span>${idx+1} / ${images.length}</span>
+          <button class="btn btn-secondary btn-sm" onclick="setCover(${recordId},'${img.filename}')"
+            ${isCover ? 'disabled title="Already the cover"' : ''}>
+            Use as Cover
+          </button>
+        </div>
+      </div>`;
+  }
+
+  window.carouselStep = (dir) => {
+    idx = (idx + dir + images.length) % images.length;
+    render();
+  };
+
+  render();
+}
+
+async function setCover(recordId, filename) {
+  try {
+    const r = await fetch(`/api/records/${recordId}/set-cover`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ filename }),
+    });
+    if (!r.ok) throw new Error();
+    await loadRecords();
+    // Refresh the detail view with the updated record
+    openDetail(recordId);
+    toast('Cover updated', 'success');
+  } catch {
+    toast('Failed to set cover', 'error');
+  }
+}
+
+// ── Add / Edit form ────────────────────────────────────────────────────────
+function openAdd() {
+  editingId = null;
+  fetchedMeta = {};
+  document.getElementById('form-modal-title').textContent = 'Add Record';
+  document.getElementById('discogs-section').style.display = '';
+  document.getElementById('fetch-btn').textContent = 'Fetch';
+  document.getElementById('delete-btn').classList.add('hidden');
+  resetForm();
+  openModal('modal-form');
+}
+
+function openEdit(id) {
+  const r = records.find(x => x.id === id);
+  if (!r) return;
+  editingId = id;
+  fetchedMeta = { cover_file: r.cover_file };
+
+  document.getElementById('form-modal-title').textContent = 'Edit Record';
+  document.getElementById('discogs-section').style.display = '';
+  document.getElementById('fetch-btn').textContent = 'Re-fetch';
+  document.getElementById('discogs-preview').classList.add('hidden');
+  document.getElementById('delete-btn').classList.remove('hidden');
+
+  setField('f-discogs-id', r.discogs_id);
+  setField('f-artist', r.artist);
+  setField('f-title', r.title);
+  setField('f-label', r.label);
+  setField('f-cat-no', r.cat_no);
+  setField('f-year', r.year);
+  setField('f-format', r.format);
+  setField('f-valuation', (r.valuation||0).toFixed(2));
+  setField('f-retailer', r.retailer);
+  setField('f-order-ref', r.order_ref);
+  setField('f-purchase-date', toISODate(r.purchase_date));
+  setField('f-price', (r.price||0).toFixed(2));
+  setField('f-pp', (r.pp||0).toFixed(2));
+  setField('f-notes', r.notes);
+  document.getElementById('f-is-new').value = r.is_new ? '1' : '0';
+  document.getElementById('f-status').value = r.status;
+  document.getElementById('f-orig-cond').value = r.orig_cond || 'NM';
+  document.getElementById('f-curr-cond').value = r.curr_cond || 'NM';
+
+  openModal('modal-form');
+}
+
+function resetForm() {
+  ['f-discogs-id','f-artist','f-title','f-label','f-cat-no','f-format',
+   'f-retailer','f-order-ref','f-notes'].forEach(id => setField(id, ''));
+  setField('f-valuation', '0.00');
+  setField('f-year', '');
+  setField('f-price', '0.00');
+  setField('f-pp', '0.00');
+  setField('f-purchase-date', new Date().toISOString().split('T')[0]);
+  document.getElementById('f-is-new').value = '0';
+  document.getElementById('f-status').value = 'In Collection';
+  document.getElementById('f-orig-cond').value = 'NM';
+  document.getElementById('f-curr-cond').value = 'NM';
+  document.getElementById('discogs-preview').classList.add('hidden');
+}
+
+async function fetchDiscogs() {
+  const rid = document.getElementById('f-discogs-id').value.trim();
+  if (!rid) { toast('Enter a Discogs release ID', 'error'); return; }
+  const btn = document.getElementById('fetch-btn');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/discogs/${encodeURIComponent(rid)}`);
+    if (!r.ok) throw new Error('Fetch failed');
+    const d = await r.json();
+    fetchedMeta = d;
+    setField('f-artist', d.artist);
+    setField('f-title', d.title);
+    setField('f-label', d.label);
+    setField('f-cat-no', d.cat_no);
+    setField('f-year', d.year||'');
+    setField('f-format', d.format);
+    setField('f-discogs-id', d.discogs_id);
+    setField('f-valuation', (d.valuation||0).toFixed(2));
+
+    const prev = document.getElementById('discogs-preview');
+    prev.classList.remove('hidden');
+    prev.innerHTML = `<div class="discogs-preview">
+      ${d.cover_file ? `<img src="/images/${d.cover_file}" alt="cover">` : '<div style="width:60px;height:60px;background:var(--surface);border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--groove)">♪</div>'}
+      <div class="discogs-preview-info">
+        <div class="discogs-preview-artist">${esc(d.artist)}</div>
+        <div class="discogs-preview-title">${esc(d.title)}</div>
+        <div class="discogs-preview-meta">${esc(d.label)} · ${d.year||''} · ${esc(d.format)}</div>
+      </div>
+    </div>`;
+    toast('Metadata fetched', 'success');
+  } catch(e) {
+    toast('Discogs fetch failed — check the ID and your token', 'error');
+  } finally {
+    btn.innerHTML = 'Fetch';
+    btn.disabled = false;
+  }
+}
+
+async function saveRecord() {
+  const payload = {
+    discogs_id: val('f-discogs-id'),
+    cat_no: val('f-cat-no'),
+    artist: val('f-artist'),
+    title: val('f-title'),
+    label: val('f-label'),
+    year: parseInt(val('f-year'))||null,
+    format: val('f-format'),
+    cover_file: fetchedMeta.cover_file || '',
+    is_new: document.getElementById('f-is-new').value === '1',
+    orig_cond: val('f-orig-cond'),
+    curr_cond: val('f-curr-cond'),
+    status: val('f-status'),
+    retailer: val('f-retailer'),
+    order_ref: val('f-order-ref'),
+    purchase_date: val('f-purchase-date'),
+    price: parseFloat(val('f-price'))||0,
+    pp: parseFloat(val('f-pp'))||0,
+    notes: val('f-notes'),
+    valuation: parseFloat(val('f-valuation'))||0,
+  };
+
+  if (!payload.discogs_id) { toast('Discogs ID is required', 'error'); return; }
+
+  const btn = document.getElementById('save-btn');
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
+
+  try {
+    const url = editingId ? `/api/records/${editingId}` : '/api/records';
+    const method = editingId ? 'PUT' : 'POST';
+    const r = await fetch(url, {
+      method,
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error();
+    closeModal('modal-form');
+    await loadRecords();
+    toast(editingId ? 'Record updated' : 'Record added', 'success');
+  } catch {
+    toast('Save failed', 'error');
+  } finally {
+    btn.textContent = 'Save';
+    btn.disabled = false;
+  }
+}
+
+async function deleteRecord() {
+  if (!editingId) return;
+  if (!confirm('Delete this record? This cannot be undone.')) return;
+  try {
+    await fetch(`/api/records/${editingId}`, { method: 'DELETE' });
+    closeModal('modal-form');
+    await loadRecords();
+    toast('Record deleted', 'success');
+  } catch {
+    toast('Delete failed', 'error');
+  }
+}
+
+// ── Import / Export ────────────────────────────────────────────────────────
+function openImport() {
+  document.getElementById('import-file').value = '';
+  document.getElementById('import-result').innerHTML = '';
+  document.getElementById('import-cancel-btn').classList.remove('hidden');
+  document.getElementById('import-submit-btn').classList.remove('hidden');
+  document.getElementById('import-close-btn').classList.add('hidden');
+  openModal('modal-import');
+}
+
+async function doImport() {
+  const file = document.getElementById('import-file').files[0];
+  if (!file) { toast('Select a file first', 'error'); return; }
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = document.getElementById('import-result');
+  res.textContent = 'Importing…';
+  try {
+    const r = await fetch('/api/import', { method: 'POST', body: fd });
+    const d = await r.json();
+    const skippedNote = d.skipped ? `, ${d.skipped} already existed` : '';
+    res.innerHTML = `<span style="color:var(--green)">✓ Imported ${d.inserted} record${d.inserted !== 1 ? 's' : ''}${skippedNote}</span>`;
+    await loadRecords();
+    document.getElementById('import-cancel-btn').classList.add('hidden');
+    document.getElementById('import-submit-btn').classList.add('hidden');
+    document.getElementById('import-close-btn').classList.remove('hidden');
+  } catch {
+    res.innerHTML = `<span style="color:var(--red)">Import failed</span>`;
+  }
+}
+
+function doExport() {
+  window.location.href = '/api/export';
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('clean-artists-toggle').checked = cleanArtists;
+  document.getElementById('include-pp-toggle').checked = includePP;
+  document.getElementById('hide-obvious-formats-toggle').checked = hideObviousFormats;
+  document.getElementById('format-safety-toggle').checked = false;
+  onFormatToggle();
+  document.getElementById('clear-images-safety-toggle').checked = false;
+  onClearImagesToggle();
+  buildFetchRanges();
+  document.getElementById('fetch-progress').classList.add('hidden');
+  openModal('modal-settings');
+}
+
+function onCleanArtistsToggle() {
+  cleanArtists = document.getElementById('clean-artists-toggle').checked;
+  fetch('/api/settings/clean_artists', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ value: String(cleanArtists) }),
+  });
+  renderView();
+}
+
+function onIncludePPToggle() {
+  includePP = document.getElementById('include-pp-toggle').checked;
+  fetch('/api/settings/include_pp', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ value: String(includePP) }),
+  });
+  updateStats();
+}
+
+function onHideObviousFormatsToggle() {
+  hideObviousFormats = document.getElementById('hide-obvious-formats-toggle').checked;
+  fetch('/api/settings/hide_obvious_formats', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ value: String(hideObviousFormats) }),
+  });
+  updateFormatFilterBar();
+  renderView();
+}
+
+function buildFetchRanges() {
+  const container = document.getElementById('fetch-range-btns');
+  if (!records.length) {
+    container.innerHTML = '<span style="font-size:12px;color:var(--ink-light)">No records in collection.</span>';
+    return;
+  }
+  const missing = records.filter(r => !r.format);
+  const missingBtn = missing.length
+    ? `<button class="btn btn-secondary btn-sm fetch-range-btn" onclick="doFetchBatch(records.filter(r=>!r.format))">Fetch Missing (${missing.length})</button>`
+    : '';
+  const allBtn = `<button class="btn btn-secondary btn-sm fetch-range-btn" onclick="doFetchBatch([...records])">Fetch All (${records.length})</button>`;
+  container.innerHTML = (missingBtn ? missingBtn + '<span style="width:1px;height:20px;background:var(--border);display:inline-block;margin:0 0.25rem;vertical-align:middle"></span>' : '') + allBtn;
+}
+
+async function doFetchBatch(batch) {
+  const total = batch.length;
+  const progress = document.getElementById('fetch-progress');
+  const label = document.getElementById('fetch-progress-label');
+  const bar = document.getElementById('fetch-progress-bar');
+
+  document.querySelectorAll('.fetch-range-btn').forEach(b => b.disabled = true);
+  progress.classList.remove('hidden');
+
+  const CONCURRENCY = 5;
+  const BATCH_PAUSE = 10000; // 5 concurrent × 2 API calls each = 10 req/batch; 10s pause → 60 req/min, 30 records/min
+  let done = 0;
+
+  for (let i = 0; i < batch.length; i += CONCURRENCY) {
+    const chunk = batch.slice(i, i + CONCURRENCY);
+    label.textContent = `Fetching ${done + 1}–${Math.min(done + chunk.length, total)} of ${total}…`;
+    await Promise.all(chunk.map(rec =>
+      fetch(`/api/records/${rec.id}/refresh`, { method: 'POST' }).catch(() => {})
+    ));
+    done += chunk.length;
+    bar.style.width = `${Math.round(done / total * 100)}%`;
+    if (done < total) await new Promise(r => setTimeout(r, BATCH_PAUSE));
+  }
+
+  label.textContent = `Done — ${total} record${total !== 1 ? 's' : ''} refreshed`;
+  document.querySelectorAll('.fetch-range-btn').forEach(b => b.disabled = false);
+  await loadRecords();
+}
+
+function onFormatToggle() {
+  const enabled = document.getElementById('format-safety-toggle').checked;
+  const btn = document.getElementById('format-db-btn');
+  btn.disabled = !enabled;
+  btn.style.opacity = enabled ? '1' : '0.4';
+  btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+}
+
+async function doFormatDb() {
+  if (!confirm('This will permanently delete every record in your collection. Are you sure?')) return;
+  try {
+    const r = await fetch('/api/admin/format', { method: 'POST' });
+    if (!r.ok) throw new Error();
+    closeModal('modal-settings');
+    await loadRecords();
+    toast('Database formatted', 'success');
+  } catch {
+    toast('Format failed', 'error');
+  }
+}
+
+function onClearImagesToggle() {
+  const enabled = document.getElementById('clear-images-safety-toggle').checked;
+  const btn = document.getElementById('clear-images-btn');
+  btn.disabled = !enabled;
+  btn.style.opacity = enabled ? '1' : '0.4';
+  btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+}
+
+async function doClearImages() {
+  if (!confirm('This will permanently delete all cached cover images from disk. Are you sure?')) return;
+  try {
+    const r = await fetch('/api/admin/clear-images', { method: 'POST' });
+    if (!r.ok) throw new Error();
+    const { deleted } = await r.json();
+    await loadRecords();
+    toast(`Image cache cleared — ${deleted} file${deleted !== 1 ? 's' : ''} deleted`, 'success');
+  } catch {
+    toast('Failed to clear image cache', 'error');
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function coverThumb(r) {
+  if (r.cover_file) return `<img class="cover-thumb" src="/images/${r.cover_file}" alt="" loading="lazy">`;
+  return `<div class="cover-placeholder">♪</div>`;
+}
+
+function statusClass(s) {
+  if (s === 'In Collection') return 'badge-ic';
+  if (s === 'Returned') return 'badge-r';
+  return 'badge-p';
+}
+
+function discogsNum(id) { return String(id||'').replace(/^r/, ''); }
+
+function emptyState() {
+  if (!records.length) {
+    return `<div class="empty">
+      <div class="empty-icon">♪</div>
+      <div class="empty-text">Your collection is empty</div>
+      <div class="empty-sub">Use <strong>Add Record</strong> or <strong>Import</strong> to get started</div>
+    </div>`;
+  }
+  return `<div class="empty">
+    <div class="empty-icon">⌕</div>
+    <div class="empty-text">No records found</div>
+    <div class="empty-sub">Try adjusting your search or filters</div>
+  </div>`;
+}
+
+
+function displayArtist(name) {
+  const s = String(name || '');
+  return cleanArtists ? s.replace(/ \(\d+\)$/, '') : s;
+}
+
+const COND_LABELS = {
+  'S': 'Sealed', 'M': 'Mint', 'NM': 'Near Mint', 'VG+': 'Very Good Plus',
+  'VG': 'Very Good', 'G+': 'Good Plus', 'G': 'Good', 'F': 'Fair', 'P': 'Poor',
+};
+function condLabel(c) {
+  const s = (c || '').trim().toUpperCase();
+  return COND_LABELS[s] ? `${COND_LABELS[s]} (${c})` : (c || '—');
+}
+
+function truncate(s, max) {
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+function formatTags(s, respectHide = true) {
+  if (!s) return [];
+  const tags = s.split(',').map(t => t.trim()).filter(Boolean);
+  return (respectHide && hideObviousFormats) ? tags.filter(t => !OBVIOUS_FORMATS.has(t)) : tags;
+}
+
+function fmtTagsHtml(s) {
+  return formatTags(s).map(t => `<span class="fmt-tag">${esc(t)}</span>`).join(' ');
+}
+
+function fmtTagsCell(s) {
+  const tags = formatTags(s);
+  if (!tags.length) return '';
+  // Estimate rendered width: each tag ≈ chars * 7px + 16px padding. Cap at ~255px.
+  let width = 0;
+  let cutoff = tags.length;
+  for (let i = 0; i < tags.length; i++) {
+    width += tags[i].length * 7 + 18; // approx px per tag incl gap
+    if (width > 255) { cutoff = i; break; }
+  }
+  const visible = tags.slice(0, cutoff);
+  const hidden = tags.slice(cutoff);
+  let html = visible.map(t => `<span class="fmt-tag">${esc(t)}</span>`).join(' ');
+  if (hidden.length) {
+    html += ` <span class="fmt-tag" style="cursor:default;opacity:0.7" title="${esc(tags.join(', '))}">+${hidden.length}</span>`;
+  }
+  return html;
+}
+
+function updateFormatFilterBar() {
+  const bar = document.getElementById('format-filter-bar');
+  const allTags = [...new Set(records.flatMap(r => formatTags(r.format)))].sort();
+  if (!allTags.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = allTags.map(t =>
+    `<span class="fmt-tag-filter${filterFormat === t ? ' active' : ''}" data-tag="${esc(t)}">${esc(t)}</span>`
+  ).join('');
+}
+
+function toggleFormatFilter(tag) {
+  filterFormat = filterFormat === tag ? null : tag;
+  updateFormatFilterBar();
+  renderView();
+}
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('.fmt-tag-filter');
+  if (el) toggleFormatFilter(el.dataset.tag);
+});
+
+function fmtDate(s) {
+  if (!s) return '';
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+}
+
+function toISODate(s) {
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return '';
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function val(id) { return document.getElementById(id)?.value || ''; }
+function setField(id, v) { const el = document.getElementById(id); if (el) el.value = v ?? ''; }
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function toast(msg, type = '') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+</script>
+</body>
+</html>
