@@ -1,6 +1,6 @@
 services:
   sleevenotes:
-    build: .
+    image: ghcr.io/sidtheturtle/sleevenotes:latest
     container_name: sleevenotes
     ports:
       - "2026:2026"
