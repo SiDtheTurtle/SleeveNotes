@@ -1052,7 +1052,7 @@ _EXPORT_STANDARD = [
     ("curr_cond",   "Collection Media Condition"),
     ("sleeve_cond", "Collection Sleeve Condition"),
 ]
-_EXPORT_MAPPABLE = ("retailer", "order_ref", "purchase_date", "price", "pp", "notes", "valuation")
+_EXPORT_MAPPABLE = ("retailer", "order_ref", "purchase_date", "is_new", "price", "pp", "notes", "valuation")
 # SN-specific columns appended after all Discogs columns
 _EXPORT_SN_EXTRAS = ("id", "instance_id", "is_new", "cover_file")
 
