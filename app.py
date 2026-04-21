@@ -297,7 +297,7 @@ DISCOGS_CONDITION_MAP = {
 def normalise_condition(val: str) -> str:
     return DISCOGS_CONDITION_MAP.get(val.strip(), val.strip())
 MAPPED_WRITEABLE = {"purchase_date", "price", "pp", "retailer", "order_ref",
-                    "curr_cond", "sleeve_cond", "notes"}
+                    "curr_cond", "sleeve_cond", "notes", "is_new"}
 
 def parse_collection_item(item: dict, field_mappings: dict) -> dict:
     info = item.get("basic_information", {})
@@ -338,6 +338,8 @@ def parse_collection_item(item: dict, field_mappings: dict) -> dict:
                 val = None
         elif db_col in ("curr_cond", "sleeve_cond"):
             val = normalise_condition(str(val))
+        elif db_col == "is_new":
+            val = str(val).lower() in ("1", "true", "yes", "new")
         record[db_col] = val
     return record
 
