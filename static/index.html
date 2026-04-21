@@ -2046,7 +2046,7 @@ function formatExportValue(dbCol, value) {
   if (dbCol === 'purchase_date') return value ? fmtDate(value) : null;
   if (dbCol === 'price' || dbCol === 'pp') {
     const n = parseFloat(value);
-    return (n && n > 0) ? n.toFixed(2) : null;
+    return isNaN(n) ? null : n.toFixed(2);
   }
   if (dbCol === 'curr_cond' || dbCol === 'sleeve_cond') {
     return CONDITION_TO_DISCOGS[String(value).trim()] || String(value).trim() || null;
