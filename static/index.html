@@ -1016,11 +1016,7 @@
 
         <div class="form-group">
           <label class="form-label">Purchase Condition</label>
-          <select class="form-control" id="f-is-new">
-            <option value="">Unknown</option>
-            <option value="0">Pre-Owned</option>
-            <option value="1">New</option>
-          </select>
+          <input class="form-control" id="f-is-new" placeholder="e.g. New, Pre-Owned">
         </div>
 
         <div class="form-group">
@@ -1543,7 +1539,7 @@ function rowHtml(r) {
     <td class="text-mono col-sm">${r.year||''}</td>
     <td class="col-sm" style="white-space:nowrap">${fmtTagsCell(r.format)}</td>
     <td class="col-sm">
-      ${r.is_new !== null && r.is_new !== undefined ? `<span class="${r.is_new ? 'badge badge-new' : 'badge badge-used'}">${r.is_new ? 'New' : 'Pre-Owned'}</span>` : ''}
+      ${r.is_new ? `<span class="${/new/i.test(r.is_new) ? 'badge badge-new' : 'badge badge-used'}">${esc(r.is_new)}</span>` : ''}
       <span style="font-size:10px;color:var(--ink-light);margin-left:4px">${esc(r.curr_cond||'—')}/${esc(r.sleeve_cond||'—')}</span>
     </td>
     <td class="col-md">${esc(r.retailer)}</td>
@@ -1685,7 +1681,7 @@ async function openDetail(id) {
           <div class="detail-artist">${esc(displayArtist(r.artist))}</div>
           <div class="detail-title">${esc(r.title)}</div>
           <div class="detail-meta">
-            ${r.is_new !== null && r.is_new !== undefined ? `<span class="${r.is_new ? 'badge badge-new' : 'badge badge-used'}">${r.is_new ? 'New' : 'Pre-Owned'}</span>` : ''}
+            ${r.is_new ? `<span class="${/new/i.test(r.is_new) ? 'badge badge-new' : 'badge badge-used'}">${esc(r.is_new)}</span>` : ''}
           </div>
           <div class="detail-row"><span class="detail-key">Label</span><span class="detail-val">${esc(r.label)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Cat No.</span><span class="detail-val">${esc(r.cat_no)||'—'}</span></div>
@@ -1875,7 +1871,7 @@ function openEdit(id) {
   setField('f-price', r.price == null ? '' : r.price.toFixed(2));
   setField('f-pp', r.pp == null ? '' : r.pp.toFixed(2));
   setField('f-notes', r.notes);
-  document.getElementById('f-is-new').value = r.is_new === null || r.is_new === undefined ? '' : (r.is_new ? '1' : '0');
+  document.getElementById('f-is-new').value = r.is_new ?? '';
   document.getElementById('f-curr-cond').value = r.curr_cond || '';
   document.getElementById('f-sleeve-cond').value = r.sleeve_cond || '';
 
@@ -1945,7 +1941,7 @@ async function saveRecord() {
     year: parseInt(val('f-year'))||null,
     format: val('f-format'),
     cover_file: fetchedMeta.cover_file || '',
-    is_new: document.getElementById('f-is-new').value === '' ? null : document.getElementById('f-is-new').value === '1',
+    is_new: document.getElementById('f-is-new').value.trim() || null,
     curr_cond: val('f-curr-cond'),
     sleeve_cond: val('f-sleeve-cond'),
     retailer: val('f-retailer'),
@@ -2024,6 +2020,7 @@ function doExport() {
 // ── Discogs Sync ──────────────────────────────────────────────────────────────
 const DISCOGS_DB_COLS = [
   ['purchase_date', 'Purchase Date'],
+  ['is_new', 'Purchase Condition'],
   ['price', 'Price (£)'],
   ['pp', 'P&P (£)'],
   ['retailer', 'Retailer'],

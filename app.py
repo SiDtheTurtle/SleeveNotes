@@ -117,7 +117,7 @@ def init_db():
             year        INTEGER,
             format      TEXT,
             cover_file  TEXT,
-            is_new      INTEGER,
+            is_new      TEXT,
             curr_cond   TEXT,
             sleeve_cond TEXT,
             retailer    TEXT,
@@ -168,7 +168,7 @@ class RecordIn(BaseModel):
     year: Optional[int] = None
     format: Optional[str] = ""
     cover_file: Optional[str] = ""
-    is_new: Optional[bool] = None
+    is_new: Optional[str] = None
     curr_cond: Optional[str] = ""
     sleeve_cond: Optional[str] = ""
     retailer: Optional[str] = ""
@@ -204,7 +204,7 @@ def normalise_date(s: str) -> str:
 
 def row_to_dict(row):
     d = dict(row)
-    d["is_new"] = None if d["is_new"] is None else bool(d["is_new"])
+    d["is_new"] = d["is_new"] or None
     return d
 
 def find_cached_image(release_id: str) -> str:
@@ -297,7 +297,7 @@ DISCOGS_CONDITION_MAP = {
 def normalise_condition(val: str) -> str:
     return DISCOGS_CONDITION_MAP.get(val.strip(), val.strip())
 MAPPED_WRITEABLE = {"purchase_date", "price", "pp", "retailer", "order_ref",
-                    "curr_cond", "sleeve_cond", "notes"}
+                    "curr_cond", "sleeve_cond", "notes", "is_new"}
 
 def parse_collection_item(item: dict, field_mappings: dict) -> dict:
     info = item.get("basic_information", {})
@@ -338,7 +338,7 @@ def parse_collection_item(item: dict, field_mappings: dict) -> dict:
                 val = None
         elif db_col in ("curr_cond", "sleeve_cond"):
             val = normalise_condition(str(val))
-        record[db_col] = val
+        record[db_col] = str(val).strip() or None
     return record
 
 
@@ -450,7 +450,7 @@ def parse_discogs_csv_row(row: dict, name_to_db_col: dict) -> dict | None:
         elif db_col in ("curr_cond", "sleeve_cond"):
             record[db_col] = normalise_condition(val) or None
         elif db_col == "is_new":
-            record[db_col] = 1 if val.lower() in ("1", "true", "yes") else 0
+            record[db_col] = val or None
         else:
             record[db_col] = val
 
@@ -572,8 +572,7 @@ class SyncPayload(BaseModel):
     to_discogs: list[SyncToDiscogs]
 
 def _insert_record(conn, rec: dict) -> int:
-    _raw = rec.get("is_new")
-    is_new = None if _raw is None else (1 if str(_raw) in ("1", "True", "true") else 0)
+    is_new = str(rec["is_new"]).strip() if rec.get("is_new") not in (None, "") else None
     cur = conn.execute("""
         INSERT INTO records
           (discogs_id, instance_id, folder_id, cat_no, artist, title, label, year, format,
@@ -804,7 +803,7 @@ def create_record(rec: RecordIn):
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             rec.discogs_id, rec.cat_no, rec.artist, rec.title, rec.label,
-            rec.year, rec.format, rec.cover_file, None if rec.is_new is None else int(rec.is_new),
+            rec.year, rec.format, rec.cover_file, rec.is_new or None,
             rec.curr_cond or None, rec.sleeve_cond or None, rec.retailer,
             rec.order_ref, rec.purchase_date, rec.price, rec.pp, rec.notes, rec.valuation,
         ))
@@ -821,7 +820,7 @@ def update_record(record_id: int, rec: RecordUpdate):
         """, (
             rec.discogs_id, rec.cat_no, rec.artist, rec.title, rec.label,
             rec.year, rec.format, rec.cover_file,
-            None if rec.is_new is None else int(rec.is_new),
+            rec.is_new or None,
             rec.curr_cond or None, rec.sleeve_cond or None, rec.retailer,
             rec.order_ref, rec.purchase_date, rec.price, rec.pp, rec.notes, rec.valuation,
             record_id,
@@ -1053,7 +1052,7 @@ _EXPORT_STANDARD = [
     ("curr_cond",   "Collection Media Condition"),
     ("sleeve_cond", "Collection Sleeve Condition"),
 ]
-_EXPORT_MAPPABLE = ("retailer", "order_ref", "purchase_date", "price", "pp", "notes", "valuation")
+_EXPORT_MAPPABLE = ("retailer", "order_ref", "purchase_date", "is_new", "price", "pp", "notes", "valuation")
 # SN-specific columns appended after all Discogs columns
 _EXPORT_SN_EXTRAS = ("id", "instance_id", "is_new", "cover_file")
 
