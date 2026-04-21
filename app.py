@@ -372,10 +372,9 @@ def compute_diff(parsed_items: list[dict]) -> dict:
             for col in compare_cols:
                 new_val = prospective.get(col)
                 old_val = db_rec.get(col)
-                # For numeric fields with a 0 default, treat None (blank from source) and
-                # 0/0.0 (DB default meaning "not entered") as equivalent — avoids false positives.
+                # Skip only when both sides are truly unset.
                 if col in ("price", "pp", "valuation"):
-                    if new_val is None and (old_val is None or old_val == 0):
+                    if new_val is None and old_val is None:
                         continue
                 new_str = "" if new_val is None else str(new_val).strip()
                 old_str = "" if old_val is None else str(old_val).strip()
