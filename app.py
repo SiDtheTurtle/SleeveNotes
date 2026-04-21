@@ -108,6 +108,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS records (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             discogs_id  TEXT NOT NULL,
+            instance_id TEXT,
+            folder_id   INTEGER,
             cat_no      TEXT,
             artist      TEXT,
             title       TEXT,
