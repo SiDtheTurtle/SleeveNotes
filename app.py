@@ -590,7 +590,8 @@ def _insert_record(conn, rec: dict) -> int:
         rec.get("retailer", ""),
         rec.get("order_ref", ""),
         normalise_date(str(rec.get("purchase_date", "") or "")),
-        float(rec.get("price", 0) or 0), float(rec.get("pp", 0) or 0),
+        (float(rec["price"]) if rec.get("price") not in (None, "") else None),
+        (float(rec["pp"]) if rec.get("pp") not in (None, "") else None),
         rec.get("notes", ""), 0.0,
     ))
     return cur.lastrowid
