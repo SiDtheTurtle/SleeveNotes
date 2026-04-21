@@ -123,8 +123,8 @@ def init_db():
             retailer    TEXT,
             order_ref   TEXT,
             purchase_date TEXT,
-            price       REAL NOT NULL DEFAULT 0,
-            pp          REAL NOT NULL DEFAULT 0,
+            price       REAL,
+            pp          REAL,
             notes       TEXT,
             valuation   REAL NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -174,8 +174,8 @@ class RecordIn(BaseModel):
     retailer: Optional[str] = ""
     order_ref: Optional[str] = ""
     purchase_date: Optional[str] = ""
-    price: float = 0.0
-    pp: float = 0.0
+    price: Optional[float] = None
+    pp: Optional[float] = None
     notes: Optional[str] = ""
     valuation: float = 0.0
 
@@ -590,7 +590,8 @@ def _insert_record(conn, rec: dict) -> int:
         rec.get("retailer", ""),
         rec.get("order_ref", ""),
         normalise_date(str(rec.get("purchase_date", "") or "")),
-        float(rec.get("price", 0) or 0), float(rec.get("pp", 0) or 0),
+        (float(rec["price"]) if rec.get("price") not in (None, "") else None),
+        (float(rec["pp"]) if rec.get("pp") not in (None, "") else None),
         rec.get("notes", ""), 0.0,
     ))
     return cur.lastrowid
@@ -815,11 +816,12 @@ def update_record(record_id: int, rec: RecordUpdate):
         conn.execute("""
             UPDATE records SET
               discogs_id=?,cat_no=?,artist=?,title=?,label=?,year=?,format=?,cover_file=?,
-              curr_cond=?,sleeve_cond=?,retailer=?,order_ref=?,purchase_date=?,price=?,pp=?,notes=?,valuation=?
+              is_new=?,curr_cond=?,sleeve_cond=?,retailer=?,order_ref=?,purchase_date=?,price=?,pp=?,notes=?,valuation=?
             WHERE id=?
         """, (
             rec.discogs_id, rec.cat_no, rec.artist, rec.title, rec.label,
             rec.year, rec.format, rec.cover_file,
+            None if rec.is_new is None else int(rec.is_new),
             rec.curr_cond or None, rec.sleeve_cond or None, rec.retailer,
             rec.order_ref, rec.purchase_date, rec.price, rec.pp, rec.notes, rec.valuation,
             record_id,

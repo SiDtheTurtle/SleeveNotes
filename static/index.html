@@ -1024,6 +1024,12 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label">Retailer</label>
+          <input class="form-control" id="f-retailer" list="retailers-list" autocomplete="off">
+          <datalist id="retailers-list"></datalist>
+        </div>
+
+        <div class="form-group">
           <label class="form-label">Media Condition</label>
           <select class="form-control" id="f-curr-cond">
             <option value="">Unknown</option>
@@ -1056,19 +1062,13 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">Retailer</label>
-          <input class="form-control" id="f-retailer" list="retailers-list" autocomplete="off">
-          <datalist id="retailers-list"></datalist>
+          <label class="form-label">Purchase Date</label>
+          <input class="form-control" type="date" id="f-purchase-date">
         </div>
 
         <div class="form-group">
           <label class="form-label">Order Ref</label>
           <input class="form-control" id="f-order-ref">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Purchase Date</label>
-          <input class="form-control" type="date" id="f-purchase-date">
         </div>
 
         <div class="form-group">
@@ -1696,8 +1696,8 @@ async function openDetail(id) {
           <div class="detail-row"><span class="detail-key">Retailer</span><span class="detail-val">${esc(r.retailer)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Order Ref</span><span class="detail-val">${esc(r.order_ref)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Purchase Date</span><span class="detail-val">${fmtDate(r.purchase_date)||'—'}</span></div>
-          <div class="detail-row"><span class="detail-key">Price</span><span class="detail-val">£${(r.price||0).toFixed(2)}</span></div>
-          <div class="detail-row"><span class="detail-key">P&amp;P</span><span class="detail-val">£${(r.pp||0).toFixed(2)}</span></div>
+          <div class="detail-row"><span class="detail-key">Price</span><span class="detail-val">${r.price != null ? `£${r.price.toFixed(2)}` : '—'}</span></div>
+          <div class="detail-row"><span class="detail-key">P&amp;P</span><span class="detail-val">${r.pp != null ? `£${r.pp.toFixed(2)}` : '—'}</span></div>
           <div class="detail-row"><span class="detail-key">Valuation</span><span class="detail-val">${r.valuation ? `£${r.valuation.toFixed(2)} <span style="font-size:10px;color:var(--ink-light)">(lowest listing)</span>` : '—'}</span></div>
           <div class="detail-row"><span class="detail-key">Discogs</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></span></div>
           <div class="detail-row"><span class="detail-key">Notes</span><span class="detail-val" style="white-space:pre-wrap">${esc(r.notes)||'—'}</span></div>
@@ -1872,8 +1872,8 @@ function openEdit(id) {
   setField('f-retailer', r.retailer);
   setField('f-order-ref', r.order_ref);
   setField('f-purchase-date', toISODate(r.purchase_date));
-  setField('f-price', (r.price||0).toFixed(2));
-  setField('f-pp', (r.pp||0).toFixed(2));
+  setField('f-price', r.price == null ? '' : r.price.toFixed(2));
+  setField('f-pp', r.pp == null ? '' : r.pp.toFixed(2));
   setField('f-notes', r.notes);
   document.getElementById('f-is-new').value = r.is_new === null || r.is_new === undefined ? '' : (r.is_new ? '1' : '0');
   document.getElementById('f-curr-cond').value = r.curr_cond || '';
@@ -1951,8 +1951,8 @@ async function saveRecord() {
     retailer: val('f-retailer'),
     order_ref: val('f-order-ref'),
     purchase_date: val('f-purchase-date'),
-    price: parseFloat(val('f-price'))||0,
-    pp: parseFloat(val('f-pp'))||0,
+    price: val('f-price') === '' ? null : parseFloat(val('f-price')),
+    pp: val('f-pp') === '' ? null : parseFloat(val('f-pp')),
     notes: val('f-notes'),
     valuation: parseFloat(val('f-valuation'))||0,
   };
