@@ -1696,8 +1696,8 @@ async function openDetail(id) {
           <div class="detail-row"><span class="detail-key">Retailer</span><span class="detail-val">${esc(r.retailer)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Order Ref</span><span class="detail-val">${esc(r.order_ref)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Purchase Date</span><span class="detail-val">${fmtDate(r.purchase_date)||'—'}</span></div>
-          <div class="detail-row"><span class="detail-key">Price</span><span class="detail-val">£${(r.price||0).toFixed(2)}</span></div>
-          <div class="detail-row"><span class="detail-key">P&amp;P</span><span class="detail-val">£${(r.pp||0).toFixed(2)}</span></div>
+          <div class="detail-row"><span class="detail-key">Price</span><span class="detail-val">${r.price != null ? `£${r.price.toFixed(2)}` : '—'}</span></div>
+          <div class="detail-row"><span class="detail-key">P&amp;P</span><span class="detail-val">${r.pp != null ? `£${r.pp.toFixed(2)}` : '—'}</span></div>
           <div class="detail-row"><span class="detail-key">Valuation</span><span class="detail-val">${r.valuation ? `£${r.valuation.toFixed(2)} <span style="font-size:10px;color:var(--ink-light)">(lowest listing)</span>` : '—'}</span></div>
           <div class="detail-row"><span class="detail-key">Discogs</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></span></div>
           <div class="detail-row"><span class="detail-key">Notes</span><span class="detail-val" style="white-space:pre-wrap">${esc(r.notes)||'—'}</span></div>
