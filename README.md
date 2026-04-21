@@ -13,8 +13,8 @@ A personal vinyl record collection manager. Built for my own use out of curiosit
 - Pulls current valuations (lowest marketplace listing) from Discogs
 - Table and tile views, with filtering by format tags and status
 - Detail cards with image carousels and tracklists
-- Bulk refresh of Discogs data
-- Import/export via pipe-delimited CSV
+- Bulk import/sync from your Discogs collection or a CSV file
+- Import/export via CSV
 
 ## Stack
 
@@ -24,19 +24,14 @@ A personal vinyl record collection manager. Built for my own use out of curiosit
 
 ## Running it
 
-You'll need a [Discogs API token](https://www.discogs.com/settings/developers).
-
-1. Copy `sleevenotes.env.example` to `sleevenotes.env` and add your token:
-   ```
-   DISCOGS_TOKEN=your_token_here
-   ```
-
-2. Run:
+1. Run:
    ```bash
    docker compose up -d
    ```
 
-3. Open [http://localhost:2026](http://localhost:2026)
+2. Open [http://localhost:2026](http://localhost:2026)
+
+3. Go to **Settings → Discogs** and enter your [Discogs API token](https://www.discogs.com/settings/developers) and username.
 
 Data is persisted in a Docker volume (`sleevenotes_data`).
 

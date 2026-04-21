@@ -761,8 +761,6 @@
   .toggle input:checked ~ .toggle-thumb { left: 19px; }
 
   /* ── Discogs fetch UI ── */
-  .discogs-fetch-row { display: flex; gap: 0.5rem; }
-  .discogs-fetch-row .form-control { flex: 1; }
 
   .discogs-preview {
     background: var(--surface);
@@ -877,8 +875,7 @@
 </header>
 
 <div class="stats-bar" id="stats-bar">
-  <div class="stat-item"><span class="stat-label">Total Entries</span><span class="stat-value" id="s-total">—</span></div>
-  <div class="stat-item"><span class="stat-label">In Collection</span><span class="stat-value" id="s-col">—</span></div>
+  <div class="stat-item"><span class="stat-label">Total Records</span><span class="stat-value" id="s-total">—</span></div>
   <div class="stat-item"><span class="stat-label">Collection Cost</span><span class="stat-value" id="s-cost">—</span></div>
   <div class="stat-item"><span class="stat-label">Collection Value</span><span class="stat-value" id="s-valuation">—</span></div>
 </div>
@@ -895,13 +892,6 @@
     <span class="search-icon">⌕</span>
     <input type="text" id="search" placeholder="Search artist, title, label…" oninput="renderView()">
   </div>
-
-  <select class="filter" id="filter-status" onchange="renderView()">
-    <option value="">All Statuses</option>
-    <option value="In Collection">In Collection</option>
-    <option value="Purchased">Purchased</option>
-    <option value="Returned">Returned</option>
-  </select>
 
   <div class="toolbar-sep"></div>
 
@@ -930,15 +920,6 @@
       <div class="toggle-thumb"></div>
     </label>
     <span style="font-size:12px;color:var(--ink-light)">Show tags</span>
-  </label>
-
-  <label class="toggle-row" style="cursor:pointer">
-    <label class="toggle">
-      <input type="checkbox" id="show-returned" onchange="onShowReturnedToggle()">
-      <div class="toggle-track"></div>
-      <div class="toggle-thumb"></div>
-    </label>
-    <span style="font-size:12px;color:var(--ink-light)">Show returned</span>
   </label>
 
   <div class="toolbar-sep"></div>
@@ -982,16 +963,22 @@
       <div id="discogs-section">
         <div class="form-group form-full" style="margin-bottom:1rem">
           <label class="form-label">Discogs Release ID</label>
-          <div class="discogs-fetch-row">
-            <input class="form-control" id="f-discogs-id" placeholder="e.g. r36875179 or 36875179">
-            <button class="btn btn-secondary" onclick="fetchDiscogs()" id="fetch-btn">Fetch</button>
+          <input class="form-control" id="f-discogs-id" placeholder="e.g. r36875179 or 36875179">
+          <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+            <button class="btn btn-secondary btn-sm" onclick="fetchDiscogs()" id="fetch-btn">Fetch</button>
+            <button class="btn btn-secondary btn-sm hidden" onclick="syncRecordFields(editingId)" id="sync-fields-btn">Sync Custom Fields</button>
           </div>
-          <div id="discogs-preview" class="hidden"></div>
+          <div id="discogs-preview" class="hidden" style="margin-top:0.5rem"></div>
         </div>
       </div>
 
       <div class="form-grid" id="form-fields">
         <div class="form-section">From Discogs</div>
+
+        <div class="form-group">
+          <label class="form-label">Instance ID</label>
+          <input class="form-control" id="f-instance-id" readonly placeholder="Set after first sync">
+        </div>
 
         <div class="form-group">
           <label class="form-label">Artist</label>
@@ -1030,29 +1017,16 @@
         <div class="form-group">
           <label class="form-label">Purchase Condition</label>
           <select class="form-control" id="f-is-new">
+            <option value="">Unknown</option>
             <option value="0">Pre-Owned</option>
             <option value="1">New</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Original Grade</label>
-          <select class="form-control" id="f-orig-cond">
-            <option value="S">S — Sealed</option>
-            <option value="M">M — Mint</option>
-            <option value="NM">NM — Near Mint</option>
-            <option value="VG+">VG+ — Very Good Plus</option>
-            <option value="VG">VG — Very Good</option>
-            <option value="G+">G+ — Good Plus</option>
-            <option value="G">G — Good</option>
-            <option value="F">F — Fair</option>
-            <option value="P">P — Poor</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Current Grade</label>
+          <label class="form-label">Media Condition</label>
           <select class="form-control" id="f-curr-cond">
+            <option value="">Unknown</option>
             <option value="S">S — Sealed</option>
             <option value="M">M — Mint</option>
             <option value="NM">NM — Near Mint</option>
@@ -1066,11 +1040,18 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">Status</label>
-          <select class="form-control" id="f-status">
-            <option value="In Collection">In Collection</option>
-            <option value="Purchased">Purchased</option>
-            <option value="Returned">Returned</option>
+          <label class="form-label">Sleeve Condition</label>
+          <select class="form-control" id="f-sleeve-cond">
+            <option value="">Unknown</option>
+            <option value="S">S — Sealed</option>
+            <option value="M">M — Mint</option>
+            <option value="NM">NM — Near Mint</option>
+            <option value="VG+">VG+ — Very Good Plus</option>
+            <option value="VG">VG — Very Good</option>
+            <option value="G+">G+ — Good Plus</option>
+            <option value="G">G — Good</option>
+            <option value="F">F — Fair</option>
+            <option value="P">P — Poor</option>
           </select>
         </div>
 
@@ -1120,30 +1101,6 @@
   </div>
 </div>
 
-<!-- ── Import Modal ── -->
-<div class="modal-backdrop" id="modal-import">
-  <div class="modal" style="max-width:480px">
-    <div class="modal-header">
-      <span class="modal-title">Import CSV</span>
-      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-import')">✕</button>
-    </div>
-    <div class="modal-body">
-      <p style="font-size:13px;color:var(--ink-mid);margin-bottom:1rem">
-        Upload a pipe-delimited CSV. Rows whose Discogs ID already exists in the collection are skipped.
-      </p>
-      <div class="form-group">
-        <label class="form-label">CSV File</label>
-        <input class="form-control" type="file" id="import-file" accept=".csv,.txt">
-      </div>
-      <div id="import-result" style="margin-top:1rem;font-size:13px"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="import-cancel-btn" onclick="closeModal('modal-import')">Cancel</button>
-      <button class="btn btn-primary" id="import-submit-btn" onclick="doImport()">Import</button>
-      <button class="btn btn-primary hidden" id="import-close-btn" onclick="closeModal('modal-import')">Close</button>
-    </div>
-  </div>
-</div>
 
 <!-- ── Settings Modal ── -->
 <div class="modal-backdrop" id="modal-settings">
@@ -1155,7 +1112,7 @@
     <div class="modal-body" style="display:flex;flex-direction:column;gap:1rem;">
 
       <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
-        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Display Settings</div>
+        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Display</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
           <div>
             <div style="font-size:13px;font-weight:500;color:var(--ink)">Clean artist names</div>
@@ -1170,7 +1127,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
           <div>
             <div style="font-size:13px;font-weight:500;color:var(--ink)">Include P&amp;P in Collection Cost</div>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">When on, postage &amp; packaging is added to the Collection Cost KPI. Returned records are always excluded.</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">When on, postage &amp; packaging is added to the Collection Cost KPI.</div>
           </div>
           <label class="toggle" style="flex-shrink:0" title="Include P&P in Collection Cost">
             <input type="checkbox" id="include-pp-toggle" onchange="onIncludePPToggle()">
@@ -1178,36 +1135,68 @@
             <div class="toggle-thumb"></div>
           </label>
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
-          <div>
-            <div style="font-size:13px;font-weight:500;color:var(--ink)">Hide obvious format tags</div>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Removes Album, LP, Stereo and Vinyl from format tag display and filters.</div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+            <div>
+              <div style="font-size:13px;font-weight:500;color:var(--ink)">Hide format tags</div>
+              <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Hide tags you're not interested in from the format filter bar.</div>
+            </div>
+            <label class="toggle" style="flex-shrink:0" title="Hide format tags">
+              <input type="checkbox" id="hide-format-tags-toggle" onchange="onHideFormatTagsToggle()">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
           </div>
-          <label class="toggle" style="flex-shrink:0" title="Hide obvious format tags">
-            <input type="checkbox" id="hide-obvious-formats-toggle" onchange="onHideObviousFormatsToggle()">
-            <div class="toggle-track"></div>
-            <div class="toggle-thumb"></div>
-          </label>
+          <input class="form-control" id="hidden-format-tags-input" placeholder="e.g. Album, LP, Stereo, Vinyl" onchange="onHiddenTagsChange()">
         </div>
       </div>
 
       <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
-        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Data</div>
-        <div style="display:flex;gap:0.5rem;">
-          <button class="btn btn-secondary btn-sm" onclick="closeModal('modal-settings');openImport()">Import from CSV</button>
-          <button class="btn btn-secondary btn-sm" onclick="doExport()">Export to CSV</button>
+        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Discogs</div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Username</label>
+          <input class="form-control" id="settings-discogs-username" placeholder="Your Discogs username">
         </div>
-      </div>
-
-      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
-        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Fetch All from Discogs</div>
-        <div style="font-size:12px;color:var(--ink-light)">Re-fetches metadata and valuations for existing records. Preserves purchase details. Runs 5 records concurrently (2 API calls each), ~30 records per minute.</div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">API Token</label>
+          <input class="form-control" type="password" id="settings-discogs-token" placeholder="••••••••••••••••">
+        </div>
+        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Refresh Metadata</div>
+          <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Re-fetches Discogs-sourced fields (artist, label, format, valuation) for records already in SleeveNotes. Your purchase details, condition and notes are never touched. ~30 records per minute.</div>
+        </div>
         <div id="fetch-range-btns" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
         <div id="fetch-progress" class="hidden" style="display:flex;flex-direction:column;gap:0.4rem;">
           <div style="font-size:12px;color:var(--ink-mid)" id="fetch-progress-label">Fetching…</div>
           <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
             <div id="fetch-progress-bar" style="height:100%;background:var(--green);width:0%;transition:width 0.3s"></div>
           </div>
+        </div>
+        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Field Mapping</div>
+          <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Map your Discogs custom fields to SleeveNotes fields. Changes are saved with the Save button above.</div>
+        </div>
+        <div id="settings-mapping-loading" style="font-size:12px;color:var(--ink-light)">Loading…</div>
+        <div id="settings-mapping-section" style="display:none">
+          <div id="discogs-fields-rows"></div>
+        </div>
+        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Sync Collection</div>
+          <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Two-way sync between SleeveNotes and your Discogs collection. Shows a full diff — choose per record which direction to sync, or skip.</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync with Discogs…</button>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Data</div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <label class="btn btn-secondary btn-sm" style="cursor:pointer">Import from CSV<input type="file" accept=".csv" style="display:none" onchange="importCsv(this)"></label>
+          <button class="btn btn-secondary btn-sm" onclick="doExport()">Export to CSV</button>
         </div>
       </div>
 
@@ -1219,10 +1208,10 @@
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
           <div>
-            <div style="font-size:13px;font-weight:500;color:var(--ink)">Format Database</div>
-            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Permanently deletes all records. Cannot be undone.</div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Delete All Records</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Permanently deletes all records. Settings and field mappings are preserved. Cannot be undone.</div>
           </div>
-          <label class="toggle" title="Enable to unlock">
+          <label class="toggle" style="flex-shrink:0" title="Enable to unlock">
             <input type="checkbox" id="format-safety-toggle" onchange="onFormatToggle()">
             <div class="toggle-track"></div>
             <div class="toggle-thumb"></div>
@@ -1230,6 +1219,22 @@
         </div>
 
         <button class="btn btn-danger" id="format-db-btn" disabled onclick="doFormatDb()" style="align-self:flex-start;opacity:0.4;cursor:not-allowed">
+          Delete All Records
+        </button>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Format Database</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Deletes all records and resets all settings — Discogs token, username, field mappings and display preferences — back to defaults. Cannot be undone.</div>
+          </div>
+          <label class="toggle" style="flex-shrink:0" title="Enable to unlock">
+            <input type="checkbox" id="factory-reset-safety-toggle" onchange="onFactoryResetToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+
+        <button class="btn btn-danger" id="factory-reset-btn" disabled onclick="doFactoryReset()" style="align-self:flex-start;opacity:0.4;cursor:not-allowed">
           Format Database
         </button>
 
@@ -1238,7 +1243,7 @@
             <div style="font-size:13px;font-weight:500;color:var(--ink)">Clear Image Cache</div>
             <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Deletes all cached cover images from disk. Cannot be undone.</div>
           </div>
-          <label class="toggle" title="Enable to unlock">
+          <label class="toggle" style="flex-shrink:0" title="Enable to unlock">
             <input type="checkbox" id="clear-images-safety-toggle" onchange="onClearImagesToggle()">
             <div class="toggle-track"></div>
             <div class="toggle-thumb"></div>
@@ -1253,6 +1258,27 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-settings')">Close</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Discogs Sync — Preview Modal ── -->
+<div class="modal-backdrop" id="modal-discogs-sync">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <span class="modal-title">Sync Preview</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-discogs-sync')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="sync-preview-loading" style="text-align:center;padding:2rem;color:var(--ink-light);font-size:13px">
+        Loading…
+      </div>
+      <div id="sync-preview-content" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-discogs-sync')">Cancel</button>
+      <button class="btn btn-primary" id="sync-apply-btn" onclick="applySync()" disabled>Apply Sync</button>
     </div>
   </div>
 </div>
@@ -1271,7 +1297,7 @@ let sortDir = null;
 let cleanArtists = true;
 let includePP = false;
 let hideObviousFormats = true;
-const OBVIOUS_FORMATS = new Set(['Album', 'LP', 'Stereo', 'Vinyl']);
+let hiddenFormatTags = new Set(['Album', 'LP', 'Stereo', 'Vinyl']);
 let filterFormat = null; // active format tag string, or null
 let selectedTileId = null;
 let showValuations = false;
@@ -1300,9 +1326,6 @@ function restoreLocalState() {
   showTags = lsGet('showTags', false);
   document.getElementById('show-tags').checked = showTags;
 
-  const showReturned = lsGet('showReturned', false);
-  document.getElementById('show-returned').checked = showReturned;
-
   const groupByArtist = lsGet('groupByArtist', false);
   document.getElementById('group-by-artist').checked = groupByArtist;
 
@@ -1323,11 +1346,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('modal-form').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal('modal-form');
   });
-  document.getElementById('modal-import').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal('modal-import');
-  });
-  document.getElementById('modal-settings').addEventListener('click', e => {
+document.getElementById('modal-settings').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal('modal-settings');
+  });
+  document.getElementById('modal-discogs-sync').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-discogs-sync');
   });
   document.getElementById('main-content').addEventListener('click', e => {
     if (e.target.closest('a, button, .fmt-tag-filter')) return;
@@ -1337,6 +1360,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ── Data ───────────────────────────────────────────────────────────────────
+let discogsUsername = '';
+let discogsFieldMappings = {};
+let discogsFields = [];
+let diffData = null;
+let syncSource = 'discogs'; // 'discogs' | 'csv'
+
 async function loadSettings() {
   try {
     const r = await fetch('/api/settings');
@@ -1345,14 +1374,18 @@ async function loadSettings() {
       if (s.clean_artists !== undefined) cleanArtists = s.clean_artists === 'true';
       if (s.include_pp !== undefined) includePP = s.include_pp === 'true';
       if (s.hide_obvious_formats !== undefined) hideObviousFormats = s.hide_obvious_formats === 'true';
+      if (s.hidden_format_tags !== undefined)
+        hiddenFormatTags = new Set(s.hidden_format_tags.split(',').map(t => t.trim()).filter(Boolean));
+      discogsUsername = s.discogs_username || '';
+      try { discogsFieldMappings = JSON.parse(s.discogs_field_mappings || '{}'); } catch { discogsFieldMappings = {}; }
+      // token is not surfaced to JS state — it stays in the DB and is read server-side
     }
   } catch {}
 }
 
 async function loadRecords() {
-  const showReturned = document.getElementById('show-returned').checked;
   try {
-    const r = await fetch(`/api/records?show_returned=${showReturned}`);
+    const r = await fetch('/api/records');
     if (!r.ok) throw new Error(r.status);
     records = await r.json();
     renderView();
@@ -1375,13 +1408,23 @@ function updateRetailersList() {
     .join('');
 }
 
+function startCoverPoll(refreshingCount) {
+  // Poll every 8s until all refreshing records have a cover_file, or 40 attempts (~5 min).
+  // Uses covers-before as baseline so pre-existing no-cover records don't stall the loop.
+  const baseline = records.filter(r => r.cover_file).length;
+  let polls = 0;
+  const id = setInterval(async () => {
+    polls++;
+    await loadRecords();
+    const covered = records.filter(r => r.cover_file).length - baseline;
+    if (covered >= refreshingCount || polls >= 40) clearInterval(id);
+  }, 8000);
+}
+
 function updateStats() {
-  const inCol = records.filter(r => r.status === 'In Collection').length;
-  const notReturned = records.filter(r => r.status !== 'Returned');
-  const cost = notReturned.reduce((s,r) => s + (r.price||0) + (includePP ? (r.pp||0) : 0), 0);
+  const cost = records.reduce((s,r) => s + (r.price||0) + (includePP ? (r.pp||0) : 0), 0);
   const valuation = records.reduce((s,r) => s + (r.valuation||0), 0);
   document.getElementById('s-total').textContent = records.length;
-  document.getElementById('s-col').textContent = inCol;
   document.getElementById('s-cost').textContent = showValuations ? '£' + cost.toFixed(2) : '—';
   document.getElementById('s-valuation').textContent = showValuations && valuation ? '£' + valuation.toFixed(2) : '—';
 }
@@ -1395,9 +1438,7 @@ function onShowValuationsToggle() {
 // ── Filtering & sorting ────────────────────────────────────────────────────
 function getFiltered() {
   const q = document.getElementById('search').value.toLowerCase().trim();
-  const fs = document.getElementById('filter-status').value;
   return records.filter(r => {
-    if (fs && r.status !== fs) return false;
     if (filterFormat && !formatTags(r.format, false).includes(filterFormat)) return false;
     if (q) {
       const hay = `${r.artist} ${r.title} ${r.label} ${r.cat_no} ${r.retailer}`.toLowerCase();
@@ -1417,7 +1458,6 @@ function applySortCol(rows) {
       case 'title':     v = cmp(a.title, b.title); break;
       case 'label':     v = cmp(a.label, b.label); break;
       case 'year':      v = cmpN(a.year, b.year); break;
-      case 'status':    v = cmp(a.status, b.status); break;
       case 'retailer':  v = cmp(a.retailer, b.retailer); break;
       case 'purchase_date': {
         const da = a.purchase_date || '', db = b.purchase_date || '';
@@ -1450,7 +1490,7 @@ const cmpN = (a, b) => (a||0) - (b||0);
 
 // ── View switching ─────────────────────────────────────────────────────────
 function openRandom() {
-  const pool = records.filter(r => r.status === 'In Collection');
+  const pool = records;
   if (!pool.length) { toast('No records in collection', 'error'); return; }
   const pick = pool[Math.floor(Math.random() * pool.length)];
   openDetail(pick.id);
@@ -1483,10 +1523,6 @@ function onShowTagsToggle() {
   updateFormatFilterBar();
 }
 
-function onShowReturnedToggle() {
-  lsSet('showReturned', document.getElementById('show-returned').checked);
-  loadRecords();
-}
 
 function onGroupByArtistToggle() {
   lsSet('groupByArtist', document.getElementById('group-by-artist').checked);
@@ -1507,10 +1543,9 @@ function rowHtml(r) {
     <td class="text-mono col-sm">${r.year||''}</td>
     <td class="col-sm" style="white-space:nowrap">${fmtTagsCell(r.format)}</td>
     <td class="col-sm">
-      <span class="${r.is_new ? 'badge badge-new' : 'badge badge-used'}">${r.is_new ? 'New' : 'Pre-Owned'}</span>
-      <span style="font-size:10px;color:var(--ink-light);margin-left:4px">${esc(r.orig_cond)}/${esc(r.curr_cond)}</span>
+      ${r.is_new !== null && r.is_new !== undefined ? `<span class="${r.is_new ? 'badge badge-new' : 'badge badge-used'}">${r.is_new ? 'New' : 'Pre-Owned'}</span>` : ''}
+      <span style="font-size:10px;color:var(--ink-light);margin-left:4px">${esc(r.curr_cond||'—')}/${esc(r.sleeve_cond||'—')}</span>
     </td>
-    <td class="col-sm"><span class="badge ${statusClass(r.status)}">${esc(r.status)}</span></td>
     <td class="col-md">${esc(r.retailer)}</td>
     <td class="text-mono col-md">${fmtDate(r.purchase_date)}</td>
     <td class="text-mono text-right col-sm">£${(r.price||0).toFixed(2)}</td>
@@ -1567,7 +1602,6 @@ function renderTable() {
             ${th('year',          'Year',          'col-sm')}
             <th class="col-sm">Format</th>
             <th class="col-sm">Cond.</th>
-            ${th('status',        'Status',        'col-sm')}
             ${th('retailer',      'Retailer',      'col-md')}
             ${th('purchase_date', 'Purchase Date', 'col-md')}
             ${th('price',         'Price',         'col-sm text-right')}
@@ -1651,15 +1685,14 @@ async function openDetail(id) {
           <div class="detail-artist">${esc(displayArtist(r.artist))}</div>
           <div class="detail-title">${esc(r.title)}</div>
           <div class="detail-meta">
-            <span class="badge ${statusClass(r.status)}">${esc(r.status)}</span>
-            <span class="${r.is_new ? 'badge badge-new' : 'badge badge-used'}">${r.is_new ? 'New' : 'Pre-Owned'}</span>
+            ${r.is_new !== null && r.is_new !== undefined ? `<span class="${r.is_new ? 'badge badge-new' : 'badge badge-used'}">${r.is_new ? 'New' : 'Pre-Owned'}</span>` : ''}
           </div>
           <div class="detail-row"><span class="detail-key">Label</span><span class="detail-val">${esc(r.label)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Cat No.</span><span class="detail-val">${esc(r.cat_no)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${r.year||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Format</span><span class="detail-val">${fmtTagsHtml(r.format)||'—'}</span></div>
-          <div class="detail-row"><span class="detail-key">Purchased</span><span class="detail-val">${esc(condLabel(r.orig_cond))}</span></div>
-          <div class="detail-row"><span class="detail-key">Current</span><span class="detail-val">${esc(condLabel(r.curr_cond))}</span></div>
+          <div class="detail-row"><span class="detail-key">Media</span><span class="detail-val">${esc(condLabel(r.curr_cond))}</span></div>
+          <div class="detail-row"><span class="detail-key">Sleeve</span><span class="detail-val">${esc(condLabel(r.sleeve_cond))}</span></div>
           <div class="detail-row"><span class="detail-key">Retailer</span><span class="detail-val">${esc(r.retailer)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Order Ref</span><span class="detail-val">${esc(r.order_ref)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Purchase Date</span><span class="detail-val">${fmtDate(r.purchase_date)||'—'}</span></div>
@@ -1809,6 +1842,7 @@ function openAdd() {
   document.getElementById('discogs-section').style.display = '';
   document.getElementById('fetch-btn').textContent = 'Fetch';
   document.getElementById('delete-btn').classList.add('hidden');
+  document.getElementById('sync-fields-btn').classList.add('hidden');
   resetForm();
   openModal('modal-form');
 }
@@ -1821,11 +1855,13 @@ function openEdit(id) {
 
   document.getElementById('form-modal-title').textContent = 'Edit Record';
   document.getElementById('discogs-section').style.display = '';
-  document.getElementById('fetch-btn').textContent = 'Re-fetch';
+  document.getElementById('fetch-btn').textContent = 'Sync Metadata';
+  document.getElementById('sync-fields-btn').classList.remove('hidden');
   document.getElementById('discogs-preview').classList.add('hidden');
   document.getElementById('delete-btn').classList.remove('hidden');
 
   setField('f-discogs-id', r.discogs_id);
+  setField('f-instance-id', r.instance_id || '');
   setField('f-artist', r.artist);
   setField('f-title', r.title);
   setField('f-label', r.label);
@@ -1839,26 +1875,24 @@ function openEdit(id) {
   setField('f-price', (r.price||0).toFixed(2));
   setField('f-pp', (r.pp||0).toFixed(2));
   setField('f-notes', r.notes);
-  document.getElementById('f-is-new').value = r.is_new ? '1' : '0';
-  document.getElementById('f-status').value = r.status;
-  document.getElementById('f-orig-cond').value = r.orig_cond || 'NM';
-  document.getElementById('f-curr-cond').value = r.curr_cond || 'NM';
+  document.getElementById('f-is-new').value = r.is_new === null || r.is_new === undefined ? '' : (r.is_new ? '1' : '0');
+  document.getElementById('f-curr-cond').value = r.curr_cond || '';
+  document.getElementById('f-sleeve-cond').value = r.sleeve_cond || '';
 
   openModal('modal-form');
 }
 
 function resetForm() {
-  ['f-discogs-id','f-artist','f-title','f-label','f-cat-no','f-format',
+  ['f-discogs-id','f-instance-id','f-artist','f-title','f-label','f-cat-no','f-format',
    'f-retailer','f-order-ref','f-notes'].forEach(id => setField(id, ''));
   setField('f-valuation', '0.00');
   setField('f-year', '');
   setField('f-price', '0.00');
   setField('f-pp', '0.00');
   setField('f-purchase-date', new Date().toISOString().split('T')[0]);
-  document.getElementById('f-is-new').value = '0';
-  document.getElementById('f-status').value = 'In Collection';
-  document.getElementById('f-orig-cond').value = 'NM';
-  document.getElementById('f-curr-cond').value = 'NM';
+  document.getElementById('f-is-new').value = '';
+  document.getElementById('f-curr-cond').value = '';
+  document.getElementById('f-sleeve-cond').value = '';
   document.getElementById('discogs-preview').classList.add('hidden');
 }
 
@@ -1911,10 +1945,9 @@ async function saveRecord() {
     year: parseInt(val('f-year'))||null,
     format: val('f-format'),
     cover_file: fetchedMeta.cover_file || '',
-    is_new: document.getElementById('f-is-new').value === '1',
-    orig_cond: val('f-orig-cond'),
+    is_new: document.getElementById('f-is-new').value === '' ? null : document.getElementById('f-is-new').value === '1',
     curr_cond: val('f-curr-cond'),
-    status: val('f-status'),
+    sleeve_cond: val('f-sleeve-cond'),
     retailer: val('f-retailer'),
     order_ref: val('f-order-ref'),
     purchase_date: val('f-purchase-date'),
@@ -1964,33 +1997,23 @@ async function deleteRecord() {
 }
 
 // ── Import / Export ────────────────────────────────────────────────────────
-function openImport() {
-  document.getElementById('import-file').value = '';
-  document.getElementById('import-result').innerHTML = '';
-  document.getElementById('import-cancel-btn').classList.remove('hidden');
-  document.getElementById('import-submit-btn').classList.remove('hidden');
-  document.getElementById('import-close-btn').classList.add('hidden');
-  openModal('modal-import');
-}
-
-async function doImport() {
-  const file = document.getElementById('import-file').files[0];
-  if (!file) { toast('Select a file first', 'error'); return; }
-  const fd = new FormData();
-  fd.append('file', file);
-  const res = document.getElementById('import-result');
-  res.textContent = 'Importing…';
+async function importCsv(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  toast('Parsing CSV…');
+  closeModal('modal-settings');
   try {
-    const r = await fetch('/api/import', { method: 'POST', body: fd });
-    const d = await r.json();
-    const skippedNote = d.skipped ? `, ${d.skipped} already existed` : '';
-    res.innerHTML = `<span style="color:var(--green)">✓ Imported ${d.inserted} record${d.inserted !== 1 ? 's' : ''}${skippedNote}</span>`;
-    await loadRecords();
-    document.getElementById('import-cancel-btn').classList.add('hidden');
-    document.getElementById('import-submit-btn').classList.add('hidden');
-    document.getElementById('import-close-btn').classList.remove('hidden');
-  } catch {
-    res.innerHTML = `<span style="color:var(--red)">Import failed</span>`;
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/api/import/csv', { method: 'POST', body: fd });
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.status);
+    diffData = await resp.json();
+    syncSource = 'csv';
+    openSyncModal();
+    renderSyncPreview(diffData);
+  } catch(e) {
+    toast('CSV import failed: ' + e.message, 'error');
   }
 }
 
@@ -1998,47 +2021,446 @@ function doExport() {
   window.location.href = '/api/export';
 }
 
+// ── Discogs Sync ──────────────────────────────────────────────────────────────
+const DISCOGS_DB_COLS = [
+  ['purchase_date', 'Purchase Date'],
+  ['price', 'Price (£)'],
+  ['pp', 'P&P (£)'],
+  ['retailer', 'Retailer'],
+  ['order_ref', 'Order Ref'],
+  ['curr_cond', 'Media Condition'],
+  ['sleeve_cond', 'Sleeve Condition'],
+  ['notes', 'Notes'],
+];
+
+const CONDITION_TO_DISCOGS = {
+  'M':   'Mint (M)',
+  'NM':  'Near Mint (NM or M-)',
+  'VG+': 'Very Good Plus (VG+)',
+  'VG':  'Very Good (VG)',
+  'G+':  'Good Plus (G+)',
+  'G':   'Good (G)',
+  'F':   'Fair (F)',
+  'P':   'Poor (P)',
+};
+
+function formatExportValue(dbCol, value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (dbCol === 'purchase_date') return value ? fmtDate(value) : null;
+  if (dbCol === 'price' || dbCol === 'pp') {
+    const n = parseFloat(value);
+    return (n && n > 0) ? n.toFixed(2) : null;
+  }
+  if (dbCol === 'curr_cond' || dbCol === 'sleeve_cond') {
+    return CONDITION_TO_DISCOGS[String(value).trim()] || String(value).trim() || null;
+  }
+  return String(value).trim() || null;
+}
+
+function buildFieldUpdates(record, limitToCols = null) {
+  return Object.entries(discogsFieldMappings)
+    .filter(([, col]) => col && (!limitToCols || limitToCols.has(col)))
+    .map(([fid, col]) => {
+      const value = formatExportValue(col, record[col]);
+      if (value === null) return null;
+      const field = discogsFields.find(f => String(f.id) === fid);
+      if (field?.type === 'dropdown' && Array.isArray(field.options) && !field.options.includes(value)) {
+        return null;
+      }
+      return { field_id: fid, value };
+    })
+    .filter(u => u !== null);
+}
+
+function getDropdownSkips(record, limitToCols = null) {
+  const skips = [];
+  Object.entries(discogsFieldMappings).forEach(([fid, col]) => {
+    if (!col) return;
+    if (limitToCols && !limitToCols.has(col)) return;
+    const value = formatExportValue(col, record[col]);
+    if (value === null) return;
+    const field = discogsFields.find(f => String(f.id) === fid);
+    if (field?.type === 'dropdown' && Array.isArray(field.options) && !field.options.includes(value)) {
+      skips.push({ fieldName: field.name || col, value });
+    }
+  });
+  return skips;
+}
+
+async function loadDiscogsFields() {
+  const loading = document.getElementById('settings-mapping-loading');
+  const section = document.getElementById('settings-mapping-section');
+  if (loading) loading.style.display = '';
+  if (section) section.style.display = 'none';
+  try {
+    const resp = await fetch('/api/collection/fields');
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.status);
+    const data = await resp.json();
+    discogsFields = data.fields || [];
+    renderFieldMappings(discogsFields, discogsFieldMappings);
+    if (loading) loading.style.display = 'none';
+    if (section) section.style.display = '';
+  } catch(e) {
+    if (loading) loading.textContent = 'Could not load Discogs fields — check username and token.';
+  }
+}
+
+async function openDiscogsSync() {
+  if (!discogsUsername) {
+    toast('Set your Discogs username in Settings first', 'error');
+    return;
+  }
+  closeModal('modal-settings');
+  if (!discogsFields.length) await loadDiscogsFields();
+  await previewSync();
+}
+
+function openSyncModal(loadingText = 'Fetching your Discogs collection…') {
+  document.getElementById('sync-preview-loading').textContent = loadingText;
+  document.getElementById('sync-preview-loading').style.display = '';
+  document.getElementById('sync-preview-content').style.display = 'none';
+  document.getElementById('sync-apply-btn').disabled = true;
+  document.getElementById('sync-apply-btn').textContent = 'Apply Sync';
+  openModal('modal-discogs-sync');
+}
+
+function renderFieldMappings(fields, currentMappings) {
+  const rows = document.getElementById('discogs-fields-rows');
+  const byDbCol = {};
+  Object.entries(currentMappings).forEach(([fid, col]) => { if (col) byDbCol[col] = fid; });
+  const fieldOptions = [['', '— Not mapped —'], ...fields.map(f => [String(f.id), f.name])];
+  rows.innerHTML = DISCOGS_DB_COLS.map(([dbCol, label]) => {
+    const current = byDbCol[dbCol] || '';
+    const options = fieldOptions.map(([v, name]) =>
+      `<option value="${v}"${v === current ? ' selected' : ''}>${esc(name)}</option>`
+    ).join('');
+    return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
+      <span style="flex:1;font-size:13px">${esc(label)}</span>
+      <select class="form-control" style="width:200px;padding:0.25rem 0.5rem" data-db-col="${dbCol}">${options}</select>
+    </div>`;
+  }).join('');
+}
+
+async function previewSync(recordId = null) {
+  syncSource = 'discogs';
+  openSyncModal();
+  try {
+    const url = recordId ? `/api/collection/preview?record_id=${recordId}` : '/api/collection/preview';
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.status);
+    diffData = await resp.json();
+    renderSyncPreview(diffData);
+  } catch(e) {
+    toast('Preview failed: ' + e.message, 'error');
+    closeModal('modal-discogs-sync');
+  }
+}
+
+async function syncRecordFields(id) {
+  if (!id) return;
+  if (!discogsUsername) { toast('Set your Discogs username in Settings first', 'error'); return; }
+  if (!discogsFields.length) await loadDiscogsFields();
+  await previewSync(id);
+}
+
+function renderSyncPreview(diff) {
+  document.getElementById('sync-preview-loading').style.display = 'none';
+  const content = document.getElementById('sync-preview-content');
+  content.style.display = '';
+  let html = '';
+
+  if (diff.new.length) {
+    const newLabel = syncSource === 'csv' ? 'New from CSV' : 'New from Discogs';
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--green);font-weight:500;margin-bottom:0.5rem">${newLabel} (${diff.new.length})</div>`;
+    diff.new.forEach((r, i) => {
+      html += `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" class="sync-new-check" data-idx="${i}" checked>
+        <span style="font-size:13px"><strong>${esc(r.artist)}</strong> — ${esc(r.title)}${r.year ? ` (${r.year})` : ''}</span>
+        <span style="font-size:11px;color:var(--green);margin-left:auto;flex-shrink:0">→ SleeveNotes</span>
+      </label>`;
+    });
+    html += '</div>';
+  }
+
+  if (diff.changed.length) {
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--gold);font-weight:500;margin-bottom:0.5rem">Differences (${diff.changed.length})</div>`;
+    diff.changed.forEach((r, i) => {
+      const changeList = Object.entries(r.changes).map(([col, {from, to}]) => {
+        const fromStr = (from !== null && from !== undefined && String(from).trim()) ? esc(String(from)) : '—';
+        const toStr = (to !== null && to !== undefined && String(to).trim())
+          ? `<strong>${esc(String(to))}</strong>`
+          : `<strong style="color:var(--red)">[Deleted]</strong>`;
+        return `<span style="font-size:11px;color:var(--ink-light)">${esc(col)}: <em>${fromStr}</em> → ${toStr}</span>`;
+      }).join(' &nbsp;·&nbsp; ');
+      const changedCols = new Set(Object.keys(r.changes));
+      const skips = getDropdownSkips(r.current, changedCols);
+      const skipNote = skips.length
+        ? `<div style="font-size:11px;color:var(--gold);margin-top:0.3rem">⚠ ${skips.map(s => `${esc(s.fieldName)} ("${esc(s.value)}" not in Discogs dropdown)`).join(', ')} will be skipped</div>`
+        : '';
+      html += `<div style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;margin-bottom:0.25rem"><strong>${esc(r.current.artist)}</strong> — ${esc(r.current.title)}</div>
+        <div style="margin-bottom:0.4rem">${changeList}</div>
+        <div style="display:flex;gap:1rem;align-items:center">
+          <label style="display:flex;align-items:center;gap:0.3rem;font-size:12px;cursor:pointer">
+            <input type="radio" name="sync-changed-${i}" class="sync-changed-radio" data-idx="${i}" value="to_sleevenotes"${syncSource === 'csv' ? ' checked' : ''}> ← SleeveNotes
+          </label>
+          <label style="display:flex;align-items:center;gap:0.3rem;font-size:12px;cursor:pointer">
+            <input type="radio" name="sync-changed-${i}" class="sync-changed-radio" data-idx="${i}" value="skip"${syncSource !== 'csv' ? ' checked' : ''}> Skip
+          </label>
+          ${syncSource !== 'csv' ? `<label style="display:flex;align-items:center;gap:0.3rem;font-size:12px;cursor:pointer">
+            <input type="radio" name="sync-changed-${i}" class="sync-changed-radio" data-idx="${i}" value="to_discogs"> Discogs →
+          </label>` : ''}
+        </div>
+        ${skipNote}
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  const pushable = diff.db_only.filter(r => r.discogs_id);
+  const noId = diff.db_only.filter(r => !r.discogs_id);
+
+  if (pushable.length) {
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--blue);font-weight:500;margin-bottom:0.5rem">Only in SleeveNotes (${pushable.length})</div>`;
+    pushable.forEach((r, i) => {
+      const skips = getDropdownSkips(r);
+      const skipNote = skips.length
+        ? `<div style="font-size:11px;color:var(--gold);margin-top:0.15rem">⚠ ${skips.map(s => `${esc(s.fieldName)} ("${esc(s.value)}" not in Discogs dropdown)`).join(', ')} will be skipped</div>`
+        : '';
+      html += `<div style="padding:0.35rem 0;border-bottom:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+          <input type="checkbox" class="sync-push-check" data-idx="${i}" data-record-id="${r.id}">
+          <span style="font-size:13px"><strong>${esc(r.artist)}</strong> — ${esc(r.title)}${r.year ? ` (${r.year})` : ''}</span>
+          <span style="font-size:11px;color:var(--blue);margin-left:auto;flex-shrink:0">→ Discogs</span>
+        </label>
+        ${skipNote}
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if (noId.length) {
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500;margin-bottom:0.5rem">No Discogs ID — cannot sync (${noId.length})</div>`;
+    noId.slice(0, 5).forEach(r => {
+      html += `<div style="font-size:12px;color:var(--ink-light);padding:0.25rem 0">${esc(r.artist)} — ${esc(r.title)}</div>`;
+    });
+    if (noId.length > 5) html += `<div style="font-size:12px;color:var(--ink-light)">…and ${noId.length - 5} more</div>`;
+    html += '</div>';
+  }
+
+  if (diff.unchanged.length) {
+    html += `<div style="font-size:12px;color:var(--ink-light);margin-bottom:0.75rem">${diff.unchanged.length} record${diff.unchanged.length === 1 ? '' : 's'} unchanged</div>`;
+  }
+
+  if (!diff.new.length && !diff.changed.length && !pushable.length) {
+    html += `<div style="font-size:13px;color:var(--ink-light);text-align:center;padding:1.5rem 0">Everything is in sync.</div>`;
+  }
+
+  content.innerHTML = html;
+  content.addEventListener('change', updateSyncApplyBtn);
+  updateSyncApplyBtn();
+}
+
+function updateSyncApplyBtn() {
+  const newChecked = document.querySelectorAll('.sync-new-check:checked').length;
+  const changedActive = document.querySelectorAll('.sync-changed-radio:checked:not([value="skip"])').length;
+  const pushChecked = document.querySelectorAll('.sync-push-check:checked').length;
+  const total = newChecked + changedActive + pushChecked;
+  const btn = document.getElementById('sync-apply-btn');
+  btn.disabled = total === 0;
+  btn.textContent = total ? `Apply Sync (${total})` : 'Apply Sync';
+}
+
+function buildSyncPayload() {
+  const toSleeveNotes = [];
+  const toDiscogs = [];
+
+  document.querySelectorAll('.sync-new-check:checked').forEach(el => {
+    const r = diffData.new[+el.dataset.idx];
+    toSleeveNotes.push({ action: 'create', prospective: r });
+  });
+
+  document.querySelectorAll('.sync-changed-radio:checked').forEach(el => {
+    if (el.value === 'skip') return;
+    const r = diffData.changed[+el.dataset.idx];
+    if (el.value === 'to_sleevenotes') {
+      const prospective = {};
+      Object.entries(r.changes).forEach(([col, { to }]) => {
+        prospective[col] = (to === null || to === undefined || String(to).trim() === '') ? null : to;
+      });
+      toSleeveNotes.push({ action: 'update', record_id: r.record_id, prospective });
+    } else {
+      const changedCols = new Set(Object.keys(r.changes));
+      toDiscogs.push({
+        action: 'update',
+        record_id: r.record_id,
+        instance_id: r.prospective.instance_id || r.current.instance_id || null,
+        discogs_id: r.current.discogs_id,
+        folder_id: r.prospective.folder_id || r.current.folder_id || 1,
+        updates: buildFieldUpdates(r.current, changedCols),
+      });
+    }
+  });
+
+  const pushable = diffData.db_only.filter(r => r.discogs_id);
+  document.querySelectorAll('.sync-push-check:checked').forEach(el => {
+    const r = pushable[+el.dataset.idx];
+    toDiscogs.push({
+      action: 'create',
+      record_id: r.id,
+      discogs_id: r.discogs_id,
+      folder_id: r.folder_id || 1,
+      updates: buildFieldUpdates(r),
+    });
+  });
+
+  return { to_sleevenotes: toSleeveNotes, to_discogs: toDiscogs };
+}
+
+async function applySync() {
+  const payload = buildSyncPayload();
+  const btn = document.getElementById('sync-apply-btn');
+  btn.disabled = true;
+  btn.textContent = 'Applying…';
+  try {
+    const resp = await fetch('/api/collection/sync', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.status);
+    const result = await resp.json();
+    closeModal('modal-discogs-sync');
+    const parts = [];
+    if (result.sn_created) parts.push(`${result.sn_created} added to SleeveNotes`);
+    if (result.sn_updated) parts.push(`${result.sn_updated} updated in SleeveNotes`);
+    if (result.discogs_created) parts.push(`${result.discogs_created} added to Discogs`);
+    if (result.discogs_updated) parts.push(`${result.discogs_updated} updated in Discogs`);
+    if (result.sn_refreshing) parts.push(`fetching covers for ${result.sn_refreshing} records…`);
+    toast(parts.length ? `Sync complete: ${parts.join(', ')}` : 'Sync complete', 'success');
+    const syncedSnIds = new Set(
+      payload.to_sleevenotes.filter(i => i.action === 'update').map(i => i.record_id)
+    );
+    await loadRecords();
+    if (editingId && syncedSnIds.has(editingId)) openEdit(editingId);
+    if (result.sn_refreshing) startCoverPoll(result.sn_refreshing);
+  } catch(e) {
+    toast('Sync failed: ' + e.message, 'error');
+    updateSyncApplyBtn();
+  }
+}
+
 // ── Settings ───────────────────────────────────────────────────────────────
 function openSettings() {
   document.getElementById('clean-artists-toggle').checked = cleanArtists;
   document.getElementById('include-pp-toggle').checked = includePP;
-  document.getElementById('hide-obvious-formats-toggle').checked = hideObviousFormats;
+  document.getElementById('hide-format-tags-toggle').checked = hideObviousFormats;
+  document.getElementById('hidden-format-tags-input').value = [...hiddenFormatTags].join(', ');
+  document.getElementById('hidden-format-tags-input').disabled = !hideObviousFormats;
+  document.getElementById('hidden-format-tags-input').style.opacity = hideObviousFormats ? '1' : '0.4';
+  document.getElementById('settings-discogs-username').value = discogsUsername;
+  document.getElementById('settings-discogs-token').value = '';  // never pre-fill token
   document.getElementById('format-safety-toggle').checked = false;
   onFormatToggle();
+  document.getElementById('factory-reset-safety-toggle').checked = false;
+  onFactoryResetToggle();
   document.getElementById('clear-images-safety-toggle').checked = false;
   onClearImagesToggle();
   buildFetchRanges();
   document.getElementById('fetch-progress').classList.add('hidden');
+  // Reset mapping section then fetch (or prompt if no username yet)
+  document.getElementById('settings-mapping-section').style.display = 'none';
+  if (discogsUsername) {
+    document.getElementById('settings-mapping-loading').style.display = '';
+    document.getElementById('settings-mapping-loading').textContent = 'Loading…';
+    loadDiscogsFields();
+  } else {
+    document.getElementById('settings-mapping-loading').style.display = '';
+    document.getElementById('settings-mapping-loading').textContent = 'Enter a Discogs username above to configure field mapping.';
+  }
   openModal('modal-settings');
+}
+
+async function saveSettings() {
+  const newCleanArtists = document.getElementById('clean-artists-toggle').checked;
+  const newIncludePP = document.getElementById('include-pp-toggle').checked;
+  const newHideFormatTags = document.getElementById('hide-format-tags-toggle').checked;
+  const newHiddenTags = document.getElementById('hidden-format-tags-input').value;
+  const newUsername = document.getElementById('settings-discogs-username').value.trim();
+  const newToken = document.getElementById('settings-discogs-token').value.trim();
+
+  const newMappings = {};
+  document.querySelectorAll('#discogs-fields-rows select').forEach(sel => {
+    if (sel.value) newMappings[sel.value] = sel.dataset.dbCol;
+  });
+
+  const puts = [
+    ['clean_artists', String(newCleanArtists)],
+    ['include_pp', String(newIncludePP)],
+    ['hide_obvious_formats', String(newHideFormatTags)],
+    ['hidden_format_tags', newHiddenTags],
+    ['discogs_username', newUsername],
+    ['discogs_field_mappings', JSON.stringify(newMappings)],
+  ];
+  if (newToken) puts.push(['discogs_token', newToken]);
+
+  await Promise.all(puts.map(([key, value]) =>
+    fetch(`/api/settings/${key}`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ value }),
+    })
+  ));
+
+  const usernameChanged = newUsername !== discogsUsername;
+  cleanArtists = newCleanArtists;
+  includePP = newIncludePP;
+  hideObviousFormats = newHideFormatTags;
+  hiddenFormatTags = new Set(newHiddenTags.split(',').map(t => t.trim()).filter(Boolean));
+  discogsUsername = newUsername;
+  discogsFieldMappings = newMappings;
+
+  toast('Settings saved');
+  renderView();
+  updateStats();
+  updateFormatFilterBar();
+
+  // Refresh field mapping in-place if username was just added or changed
+  document.getElementById('settings-mapping-section').style.display = 'none';
+  if (discogsUsername) {
+    document.getElementById('settings-mapping-loading').style.display = '';
+    document.getElementById('settings-mapping-loading').textContent = usernameChanged ? 'Loading…' : '';
+    loadDiscogsFields();
+  } else {
+    document.getElementById('settings-mapping-loading').style.display = '';
+    document.getElementById('settings-mapping-loading').textContent = 'Enter a Discogs username above to configure field mapping.';
+  }
 }
 
 function onCleanArtistsToggle() {
   cleanArtists = document.getElementById('clean-artists-toggle').checked;
-  fetch('/api/settings/clean_artists', {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ value: String(cleanArtists) }),
-  });
   renderView();
 }
 
 function onIncludePPToggle() {
   includePP = document.getElementById('include-pp-toggle').checked;
-  fetch('/api/settings/include_pp', {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ value: String(includePP) }),
-  });
   updateStats();
 }
 
-function onHideObviousFormatsToggle() {
-  hideObviousFormats = document.getElementById('hide-obvious-formats-toggle').checked;
-  fetch('/api/settings/hide_obvious_formats', {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ value: String(hideObviousFormats) }),
-  });
+function onHideFormatTagsToggle() {
+  hideObviousFormats = document.getElementById('hide-format-tags-toggle').checked;
+  const input = document.getElementById('hidden-format-tags-input');
+  input.disabled = !hideObviousFormats;
+  input.style.opacity = hideObviousFormats ? '1' : '0.4';
+  updateFormatFilterBar();
+  renderView();
+}
+
+function onHiddenTagsChange() {
+  const val = document.getElementById('hidden-format-tags-input').value;
+  hiddenFormatTags = new Set(val.split(',').map(t => t.trim()).filter(Boolean));
   updateFormatFilterBar();
   renderView();
 }
@@ -2095,9 +2517,30 @@ function onFormatToggle() {
 }
 
 async function doFormatDb() {
-  if (!confirm('This will permanently delete every record in your collection. Are you sure?')) return;
+  if (!confirm('This will permanently delete every record in your collection. Settings will be preserved. Are you sure?')) return;
   try {
     const r = await fetch('/api/admin/format', { method: 'POST' });
+    if (!r.ok) throw new Error();
+    closeModal('modal-settings');
+    await loadRecords();
+    toast('All records deleted', 'success');
+  } catch {
+    toast('Delete failed', 'error');
+  }
+}
+
+function onFactoryResetToggle() {
+  const enabled = document.getElementById('factory-reset-safety-toggle').checked;
+  const btn = document.getElementById('factory-reset-btn');
+  btn.disabled = !enabled;
+  btn.style.opacity = enabled ? '1' : '0.4';
+  btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+}
+
+async function doFactoryReset() {
+  if (!confirm('This will permanently delete all records and reset all settings to defaults. Are you sure?')) return;
+  try {
+    const r = await fetch('/api/admin/factory-reset', { method: 'POST' });
     if (!r.ok) throw new Error();
     closeModal('modal-settings');
     await loadRecords();
@@ -2134,10 +2577,8 @@ function coverThumb(r) {
   return `<div class="cover-placeholder">♪</div>`;
 }
 
-function statusClass(s) {
-  if (s === 'In Collection') return 'badge-ic';
-  if (s === 'Returned') return 'badge-r';
-  return 'badge-p';
+function statusClass(_s) {
+  return 'badge-ic';
 }
 
 function discogsNum(id) { return String(id||'').replace(/^r/, ''); }
@@ -2169,7 +2610,7 @@ const COND_LABELS = {
 };
 function condLabel(c) {
   const s = (c || '').trim().toUpperCase();
-  return COND_LABELS[s] ? `${COND_LABELS[s]} (${c})` : (c || '—');
+  return COND_LABELS[s] ? `${COND_LABELS[s]} (${c})` : (c || 'Unknown');
 }
 
 function truncate(s, max) {
@@ -2179,7 +2620,7 @@ function truncate(s, max) {
 function formatTags(s, respectHide = true) {
   if (!s) return [];
   const tags = s.split(',').map(t => t.trim()).filter(Boolean);
-  return (respectHide && hideObviousFormats) ? tags.filter(t => !OBVIOUS_FORMATS.has(t)) : tags;
+  return (respectHide && hideObviousFormats && hiddenFormatTags.size) ? tags.filter(t => !hiddenFormatTags.has(t)) : tags;
 }
 
 function fmtTagsHtml(s) {

@@ -1,6 +1,3 @@
-# Secrets
-sleevenotes.env
-
 # Python
 __pycache__/
 *.pyc

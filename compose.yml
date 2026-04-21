@@ -6,8 +6,6 @@ services:
       - "2026:2026"
     volumes:
       - data:/data
-    env_file:
-      - sleevenotes.env
     restart: unless-stopped
 
 volumes:
