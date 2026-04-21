@@ -123,8 +123,8 @@ def init_db():
             retailer    TEXT,
             order_ref   TEXT,
             purchase_date TEXT,
-            price       REAL NOT NULL DEFAULT 0,
-            pp          REAL NOT NULL DEFAULT 0,
+            price       REAL,
+            pp          REAL,
             notes       TEXT,
             valuation   REAL NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -174,8 +174,8 @@ class RecordIn(BaseModel):
     retailer: Optional[str] = ""
     order_ref: Optional[str] = ""
     purchase_date: Optional[str] = ""
-    price: float = 0.0
-    pp: float = 0.0
+    price: Optional[float] = None
+    pp: Optional[float] = None
     notes: Optional[str] = ""
     valuation: float = 0.0
 

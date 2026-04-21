@@ -1872,8 +1872,8 @@ function openEdit(id) {
   setField('f-retailer', r.retailer);
   setField('f-order-ref', r.order_ref);
   setField('f-purchase-date', toISODate(r.purchase_date));
-  setField('f-price', (r.price||0).toFixed(2));
-  setField('f-pp', (r.pp||0).toFixed(2));
+  setField('f-price', r.price == null ? '' : r.price.toFixed(2));
+  setField('f-pp', r.pp == null ? '' : r.pp.toFixed(2));
   setField('f-notes', r.notes);
   document.getElementById('f-is-new').value = r.is_new === null || r.is_new === undefined ? '' : (r.is_new ? '1' : '0');
   document.getElementById('f-curr-cond').value = r.curr_cond || '';
@@ -1951,8 +1951,8 @@ async function saveRecord() {
     retailer: val('f-retailer'),
     order_ref: val('f-order-ref'),
     purchase_date: val('f-purchase-date'),
-    price: parseFloat(val('f-price'))||0,
-    pp: parseFloat(val('f-pp'))||0,
+    price: val('f-price') === '' ? null : parseFloat(val('f-price')),
+    pp: val('f-pp') === '' ? null : parseFloat(val('f-pp')),
     notes: val('f-notes'),
     valuation: parseFloat(val('f-valuation'))||0,
   };
