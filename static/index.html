@@ -819,6 +819,11 @@
     to { transform: translateX(0); opacity: 1; }
   }
 
+  /* ── Wishlist ── */
+  .wishlist-row-fulfilled td { opacity: 0.4; }
+  .badge-want { background: #FFF3CD; color: #856404; font-size: 9px; padding: 1px 5px; border: 1px solid #FFE69C; }
+  .badge-fulfilled { background: #D4EDDA; color: var(--green); font-size: 9px; padding: 1px 5px; border: 1px solid #B8DFC5; }
+
   /* ── Misc ── */
   .spinner {
     display: inline-block;
@@ -878,12 +883,14 @@
   <div class="stat-item"><span class="stat-label">Total Records</span><span class="stat-value" id="s-total">—</span></div>
   <div class="stat-item"><span class="stat-label">Collection Cost</span><span class="stat-value" id="s-cost">—</span></div>
   <div class="stat-item"><span class="stat-label">Collection Value</span><span class="stat-value" id="s-valuation">—</span></div>
+  <div class="stat-item"><span class="stat-label">Wishlist</span><span class="stat-value" id="s-wishlist">—</span></div>
 </div>
 
 <div class="toolbar" id="toolbar">
   <div class="view-toggle">
     <button class="btn btn-ghost active" id="btn-table" onclick="setView('table')">▤ Table</button>
     <button class="btn btn-ghost" id="btn-tile" onclick="setView('tile')">⊞ Tiles</button>
+    <button class="btn btn-ghost" id="btn-wishlist" onclick="setView('wishlist')">♡ Wishlist</button>
   </div>
 
   <div class="toolbar-sep"></div>
@@ -893,38 +900,53 @@
     <input type="text" id="search" placeholder="Search artist, title, label…" oninput="renderView()">
   </div>
 
-  <div class="toolbar-sep"></div>
+  <div id="collection-switches" style="display:contents">
+    <div class="toolbar-sep"></div>
 
-  <label class="toggle-row" id="group-by-wrapper" style="cursor:pointer">
-    <label class="toggle">
-      <input type="checkbox" id="group-by-artist" onchange="onGroupByArtistToggle()">
-      <div class="toggle-track"></div>
-      <div class="toggle-thumb"></div>
+    <label class="toggle-row" id="group-by-wrapper" style="cursor:pointer">
+      <label class="toggle">
+        <input type="checkbox" id="group-by-artist" onchange="onGroupByArtistToggle()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+      <span style="font-size:12px;color:var(--ink-light)">Group by artist</span>
     </label>
-    <span style="font-size:12px;color:var(--ink-light)">Group by artist</span>
-  </label>
 
-  <label class="toggle-row" style="cursor:pointer">
-    <label class="toggle">
-      <input type="checkbox" id="show-valuations" onchange="onShowValuationsToggle()">
-      <div class="toggle-track"></div>
-      <div class="toggle-thumb"></div>
+    <label class="toggle-row" style="cursor:pointer">
+      <label class="toggle">
+        <input type="checkbox" id="show-valuations" onchange="onShowValuationsToggle()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+      <span style="font-size:12px;color:var(--ink-light)">Show valuations</span>
     </label>
-    <span style="font-size:12px;color:var(--ink-light)">Show valuations</span>
-  </label>
 
-  <label class="toggle-row" style="cursor:pointer">
-    <label class="toggle">
-      <input type="checkbox" id="show-tags" onchange="onShowTagsToggle()">
-      <div class="toggle-track"></div>
-      <div class="toggle-thumb"></div>
+    <label class="toggle-row" style="cursor:pointer">
+      <label class="toggle">
+        <input type="checkbox" id="show-tags" onchange="onShowTagsToggle()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+      <span style="font-size:12px;color:var(--ink-light)">Show tags</span>
     </label>
-    <span style="font-size:12px;color:var(--ink-light)">Show tags</span>
-  </label>
 
-  <div class="toolbar-sep"></div>
+    <div class="toolbar-sep"></div>
 
-  <button class="btn btn-ghost" title="Pick a random record from your collection" onclick="openRandom()">Surprise Me</button>
+    <button class="btn btn-ghost" title="Pick a random record from your collection" onclick="openRandom()">Surprise Me</button>
+  </div>
+
+  <div id="wishlist-switches" style="display:none">
+    <div class="toolbar-sep"></div>
+
+    <label class="toggle-row" style="cursor:pointer">
+      <label class="toggle">
+        <input type="checkbox" id="show-fulfilled" onchange="onShowFulfilledToggle()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+      <span style="font-size:12px;color:var(--ink-light)">Show fulfilled</span>
+    </label>
+  </div>
 </div>
 
 <div class="format-filter-bar" id="format-filter-bar" style="display:none"></div>
@@ -1279,6 +1301,45 @@
   </div>
 </div>
 
+<!-- ── Wishlist Detail Modal ── -->
+<div class="modal-backdrop" id="modal-wishlist-detail">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title" id="wishlist-detail-title">Wishlist Item</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-wishlist-detail')">✕</button>
+    </div>
+    <div class="modal-body" id="wishlist-detail-body"></div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-danger btn-sm" id="wishlist-detail-delete-btn">Delete</button>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-secondary" onclick="closeModal('modal-wishlist-detail')">Close</button>
+        <button class="btn btn-secondary" id="wishlist-detail-fulfill-btn">Mark Fulfilled</button>
+        <button class="btn btn-primary" id="wishlist-detail-save-btn">Save Notes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Wishlist Search Modal ── -->
+<div class="modal-backdrop" id="modal-wishlist-search">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title">Search Master Releases</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-wishlist-search')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+        <input class="form-control" id="wishlist-search-input" placeholder="Artist, album title…" onkeydown="if(event.key==='Enter')doWishlistSearch()">
+        <button class="btn btn-primary btn-sm" onclick="doWishlistSearch()" id="wishlist-search-btn">Search</button>
+      </div>
+      <div id="wishlist-search-results"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-wishlist-search')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast container ── -->
 <div class="toast-container" id="toasts"></div>
 
@@ -1298,6 +1359,8 @@ let filterFormat = null; // active format tag string, or null
 let selectedTileId = null;
 let showValuations = false;
 let showTags = false;
+let wishlistItems = [];
+let showFulfilled = false;
 
 // ── localStorage helpers ────────────────────────────────────────────────────
 function lsGet(key, fallback) {
@@ -1309,23 +1372,24 @@ function lsSet(key, val) {
 }
 
 function restoreLocalState() {
-  // View
   currentView = lsGet('view', 'table');
   document.getElementById('btn-table').classList.toggle('active', currentView === 'table');
   document.getElementById('btn-tile').classList.toggle('active', currentView === 'tile');
-  document.getElementById('group-by-wrapper').style.display = currentView === 'table' ? '' : 'none';
+  document.getElementById('btn-wishlist').classList.toggle('active', currentView === 'wishlist');
+  applyToolbarSwitches(currentView);
 
-  // Toggles
   showValuations = lsGet('showValuations', false);
   document.getElementById('show-valuations').checked = showValuations;
 
   showTags = lsGet('showTags', false);
   document.getElementById('show-tags').checked = showTags;
 
+  showFulfilled = lsGet('showFulfilled', false);
+  document.getElementById('show-fulfilled').checked = showFulfilled;
+
   const groupByArtist = lsGet('groupByArtist', false);
   document.getElementById('group-by-artist').checked = groupByArtist;
 
-  // Toolbar
   const defaultExpanded = window.innerWidth >= 768;
   const toolbarExpanded = lsGet('toolbarExpanded', defaultExpanded);
   applyToolbarState(toolbarExpanded);
@@ -1336,17 +1400,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   restoreLocalState();
   await loadSettings();
   loadRecords();
+  loadWishlist();
   document.getElementById('modal-detail').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal('modal-detail');
   });
   document.getElementById('modal-form').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal('modal-form');
   });
-document.getElementById('modal-settings').addEventListener('click', e => {
+  document.getElementById('modal-settings').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal('modal-settings');
   });
   document.getElementById('modal-discogs-sync').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal('modal-discogs-sync');
+  });
+  document.getElementById('modal-wishlist-detail').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-wishlist-detail');
+  });
+  document.getElementById('modal-wishlist-search').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal('modal-wishlist-search');
+  });
+  document.getElementById('search').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && currentView === 'wishlist') {
+      openWishlistSearchModal(document.getElementById('search').value.trim());
+    }
   });
   document.getElementById('main-content').addEventListener('click', e => {
     if (e.target.closest('a, button, .fmt-tag-filter')) return;
@@ -1423,6 +1499,8 @@ function updateStats() {
   document.getElementById('s-total').textContent = records.length;
   document.getElementById('s-cost').textContent = showValuations ? '£' + cost.toFixed(2) : '—';
   document.getElementById('s-valuation').textContent = showValuations && valuation ? '£' + valuation.toFixed(2) : '—';
+  const wCount = wishlistItems.filter(w => !w.fulfilled).length;
+  document.getElementById('s-wishlist').textContent = wCount || '—';
 }
 
 function onShowValuationsToggle() {
@@ -1495,11 +1573,25 @@ function openRandom() {
 function setView(v) {
   currentView = v;
   selectedTileId = null;
+  document.getElementById('search').value = '';
   document.getElementById('btn-table').classList.toggle('active', v === 'table');
   document.getElementById('btn-tile').classList.toggle('active', v === 'tile');
-  document.getElementById('group-by-wrapper').style.display = v === 'table' ? '' : 'none';
+  document.getElementById('btn-wishlist').classList.toggle('active', v === 'wishlist');
+  applyToolbarSwitches(v);
+  updateFormatFilterBar();
   lsSet('view', v);
-  renderView();
+  if (v === 'wishlist') loadWishlist();
+  else renderView();
+}
+
+function applyToolbarSwitches(v) {
+  const isWishlist = v === 'wishlist';
+  document.getElementById('collection-switches').style.display = isWishlist ? 'none' : 'contents';
+  document.getElementById('wishlist-switches').style.display = isWishlist ? 'contents' : 'none';
+  document.getElementById('group-by-wrapper').style.display = v === 'table' ? '' : 'none';
+  document.getElementById('search').placeholder = isWishlist
+    ? 'Search for a master release…'
+    : 'Search artist, title, label…';
 }
 
 function applyToolbarState(expanded) {
@@ -1527,7 +1619,8 @@ function onGroupByArtistToggle() {
 
 function renderView() {
   if (currentView === 'table') renderTable();
-  else renderTiles();
+  else if (currentView === 'tile') renderTiles();
+  else if (currentView === 'wishlist') renderWishlist();
 }
 
 // ── Table view ─────────────────────────────────────────────────────────────
@@ -1921,7 +2014,9 @@ async function fetchDiscogs() {
         <div class="discogs-preview-title">${esc(d.title)}</div>
         <div class="discogs-preview-meta">${esc(d.label)} · ${d.year||''} · ${esc(d.format)}</div>
       </div>
-    </div>`;
+    </div>${d.wishlist_match
+      ? `<div style="margin-top:0.5rem;padding:0.5rem 0.75rem;background:#FFF3CD;border:1px solid #FFE69C;border-radius:var(--radius);font-size:12px;color:#856404">♡ <strong>${esc(d.wishlist_match.artist)} — ${esc(d.wishlist_match.title)}</strong> is on your wishlist — you'll be prompted to mark it fulfilled on save</div>`
+      : ''}`;
     toast('Metadata fetched', 'success');
   } catch(e) {
     toast('Discogs fetch failed — check the ID and your token', 'error');
@@ -1968,9 +2063,22 @@ async function saveRecord() {
       body: JSON.stringify(payload),
     });
     if (!r.ok) throw new Error();
+    const wasNew = !editingId;
+    const match = wasNew ? fetchedMeta.wishlist_match : null;
     closeModal('modal-form');
     await loadRecords();
     toast(editingId ? 'Record updated' : 'Record added', 'success');
+    if (match) {
+      if (confirm(`"${match.artist} — ${match.title}" is on your wishlist. Mark as fulfilled?`)) {
+        await fetch(`/api/wishlist/${match.id}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ fulfilled: true }),
+        }).catch(() => {});
+        await loadWishlist();
+        toast('Marked as fulfilled', 'success');
+      }
+    }
   } catch {
     toast('Save failed', 'error');
   } finally {
@@ -2568,6 +2676,245 @@ async function doClearImages() {
   }
 }
 
+// ── Wishlist ───────────────────────────────────────────────────────────────
+
+async function loadWishlist() {
+  try {
+    const r = await fetch(`/api/wishlist${showFulfilled ? '?show_fulfilled=true' : ''}`);
+    if (!r.ok) throw new Error();
+    wishlistItems = await r.json();
+  } catch {
+    wishlistItems = [];
+    if (currentView === 'wishlist') toast('Failed to load wishlist', 'error');
+  }
+  if (currentView === 'wishlist') renderWishlist();
+  updateStats();
+}
+
+function renderWishlist() {
+  const el = document.getElementById('main-content');
+  let items = showFulfilled ? wishlistItems : wishlistItems.filter(w => !w.fulfilled);
+
+  // Sort: use sortCol if it's a wishlist column, else default to artist asc
+  const wishlistCols = ['artist', 'title', 'year', 'added_at'];
+  items = [...items].sort((a, b) => {
+    const col = wishlistCols.includes(sortCol) ? sortCol : 'artist';
+    const v = col === 'added_at' ? cmp(a.added_at, b.added_at) : cmp(a[col], b[col]);
+    return (sortDir === 'desc' && wishlistCols.includes(sortCol)) ? -v : v;
+  });
+
+  if (!items.length) {
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon">♡</div>
+      <div class="empty-text">${wishlistItems.length ? 'No matching items' : 'Your wishlist is empty'}</div>
+      <div class="empty-sub">${wishlistItems.length ? 'Try adjusting your search' : 'Type a master release above and press Enter to search'}</div>
+    </div>`;
+    return;
+  }
+
+  const rows = items.map(w => `
+    <tr class="${w.fulfilled ? 'wishlist-row-fulfilled' : ''} data-row" style="cursor:pointer" onclick="openWishlistDetail(${w.id})">
+      <td>${w.cover_file ? `<img class="cover-thumb" src="/images/${esc(w.cover_file)}" alt="" loading="lazy">` : `<div class="cover-placeholder">♡</div>`}</td>
+      <td title="${esc(w.artist)}">${esc(truncate(w.artist, 32))}</td>
+      <td class="overflow" title="${esc(w.title)}">${esc(w.title)}</td>
+      <td class="text-mono col-sm">${w.year || '—'}</td>
+      <td class="text-mono col-sm">${fmtDate(w.added_at ? w.added_at.split(' ')[0] : '')}</td>
+      <td class="note-cell col-md" title="${esc(w.notes)}">${esc(w.notes)}</td>
+      <td>${w.fulfilled
+        ? '<span class="badge badge-fulfilled">Fulfilled</span>'
+        : '<span class="badge badge-want">Want</span>'}</td>
+    </tr>`).join('');
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            ${th('artist', 'Artist')}
+            ${th('title', 'Title')}
+            ${th('year', 'Year', 'col-sm')}
+            ${th('added_at', 'Added', 'col-sm')}
+            <th class="col-md">Notes</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function openWishlistSearchModal(prefill = '') {
+  const input = document.getElementById('wishlist-search-input');
+  input.value = prefill;
+  document.getElementById('wishlist-search-results').innerHTML = '';
+  openModal('modal-wishlist-search');
+  input.focus();
+  if (prefill) doWishlistSearch();
+}
+
+async function doWishlistSearch() {
+  const q = document.getElementById('wishlist-search-input').value.trim();
+  if (!q) return;
+  const btn = document.getElementById('wishlist-search-btn');
+  const results = document.getElementById('wishlist-search-results');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  results.innerHTML = '<div style="color:var(--ink-light);font-size:13px;padding:0.5rem 0">Searching…</div>';
+  try {
+    const r = await fetch(`/api/wishlist/search?q=${encodeURIComponent(q)}`);
+    if (!r.ok) throw new Error();
+    const items = await r.json();
+    items.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+    if (!items.length) {
+      results.innerHTML = '<div style="color:var(--ink-light);font-size:13px;padding:0.5rem 0">No results found.</div>';
+      return;
+    }
+    results.innerHTML = items.map(item => {
+      const existingItem = wishlistItems.find(w => String(w.master_id) === String(item.master_id));
+      return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0;border-bottom:1px solid var(--border)">
+        ${item.thumb
+          ? `<img src="${esc(item.thumb)}" style="width:48px;height:48px;object-fit:cover;border-radius:2px;flex-shrink:0">`
+          : `<div style="width:48px;height:48px;background:var(--surface);border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--groove);flex-shrink:0">♪</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.title)}</div>
+          <div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${item.year ? item.year + ' · ' : ''}master ${esc(item.master_id)}</div>
+        </div>
+        ${existingItem
+          ? `<span style="font-size:12px;color:var(--ink-light);white-space:nowrap;flex-shrink:0">${existingItem.fulfilled ? 'Fulfilled' : 'On wishlist'}</span>`
+          : `<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="addToWishlist('${esc(item.master_id)}')">Add</button>`}
+      </div>`;
+    }).join('');
+  } catch {
+    results.innerHTML = '<div style="color:var(--red);font-size:13px;padding:0.5rem 0">Search failed — check your Discogs token in Settings.</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search';
+  }
+}
+
+async function addToWishlist(masterId) {
+  try {
+    const r = await fetch('/api/wishlist', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ master_id: masterId, notes: '' }),
+    });
+    if (r.status === 409) { toast('Already on wishlist', 'error'); return; }
+    if (!r.ok) throw new Error();
+    closeModal('modal-wishlist-search');
+    document.getElementById('search').value = '';
+    await loadWishlist();
+    toast('Added to wishlist', 'success');
+  } catch {
+    toast('Failed to add to wishlist', 'error');
+  }
+}
+
+async function fulfillWishlistItem(id) {
+  try {
+    const r = await fetch(`/api/wishlist/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ fulfilled: true }),
+    });
+    if (!r.ok) throw new Error();
+    await loadWishlist();
+    toast('Marked as fulfilled', 'success');
+  } catch {
+    toast('Failed to update', 'error');
+  }
+}
+
+async function deleteWishlistItem(id) {
+  if (!confirm('Remove this item from your wishlist?')) return;
+  try {
+    const r = await fetch(`/api/wishlist/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error();
+    await loadWishlist();
+    toast('Removed from wishlist', 'success');
+  } catch {
+    toast('Failed to remove', 'error');
+  }
+}
+
+function onShowFulfilledToggle() {
+  showFulfilled = document.getElementById('show-fulfilled').checked;
+  lsSet('showFulfilled', showFulfilled);
+  if (currentView === 'wishlist') loadWishlist();
+}
+
+function openWishlistDetail(id) {
+  const w = wishlistItems.find(x => x.id === id);
+  if (!w) return;
+
+  document.getElementById('wishlist-detail-title').textContent = w.artist;
+  document.getElementById('wishlist-detail-body').innerHTML = `
+    <div class="detail-layout" style="margin-bottom:1.25rem">
+      <div>
+        ${w.cover_file
+          ? `<img class="detail-cover" src="/images/${esc(w.cover_file)}" alt="cover">`
+          : `<div class="detail-cover-placeholder">♡</div>`}
+      </div>
+      <div class="detail-fields">
+        <div class="detail-artist">${esc(w.artist)}</div>
+        <div class="detail-title">${esc(w.title)}</div>
+        <div style="margin:0.5rem 0">
+          ${w.fulfilled
+            ? '<span class="badge badge-fulfilled">Fulfilled</span>'
+            : '<span class="badge badge-want">Want</span>'}
+        </div>
+        ${w.year ? `<div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${w.year}</span></div>` : ''}
+        ${w.genres ? `<div class="detail-row"><span class="detail-key">Genres</span><span class="detail-val">${esc(w.genres)}</span></div>` : ''}
+        ${w.styles ? `<div class="detail-row"><span class="detail-key">Styles</span><span class="detail-val">${esc(w.styles)}</span></div>` : ''}
+        ${w.lowest_price != null ? `<div class="detail-row"><span class="detail-key">Lowest price</span><span class="detail-val">£${w.lowest_price.toFixed(2)}${w.num_for_sale ? ` (${w.num_for_sale} for sale)` : ''}</span></div>` : ''}
+        <div class="detail-row"><span class="detail-key">Added</span><span class="detail-val">${fmtDate(w.added_at ? w.added_at.split(' ')[0] : '') || '—'}</span></div>
+        <div class="detail-row"><span class="detail-key">Master</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/master/${esc(w.master_id)}" target="_blank">m${esc(w.master_id)}</a></span></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <textarea class="form-control" id="wishlist-detail-notes" rows="3" style="resize:vertical">${esc(w.notes || '')}</textarea>
+    </div>`;
+
+  const fulfillBtn = document.getElementById('wishlist-detail-fulfill-btn');
+  fulfillBtn.style.display = w.fulfilled ? 'none' : '';
+  fulfillBtn.onclick = async () => {
+    closeModal('modal-wishlist-detail');
+    await fulfillWishlistItem(id);
+  };
+
+  document.getElementById('wishlist-detail-delete-btn').onclick = async () => {
+    if (!confirm('Remove this item from your wishlist?')) return;
+    closeModal('modal-wishlist-detail');
+    try {
+      await fetch(`/api/wishlist/${id}`, { method: 'DELETE' });
+      await loadWishlist();
+      toast('Removed from wishlist', 'success');
+    } catch {
+      toast('Failed to remove', 'error');
+    }
+  };
+
+  document.getElementById('wishlist-detail-save-btn').onclick = async () => {
+    const notes = document.getElementById('wishlist-detail-notes').value;
+    try {
+      const r = await fetch(`/api/wishlist/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ notes }),
+      });
+      if (!r.ok) throw new Error();
+      await loadWishlist();
+      toast('Notes saved', 'success');
+    } catch {
+      toast('Failed to save notes', 'error');
+    }
+  };
+
+  openModal('modal-wishlist-detail');
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function coverThumb(r) {
   if (r.cover_file) return `<img class="cover-thumb" src="/images/${r.cover_file}" alt="" loading="lazy">`;
@@ -2646,7 +2993,7 @@ function fmtTagsCell(s) {
 function updateFormatFilterBar() {
   const bar = document.getElementById('format-filter-bar');
   const allTags = [...new Set(records.flatMap(r => formatTags(r.format)))].sort();
-  if (!allTags.length || !showTags) { bar.style.display = 'none'; return; }
+  if (currentView === 'wishlist' || !allTags.length || !showTags) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
   bar.innerHTML = allTags.map(t =>
     `<span class="fmt-tag-filter${filterFormat === t ? ' active' : ''}" data-tag="${esc(t)}">${esc(t)}</span>`

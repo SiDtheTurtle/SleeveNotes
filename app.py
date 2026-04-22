@@ -150,6 +150,21 @@ def init_db():
             type       TEXT NOT NULL DEFAULT 'track',
             seq        INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            master_id    TEXT NOT NULL UNIQUE,
+            artist       TEXT,
+            title        TEXT,
+            cover_file   TEXT,
+            added_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            notes        TEXT,
+            fulfilled    INTEGER NOT NULL DEFAULT 0,
+            year         INTEGER,
+            genres       TEXT,
+            styles       TEXT,
+            lowest_price REAL,
+            num_for_sale INTEGER
+        );
         """)
         # Seed default settings (INSERT OR IGNORE preserves user changes)
         for key, value in SETTINGS_DEFAULTS.items():
@@ -181,6 +196,14 @@ class RecordIn(BaseModel):
 
 class RecordUpdate(RecordIn):
     pass
+
+class WishlistAddIn(BaseModel):
+    master_id: str
+    notes: Optional[str] = ""
+
+class WishlistUpdateIn(BaseModel):
+    notes: Optional[str] = None
+    fulfilled: Optional[bool] = None
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -766,6 +789,16 @@ async def fetch_discogs(release_id: str):
     stats = stats_resp.json() if stats_resp.status_code == 200 else {}
     lp = stats.get("lowest_price") or {}
     valuation = float(lp.get("value") or 0)
+    master_id = str(data.get("master_id") or "")
+    wishlist_match = None
+    if master_id:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT id, artist, title FROM wishlist WHERE master_id = ? AND fulfilled = 0",
+                (master_id,)
+            ).fetchone()
+            if row:
+                wishlist_match = {"id": row["id"], "artist": row["artist"], "title": row["title"]}
     return {
         "discogs_id": f"r{rid}",
         "artist": ", ".join(a["name"] for a in data.get("artists", [])),
@@ -776,6 +809,8 @@ async def fetch_discogs(release_id: str):
         "format": fmt.strip(),
         "cover_file": cover_file,
         "valuation": valuation,
+        "master_id": master_id,
+        "wishlist_match": wishlist_match,
     }
 
 # ── Routes: Records ───────────────────────────────────────────────────────────
@@ -1123,6 +1158,104 @@ async def export_csv():
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=sleevenotes_export.csv"},
     )
+
+# ── Routes: Wishlist ─────────────────────────────────────────────────────────
+
+@app.get("/api/wishlist/search")
+async def search_masters(q: str):
+    hdrs = get_discogs_headers()
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await discogs_get(
+            client,
+            "https://api.discogs.com/database/search",
+            params={"q": q, "type": "master", "per_page": 10},
+            headers=hdrs,
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="Discogs search failed")
+    return [
+        {
+            "master_id": str(r.get("master_id") or r.get("id")),
+            "title": r.get("title", ""),
+            "year": r.get("year"),
+            "thumb": r.get("thumb", ""),
+            "cover_image": r.get("cover_image", ""),
+        }
+        for r in resp.json().get("results", [])
+    ]
+
+
+@app.get("/api/wishlist")
+def list_wishlist(show_fulfilled: bool = False):
+    with get_db() as conn:
+        if show_fulfilled:
+            rows = conn.execute(
+                "SELECT * FROM wishlist ORDER BY artist, title"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM wishlist WHERE fulfilled = 0 ORDER BY artist, title"
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/wishlist", status_code=201)
+async def add_wishlist(body: WishlistAddIn):
+    mid = str(body.master_id).lstrip("m")
+    hdrs = get_discogs_headers()
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await discogs_get(
+            client,
+            f"https://api.discogs.com/masters/{mid}",
+            headers=hdrs,
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="Discogs master fetch failed")
+    data = resp.json()
+    artist = ", ".join(a["name"] for a in data.get("artists", []))
+    title = data.get("title", "")
+    downloaded = await download_all_images(data.get("images", [])[:1], f"m{mid}", hdrs)
+    cover_file = downloaded[0]["filename"] if downloaded else ""
+    year = data.get("year")
+    genres = ", ".join(data.get("genres", [])) or None
+    styles = ", ".join(data.get("styles", [])) or None
+    lp = data.get("lowest_price")
+    lowest_price = float(lp) if lp is not None else None
+    num_for_sale = data.get("num_for_sale")
+    with get_db() as conn:
+        try:
+            cur = conn.execute(
+                """INSERT INTO wishlist
+                   (master_id, artist, title, cover_file, notes, year, genres, styles, lowest_price, num_for_sale)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (mid, artist, title, cover_file, body.notes or "", year, genres, styles, lowest_price, num_for_sale),
+            )
+            return {"id": cur.lastrowid}
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Already on wishlist")
+
+
+@app.put("/api/wishlist/{wishlist_id}")
+def update_wishlist(wishlist_id: int, body: WishlistUpdateIn):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM wishlist WHERE id = ?", (wishlist_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404)
+        notes = body.notes if body.notes is not None else row["notes"]
+        fulfilled = int(body.fulfilled) if body.fulfilled is not None else row["fulfilled"]
+        conn.execute(
+            "UPDATE wishlist SET notes = ?, fulfilled = ? WHERE id = ?",
+            (notes, fulfilled, wishlist_id),
+        )
+    return {"ok": True}
+
+
+@app.delete("/api/wishlist/{wishlist_id}")
+def delete_wishlist(wishlist_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM wishlist WHERE id = ?", (wishlist_id,))
+    return {"ok": True}
+
 
 # ── Static ────────────────────────────────────────────────────────────────────
 
