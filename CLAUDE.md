@@ -88,6 +88,24 @@ Per-release image cache: `discogs_id`, `filename`, `seq`, `is_cover`.
 ### `tracklist` table
 Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `seq`.
 
+### `wishlist` table
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | Auto-increment |
+| `master_id` | TEXT UNIQUE | Discogs master release ID (plain numeric string, no prefix) |
+| `artist` | TEXT | |
+| `title` | TEXT | |
+| `cover_file` | TEXT | Cached image filename — prefixed `m{master_id}` to avoid collision with release images |
+| `added_at` | TEXT | Auto timestamp |
+| `notes` | TEXT | |
+| `fulfilled` | INTEGER | 0 = wanted, 1 = fulfilled |
+| `year` | INTEGER | Master release year |
+| `genres` | TEXT | Comma-separated genres from Discogs |
+| `styles` | TEXT | Comma-separated styles from Discogs |
+| `lowest_price` | REAL | Discogs lowest listing price at time of add |
+| `num_for_sale` | INTEGER | Discogs for-sale count at time of add |
+
 ## API Endpoints
 
 | Method | Path | Description |
@@ -111,6 +129,17 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 | POST | `/api/admin/format` | Delete all records (settings preserved) |
 | POST | `/api/admin/factory-reset` | Delete all records + restore all settings to defaults |
 | POST | `/api/admin/clear-images` | Delete all cached cover images from disk |
+| GET | `/api/wishlist/search` | Search Discogs master releases (`?q=`) |
+| GET | `/api/wishlist` | List wishlist items (`?include_fulfilled=true` to include fulfilled) |
+| POST | `/api/wishlist` | Add a master release to the wishlist (fetches `/masters/{id}`, downloads cover) |
+| PUT | `/api/wishlist/{id}` | Update notes and/or fulfilled status |
+| DELETE | `/api/wishlist/{id}` | Delete a wishlist item |
+
+### Wishlist add (`POST /api/wishlist`)
+- Accepts `{master_id, notes}`; strips leading `m` from master_id
+- Calls `/masters/{id}` — extracts artist, title, year, genres, styles, lowest_price, num_for_sale
+- Downloads and caches the first master image to `/data/images/` with `m{master_id}` prefix
+- Returns 409 if master_id already on wishlist
 
 ### Discogs rate limiter
 All outbound Discogs API calls go through `discogs_get()` / `discogs_post()` wrappers that enforce a 55 req/min sliding-window limit (buffer under Discogs' 60/min). The limiter is process-wide — no manual sleep/batch logic anywhere else. On a 429 response, it waits 60 s and retries once. Image CDN calls (`i.discogs.com`) bypass the limiter — they are not API calls.
@@ -118,7 +147,7 @@ All outbound Discogs API calls go through `discogs_get()` / `discogs_post()` wra
 ### Discogs fetch (`/api/discogs/{id}`)
 - Accepts `r12345678` or `12345678`
 - Makes 2 concurrent Discogs calls: `/releases/{id}` + `/marketplace/stats/{id}`
-- Returns artist, title, label, cat_no, year, format, cover_file, valuation
+- Returns artist, title, label, cat_no, year, format, cover_file, valuation, and `wishlist_match` (unfulfilled wishlist item matching this release's `master_id`, or null)
 - Downloads and caches all images (up to 8) to `/data/images/`; populates `tracklist` table
 
 ### Record refresh (`/api/records/{id}/refresh`)
@@ -158,7 +187,7 @@ Everything lives in one file. No framework, no build step.
 ### Global state
 ```js
 records           // array — full dataset from API
-currentView       // 'table' | 'tile'
+currentView       // 'table' | 'tile' | 'wishlist'
 editingId         // null or record id
 fetchedMeta       // Discogs preview data during add/edit
 sortCol           // active sort column key or null
@@ -170,10 +199,12 @@ diffData          // last sync diff payload
 syncSource        // 'discogs' | 'csv' — controls sync modal behaviour
 hideObviousFormats // bool — global on/off for format tag hiding
 hiddenFormatTags  // Set<string> — tags to hide from filter bar
+wishlistItems     // array — full wishlist dataset from API (loaded on demand)
+showFulfilled     // bool — show fulfilled items in wishlist view
 ```
 
 ### localStorage persistence
-All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers (prefixed `sn_`). `restoreLocalState()` runs on `DOMContentLoaded` before any data fetch. Persisted keys: `view`, `showValuations`, `showTags`, `groupByArtist`, `toolbarExpanded`.
+All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers (prefixed `sn_`). `restoreLocalState()` runs on `DOMContentLoaded` before any data fetch. Persisted keys: `view`, `showValuations`, `showTags`, `groupByArtist`, `toolbarExpanded`, `showFulfilled`.
 
 ### Key functions
 
@@ -200,10 +231,20 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `importCsv(input)` | POST CSV → sets `syncSource='csv'` → opens sync modal |
 | `openSettings()` | Open settings modal; reloads field mapping in-place |
 | `saveSettings()` | Persist settings; stays open; refreshes field mapping if username changed |
+| `loadWishlist()` | Fetch `/api/wishlist`, update `wishlistItems`, update stats; calls `renderWishlist()` only if `currentView === 'wishlist'` |
+| `renderWishlist()` | Build sortable wishlist table (cover, Artist, Title, Year, Added, Notes, Status); no inline search filtering |
+| `openWishlistSearchModal(prefill)` | Open master release search modal; auto-searches if prefill provided |
+| `doWishlistSearch()` | POST to `/api/wishlist/search`, sort by year desc, render results with Add/On wishlist/Fulfilled state |
+| `addToWishlist(masterId)` | POST to `/api/wishlist`, close modal, clear search bar, reload wishlist |
+| `fulfillWishlistItem(id)` | PUT fulfilled=true, reload wishlist |
+| `deleteWishlistItem(id)` | DELETE item, reload wishlist |
+| `openWishlistDetail(id)` | Open detail modal: cover, metadata (year/genres/styles/lowest price), notes textarea, Mark Fulfilled + Delete + Save buttons |
+| `applyToolbarSwitches(v)` | Show/hide collection vs wishlist toolbar sections; update search placeholder |
 
 ### Views
 - **Table:** Clickable column headers cycle asc/desc/clear. "Group by artist" toggle overrides column sort with artist A-Z + year.
 - **Tiles:** Always sorted artist A-Z → year. Clicking a tile opens detail modal.
+- **Wishlist:** Sortable table (artist, title, year, added date). No inline search filtering — the search bar is a CTA that opens the master release search modal on Enter. Switching views clears the search bar. Format filter bar hidden. Toolbar shows "Show fulfilled" toggle only.
 
 ### Toolbar
 Collapsible via the "Options ▾" button in the header. Collapsed by default on mobile (`< 768px`), expanded on desktop. State persisted to localStorage.
@@ -213,6 +254,8 @@ Collapsible via the "Options ▾" button in the header. Collapsed by default on 
 - `modal-form` — add/edit form with Discogs lookup
 - `modal-discogs-sync` — diff preview; shared between Discogs collection sync and CSV import. `syncSource` controls labels and available actions (CSV hides "Discogs →" direction)
 - `modal-settings` — Display settings, Discogs config + field mapping, Data (import/export), Danger Zone. **Save stays open** (reload fields in-place); Close button dismisses.
+- `modal-wishlist-search` — Discogs master release search; results show Add/On wishlist/Fulfilled per item
+- `modal-wishlist-detail` — Wishlist item detail: cover, metadata, notes editing, Mark Fulfilled, Delete
 
 ### Settings modal sections (top to bottom)
 1. **Display** — Clean artists, Include P&P, Hide format tags (toggle + tag list)
@@ -234,3 +277,5 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **SPA routing:** `GET /{full_path:path}` serves static files or falls back to `index.html`. API routes are defined before this catch-all.
 - **Empty DB:** `list_records` catches `OperationalError`, calls `init_db()`, returns `[]` rather than 500.
 - **No schema migrations:** `init_db()` uses `CREATE TABLE IF NOT EXISTS` only. Assume fresh installs. To reset: delete `/data/sleevenotes.db`.
+- **Wishlist fulfilled prompt:** When saving a new collection record, if the fetched Discogs release has a `master_id` matching an unfulfilled wishlist item (`wishlist_match` in the fetch response), the user is prompted to mark it fulfilled.
+- **Wishlist cover prefix:** Master release covers are stored as `m{master_id}_01.jpeg` to avoid filename collision with release images (`r{release_id}_...`).
