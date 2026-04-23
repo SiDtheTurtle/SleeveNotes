@@ -281,6 +281,11 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **Wishlist cover prefix:** Master release covers are stored as `m{master_id}_01.jpeg` to avoid filename collision with release images (`r{release_id}_...`).
 - **PWA:** `static/manifest.json`, `static/sw.js` (minimal — satisfies Chrome install requirement), `static/icon.svg`, `static/icon-192.png`, `static/icon-512.png`. Offline detection via `navigator.onLine` + `window online/offline` events toggles a `body.offline` CSS class and an amber banner. Write actions (Add Record, Sync, Import, Settings Save, Edit, Delete) are disabled offline. Wishlist always fetches all items (`show_fulfilled=true`) and filters client-side so the fulfilled toggle works offline without re-fetching.
 
+## Known Bugs
+
+### Offline banner doesn't trigger on mobile with 5G but no home server
+`navigator.onLine` returns `true` whenever the device has any internet connection, so the offline banner and read-only mode never activate when the user is away from home on mobile data. The fix requires active server reachability probing (see Offline wishlist adding feature request below for the full two-state design).
+
 ## Feature Requests
 
 ### Offline wishlist adding
