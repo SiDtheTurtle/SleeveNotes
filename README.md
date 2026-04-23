@@ -21,9 +21,11 @@ As a disclaimer I have a developer background but this was ripe for AI-assisted 
 
 ![Collection table view](docs/screenshots/collection-table.png)
 ![Collection tile view](docs/screenshots/collection-tiles.png)
+![Record card](docs/screenshots/record-card.png)
+![Tracklist](docs/screenshots/tracklist-card.png)
+![Add record](docs/screenshots/add-record.png)
 ![Wishlist](docs/screenshots/wishlist.png)
-![Mobile view](docs/screenshots/mobile.png)
-![Settings](docs/screenshots/settings.png)
+![Add to wishlist](docs/screenshots/add-wishlist.png)
 
 ---
 
