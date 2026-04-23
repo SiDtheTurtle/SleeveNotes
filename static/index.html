@@ -140,7 +140,14 @@
     border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
   }
-  .toolbar.collapsed { display: none; }
+  .toolbar-nav {
+    flex: 1 1 100%;
+    display: flex;
+    gap: 0.25rem;
+    padding-bottom: 0.625rem;
+    border-bottom: 1px solid var(--border);
+    order: -1;
+  }
 
   .search-wrap {
     position: relative;
@@ -884,7 +891,7 @@
     .stats-bar { padding: 0.5rem 1rem; gap: 0.75rem; flex-wrap: wrap; }
     .stat-label { font-size: 9px; }
     .toolbar { padding: 0.75rem 1rem; gap: 0.5rem; }
-    .search-wrap { flex: 1 1 100%; order: -1; }
+    .search-wrap { flex: 1 1 100%; }
     main { padding: 1rem; }
     .form-grid { grid-template-columns: 1fr; }
     .detail-layout { grid-template-columns: 1fr; }
@@ -907,7 +914,6 @@
     SleeveNotes
   </div>
   <div class="header-actions">
-    <button class="btn btn-ghost btn-sm" id="toolbar-toggle-btn" onclick="toggleToolbar()"><span id="toolbar-toggle-icon">▾</span> Options</button>
     <button id="btn-add-record" class="btn btn-primary btn-sm" onclick="openAdd()">+ Add Record</button>
     <button id="btn-settings" class="btn btn-ghost btn-icon" onclick="openSettings()" title="Settings" style="color:var(--groove)">⚙</button>
   </div>
@@ -923,13 +929,19 @@
 </div>
 
 <div class="toolbar" id="toolbar">
-  <div class="view-toggle">
-    <button class="btn btn-ghost active" id="btn-table" onclick="setView('table')">▤ Table</button>
-    <button class="btn btn-ghost" id="btn-tile" onclick="setView('tile')">⊞ Tiles</button>
-    <button class="btn btn-ghost" id="btn-wishlist" onclick="setView('wishlist')">♡ Wishlist</button>
+  <div class="toolbar-nav">
+    <div class="view-toggle">
+      <button class="btn btn-ghost active" id="btn-collection" onclick="setSection('collection')">⊙ Collection</button>
+      <button class="btn btn-ghost" id="btn-wishlist-nav" onclick="setSection('wishlist')">♡ Wishlist</button>
+    </div>
+    <div id="collection-view-toggle" style="display:contents">
+      <div class="toolbar-sep"></div>
+      <div class="view-toggle">
+        <button class="btn btn-ghost active" id="btn-table" onclick="setView('table')">▤ Table</button>
+        <button class="btn btn-ghost" id="btn-tile" onclick="setView('tile')">⊞ Tiles</button>
+      </div>
+    </div>
   </div>
-
-  <div class="toolbar-sep"></div>
 
   <div class="search-wrap">
     <span class="search-icon">⌕</span>
@@ -946,15 +958,6 @@
         <div class="toggle-thumb"></div>
       </label>
       <span style="font-size:12px;color:var(--ink-light)">Group by artist</span>
-    </label>
-
-    <label class="toggle-row" style="cursor:pointer">
-      <label class="toggle">
-        <input type="checkbox" id="show-valuations" onchange="onShowValuationsToggle()">
-        <div class="toggle-track"></div>
-        <div class="toggle-thumb"></div>
-      </label>
-      <span style="font-size:12px;color:var(--ink-light)">Show valuations</span>
     </label>
 
     <label class="toggle-row" style="cursor:pointer">
@@ -1189,6 +1192,17 @@
             <div class="toggle-thumb"></div>
           </label>
         </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Show valuations</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Show the Collection Value KPI and per-record Discogs marketplace valuations.</div>
+          </div>
+          <label class="toggle" style="flex-shrink:0" title="Show valuations">
+            <input type="checkbox" id="show-valuations" onchange="onShowValuationsToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
         <div style="display:flex;flex-direction:column;gap:0.4rem;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
             <div>
@@ -1382,6 +1396,7 @@
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let records = [];
+let currentSection = 'collection';
 let currentView = 'table';
 let editingId = null;
 let fetchedMeta = {};
@@ -1413,11 +1428,9 @@ function restoreLocalState() {
   currentView = lsGet('view', 'table');
   document.getElementById('btn-table').classList.toggle('active', currentView === 'table');
   document.getElementById('btn-tile').classList.toggle('active', currentView === 'tile');
-  document.getElementById('btn-wishlist').classList.toggle('active', currentView === 'wishlist');
-  applyToolbarSwitches(currentView);
-
-  showValuations = lsGet('showValuations', false);
-  document.getElementById('show-valuations').checked = showValuations;
+  document.getElementById('btn-collection').classList.add('active');
+  document.getElementById('btn-wishlist-nav').classList.remove('active');
+  applyToolbarSwitches('collection');
 
   showTags = lsGet('showTags', false);
   document.getElementById('show-tags').checked = showTags;
@@ -1428,9 +1441,6 @@ function restoreLocalState() {
   const groupByArtist = lsGet('groupByArtist', false);
   document.getElementById('group-by-artist').checked = groupByArtist;
 
-  const defaultExpanded = window.innerWidth >= 768;
-  const toolbarExpanded = lsGet('toolbarExpanded', defaultExpanded);
-  applyToolbarState(toolbarExpanded);
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -1460,7 +1470,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.target === e.currentTarget) closeModal('modal-wishlist-search');
   });
   document.getElementById('search').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && currentView === 'wishlist') {
+    if (e.key === 'Enter' && currentSection === 'wishlist') {
       openWishlistSearchModal(document.getElementById('search').value.trim());
     }
   });
@@ -1488,6 +1498,10 @@ async function loadSettings() {
       if (s.hide_obvious_formats !== undefined) hideObviousFormats = s.hide_obvious_formats === 'true';
       if (s.hidden_format_tags !== undefined)
         hiddenFormatTags = new Set(s.hidden_format_tags.split(',').map(t => t.trim()).filter(Boolean));
+      if (s.show_valuations !== undefined) {
+        showValuations = s.show_valuations === 'true';
+        document.getElementById('show-valuations').checked = showValuations;
+      }
       discogsUsername = s.discogs_username || '';
       try { discogsFieldMappings = JSON.parse(s.discogs_field_mappings || '{}'); } catch { discogsFieldMappings = {}; }
       // token is not surfaced to JS state — it stays in the DB and is read server-side
@@ -1537,17 +1551,15 @@ function updateStats() {
   const cost = records.reduce((s,r) => s + (r.price||0) + (includePP ? (r.pp||0) : 0), 0);
   const valuation = records.reduce((s,r) => s + (r.valuation||0), 0);
   document.getElementById('s-total').textContent = records.length;
-  document.getElementById('s-cost').textContent = showValuations ? '£' + cost.toFixed(2) : '—';
-  document.getElementById('s-valuation').textContent = showValuations && valuation ? '£' + valuation.toFixed(2) : '—';
+  document.getElementById('s-cost').closest('.stat-item').style.display = showValuations ? '' : 'none';
+  document.getElementById('s-cost').textContent = '£' + cost.toFixed(2);
+  document.getElementById('s-valuation').closest('.stat-item').style.display = showValuations ? '' : 'none';
+  document.getElementById('s-valuation').textContent = valuation ? '£' + valuation.toFixed(2) : '—';
   const wCount = wishlistItems.filter(w => !w.fulfilled).length;
   document.getElementById('s-wishlist').textContent = wCount || '—';
 }
 
-function onShowValuationsToggle() {
-  showValuations = document.getElementById('show-valuations').checked;
-  lsSet('showValuations', showValuations);
-  updateStats();
-}
+function onShowValuationsToggle() {}
 
 // ── Filtering & sorting ────────────────────────────────────────────────────
 function getFiltered() {
@@ -1616,33 +1628,32 @@ function setView(v) {
   document.getElementById('search').value = '';
   document.getElementById('btn-table').classList.toggle('active', v === 'table');
   document.getElementById('btn-tile').classList.toggle('active', v === 'tile');
-  document.getElementById('btn-wishlist').classList.toggle('active', v === 'wishlist');
-  applyToolbarSwitches(v);
-  updateFormatFilterBar();
   lsSet('view', v);
-  if (v === 'wishlist') loadWishlist();
+  applyToolbarSwitches(currentSection);
+  updateFormatFilterBar();
+  renderView();
+}
+
+function setSection(section) {
+  currentSection = section;
+  selectedTileId = null;
+  document.getElementById('search').value = '';
+  document.getElementById('btn-collection').classList.toggle('active', section === 'collection');
+  document.getElementById('btn-wishlist-nav').classList.toggle('active', section === 'wishlist');
+  applyToolbarSwitches(section);
+  updateFormatFilterBar();
+  if (section === 'wishlist') loadWishlist();
   else renderView();
 }
 
-function applyToolbarSwitches(v) {
-  const isWishlist = v === 'wishlist';
+function applyToolbarSwitches(s) {
+  const isWishlist = s === 'wishlist';
   document.getElementById('collection-switches').style.display = isWishlist ? 'none' : 'contents';
   document.getElementById('wishlist-switches').style.display = isWishlist ? 'contents' : 'none';
-  document.getElementById('group-by-wrapper').style.display = v === 'table' ? '' : 'none';
+  document.getElementById('group-by-wrapper').style.display = (!isWishlist && currentView === 'table') ? '' : 'none';
   document.getElementById('search').placeholder = isWishlist
     ? 'Search for a master release…'
     : 'Search artist, title, label…';
-}
-
-function applyToolbarState(expanded) {
-  document.getElementById('toolbar').classList.toggle('collapsed', !expanded);
-  document.getElementById('toolbar-toggle-icon').textContent = expanded ? '▾' : '▸';
-}
-
-function toggleToolbar() {
-  const expanded = document.getElementById('toolbar').classList.contains('collapsed');
-  applyToolbarState(expanded);
-  lsSet('toolbarExpanded', expanded);
 }
 
 function onShowTagsToggle() {
@@ -1658,9 +1669,9 @@ function onGroupByArtistToggle() {
 }
 
 function renderView() {
-  if (currentView === 'table') renderTable();
-  else if (currentView === 'tile') renderTiles();
-  else if (currentView === 'wishlist') renderWishlist();
+  if (currentSection === 'wishlist') renderWishlist();
+  else if (currentView === 'table') renderTable();
+  else renderTiles();
 }
 
 // ── Table view ─────────────────────────────────────────────────────────────
@@ -2496,6 +2507,7 @@ async function applySync() {
 function openSettings() {
   document.getElementById('clean-artists-toggle').checked = cleanArtists;
   document.getElementById('include-pp-toggle').checked = includePP;
+  document.getElementById('show-valuations').checked = showValuations;
   document.getElementById('hide-format-tags-toggle').checked = hideObviousFormats;
   document.getElementById('hidden-format-tags-input').value = [...hiddenFormatTags].join(', ');
   document.getElementById('hidden-format-tags-input').disabled = !hideObviousFormats;
@@ -2536,9 +2548,11 @@ async function saveSettings() {
     if (sel.value) newMappings[sel.value] = sel.dataset.dbCol;
   });
 
+  const newShowValuations = document.getElementById('show-valuations').checked;
   const puts = [
     ['clean_artists', String(newCleanArtists)],
     ['include_pp', String(newIncludePP)],
+    ['show_valuations', String(newShowValuations)],
     ['hide_obvious_formats', String(newHideFormatTags)],
     ['hidden_format_tags', newHiddenTags],
     ['discogs_username', newUsername],
@@ -2556,6 +2570,7 @@ async function saveSettings() {
   const usernameChanged = newUsername !== discogsUsername;
   cleanArtists = newCleanArtists;
   includePP = newIncludePP;
+  showValuations = newShowValuations;
   hideObviousFormats = newHideFormatTags;
   hiddenFormatTags = new Set(newHiddenTags.split(',').map(t => t.trim()).filter(Boolean));
   discogsUsername = newUsername;
@@ -2578,31 +2593,18 @@ async function saveSettings() {
   }
 }
 
-function onCleanArtistsToggle() {
-  cleanArtists = document.getElementById('clean-artists-toggle').checked;
-  renderView();
-}
+function onCleanArtistsToggle() {}
 
-function onIncludePPToggle() {
-  includePP = document.getElementById('include-pp-toggle').checked;
-  updateStats();
-}
+function onIncludePPToggle() {}
 
 function onHideFormatTagsToggle() {
-  hideObviousFormats = document.getElementById('hide-format-tags-toggle').checked;
+  const val = document.getElementById('hide-format-tags-toggle').checked;
   const input = document.getElementById('hidden-format-tags-input');
-  input.disabled = !hideObviousFormats;
-  input.style.opacity = hideObviousFormats ? '1' : '0.4';
-  updateFormatFilterBar();
-  renderView();
+  input.disabled = !val;
+  input.style.opacity = val ? '1' : '0.4';
 }
 
-function onHiddenTagsChange() {
-  const val = document.getElementById('hidden-format-tags-input').value;
-  hiddenFormatTags = new Set(val.split(',').map(t => t.trim()).filter(Boolean));
-  updateFormatFilterBar();
-  renderView();
-}
+function onHiddenTagsChange() {}
 
 function buildFetchRanges() {
   const container = document.getElementById('fetch-range-btns');
@@ -2714,7 +2716,7 @@ async function doClearImages() {
 
 async function loadWishlist() {
   if (!navigator.onLine || !serverReachable) {
-    if (currentView === 'wishlist') renderWishlist();
+    if (currentSection === 'wishlist') renderWishlist();
     updateStats();
     return;
   }
@@ -2724,13 +2726,41 @@ async function loadWishlist() {
     wishlistItems = await r.json();
   } catch {
     wishlistItems = [];
-    if (currentView === 'wishlist') toast('Failed to load wishlist', 'error');
+    if (currentSection === 'wishlist') toast('Failed to load wishlist', 'error');
   }
-  if (currentView === 'wishlist') renderWishlist();
+  if (currentSection === 'wishlist') renderWishlist();
   updateStats();
 }
 
+function renderWishlistTiles() {
+  const el = document.getElementById('main-content');
+  let items = showFulfilled ? wishlistItems : wishlistItems.filter(w => !w.fulfilled);
+  items = [...items].sort((a, b) => cmp(a.artist, b.artist) || cmpN(a.year, b.year));
+
+  if (!items.length) {
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon">♡</div>
+      <div class="empty-text">${wishlistItems.length ? 'No matching items' : 'Your wishlist is empty'}</div>
+      <div class="empty-sub">${wishlistItems.length ? 'Try adjusting your search' : 'Type a master release above and press Enter to search'}</div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="tile-grid">${items.map(w => `
+    <div class="tile" onclick="openWishlistDetail(${w.id})">
+      ${w.cover_file
+        ? `<img class="tile-img" src="/images/${esc(w.cover_file)}" alt="${esc(w.artist)} - ${esc(w.title)}" loading="lazy">`
+        : `<div class="tile-placeholder">♡</div>`}
+      <div class="tile-overlay">
+        <div class="tile-overlay-artist">${esc(w.artist)}</div>
+        <div class="tile-overlay-title">${esc(w.title)}</div>
+        ${w.year ? `<div style="font-size:11px;color:var(--cream);opacity:0.8;font-family:var(--font-mono);margin-top:0.15rem">${w.year}</div>` : ''}
+      </div>
+    </div>`).join('')}</div>`;
+}
+
 function renderWishlist() {
+  if (currentView === 'tile') { renderWishlistTiles(); return; }
   const el = document.getElementById('main-content');
   let items = showFulfilled ? wishlistItems : wishlistItems.filter(w => !w.fulfilled);
 
@@ -2877,7 +2907,7 @@ async function deleteWishlistItem(id) {
 function onShowFulfilledToggle() {
   showFulfilled = document.getElementById('show-fulfilled').checked;
   lsSet('showFulfilled', showFulfilled);
-  if (currentView === 'wishlist') renderWishlist();
+  if (currentSection === 'wishlist') renderWishlist();
 }
 
 function openWishlistDetail(id) {
@@ -3029,7 +3059,7 @@ function fmtTagsCell(s) {
 function updateFormatFilterBar() {
   const bar = document.getElementById('format-filter-bar');
   const allTags = [...new Set(records.flatMap(r => formatTags(r.format)))].sort();
-  if (currentView === 'wishlist' || !allTags.length || !showTags) { bar.style.display = 'none'; return; }
+  if (currentSection === 'wishlist' || !allTags.length || !showTags) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
   bar.innerHTML = allTags.map(t =>
     `<span class="fmt-tag-filter${filterFormat === t ? ' active' : ''}" data-tag="${esc(t)}">${esc(t)}</span>`

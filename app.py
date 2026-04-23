@@ -95,6 +95,7 @@ SETTINGS_DEFAULTS: dict[str, str] = {
     "include_pp":           "false",
     "hide_obvious_formats": "true",
     "hidden_format_tags":   "Album, LP, Stereo, Vinyl",
+    "show_valuations":      "true",
     "discogs_username":     "",
     "discogs_token":        "",
     "discogs_field_mappings": "{}",
