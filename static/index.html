@@ -2716,7 +2716,7 @@ async function loadWishlist() {
     return;
   }
   try {
-    const r = await fetch(`/api/wishlist${showFulfilled ? '?show_fulfilled=true' : ''}`);
+    const r = await fetch('/api/wishlist?show_fulfilled=true');
     if (!r.ok) throw new Error();
     wishlistItems = await r.json();
   } catch {
@@ -2878,7 +2878,7 @@ async function deleteWishlistItem(id) {
 function onShowFulfilledToggle() {
   showFulfilled = document.getElementById('show-fulfilled').checked;
   lsSet('showFulfilled', showFulfilled);
-  if (currentView === 'wishlist') loadWishlist();
+  if (currentView === 'wishlist') renderWishlist();
 }
 
 function openWishlistDetail(id) {
