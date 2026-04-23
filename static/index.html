@@ -1397,6 +1397,8 @@ let showValuations = false;
 let showTags = false;
 let wishlistItems = [];
 let showFulfilled = false;
+let serverReachable = true;
+let _reachabilityPollTimer = null;
 
 // ── localStorage helpers ────────────────────────────────────────────────────
 function lsGet(key, fallback) {
@@ -1435,6 +1437,7 @@ function restoreLocalState() {
 document.addEventListener('DOMContentLoaded', async () => {
   restoreLocalState();
   updateOnlineState();
+  probeHealth();
   await loadSettings();
   loadRecords();
   loadWishlist();
@@ -1477,7 +1480,7 @@ let syncSource = 'discogs'; // 'discogs' | 'csv'
 
 async function loadSettings() {
   try {
-    const r = await fetch('/api/settings');
+    const r = await apiFetch('/api/settings');
     if (r.ok) {
       const s = await r.json();
       if (s.clean_artists !== undefined) cleanArtists = s.clean_artists === 'true';
@@ -1494,7 +1497,7 @@ async function loadSettings() {
 
 async function loadRecords() {
   try {
-    const r = await fetch('/api/records');
+    const r = await apiFetch('/api/records');
     if (!r.ok) throw new Error(r.status);
     records = await r.json();
     renderView();
@@ -1866,7 +1869,7 @@ async function openDetail(id) {
 
   // Async: fetch images and upgrade cover slot to carousel if multiple exist
   try {
-    const resp = await fetch(`/api/records/${id}/images`);
+    const resp = await apiFetch(`/api/records/${id}/images`);
     if (resp.ok) {
       const images = await resp.json();
       if (images.length > 1) setupCarousel(id, images, r.cover_file);
@@ -1878,7 +1881,7 @@ async function loadTracklist(id) {
   const el = document.getElementById('tracklist-content');
   if (!el) return;
   try {
-    const resp = await fetch(`/api/records/${id}/tracklist`);
+    const resp = await apiFetch(`/api/records/${id}/tracklist`);
     if (!resp.ok) throw new Error();
     const tracks = await resp.json();
     if (!tracks.length) {
@@ -1939,7 +1942,7 @@ function setupCarousel(recordId, images, currentCover) {
 
 async function setCover(recordId, filename) {
   try {
-    const r = await fetch(`/api/records/${recordId}/set-cover`, {
+    const r = await apiFetch(`/api/records/${recordId}/set-cover`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ filename }),
@@ -2023,7 +2026,7 @@ async function fetchDiscogs() {
   btn.innerHTML = '<span class="spinner"></span>';
   btn.disabled = true;
   try {
-    const r = await fetch(`/api/discogs/${encodeURIComponent(rid)}`);
+    const r = await apiFetch(`/api/discogs/${encodeURIComponent(rid)}`);
     if (!r.ok) throw new Error('Fetch failed');
     const d = await r.json();
     fetchedMeta = d;
@@ -2101,7 +2104,7 @@ async function saveRecord() {
     toast(editingId ? 'Record updated' : 'Record added', 'success');
     if (match) {
       if (confirm(`"${match.artist} — ${match.title}" is on your wishlist. Mark as fulfilled?`)) {
-        await fetch(`/api/wishlist/${match.id}`, {
+        await apiFetch(`/api/wishlist/${match.id}`, {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ fulfilled: true }),
@@ -2122,7 +2125,7 @@ async function deleteRecord() {
   if (!editingId) return;
   if (!confirm('Delete this record? This cannot be undone.')) return;
   try {
-    await fetch(`/api/records/${editingId}`, { method: 'DELETE' });
+    await apiFetch(`/api/records/${editingId}`, { method: 'DELETE' });
     closeModal('modal-form');
     await loadRecords();
     toast('Record deleted', 'success');
@@ -2141,7 +2144,7 @@ async function importCsv(input) {
   try {
     const fd = new FormData();
     fd.append('file', file);
-    const resp = await fetch('/api/import/csv', { method: 'POST', body: fd });
+    const resp = await apiFetch('/api/import/csv', { method: 'POST', body: fd });
     if (!resp.ok) throw new Error((await resp.json()).detail || resp.status);
     diffData = await resp.json();
     syncSource = 'csv';
@@ -2229,7 +2232,7 @@ async function loadDiscogsFields() {
   if (loading) loading.style.display = '';
   if (section) section.style.display = 'none';
   try {
-    const resp = await fetch('/api/collection/fields');
+    const resp = await apiFetch('/api/collection/fields');
     if (!resp.ok) throw new Error((await resp.json()).detail || resp.status);
     const data = await resp.json();
     discogsFields = data.fields || [];
@@ -2463,7 +2466,7 @@ async function applySync() {
   btn.disabled = true;
   btn.textContent = 'Applying…';
   try {
-    const resp = await fetch('/api/collection/sync', {
+    const resp = await apiFetch('/api/collection/sync', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload),
     });
@@ -2655,7 +2658,7 @@ function onFormatToggle() {
 async function doFormatDb() {
   if (!confirm('This will permanently delete every record in your collection. Settings will be preserved. Are you sure?')) return;
   try {
-    const r = await fetch('/api/admin/format', { method: 'POST' });
+    const r = await apiFetch('/api/admin/format', { method: 'POST' });
     if (!r.ok) throw new Error();
     closeModal('modal-settings');
     await loadRecords();
@@ -2676,7 +2679,7 @@ function onFactoryResetToggle() {
 async function doFactoryReset() {
   if (!confirm('This will permanently delete all records and reset all settings to defaults. Are you sure?')) return;
   try {
-    const r = await fetch('/api/admin/factory-reset', { method: 'POST' });
+    const r = await apiFetch('/api/admin/factory-reset', { method: 'POST' });
     if (!r.ok) throw new Error();
     closeModal('modal-settings');
     await loadRecords();
@@ -2697,7 +2700,7 @@ function onClearImagesToggle() {
 async function doClearImages() {
   if (!confirm('This will permanently delete all cached cover images from disk. Are you sure?')) return;
   try {
-    const r = await fetch('/api/admin/clear-images', { method: 'POST' });
+    const r = await apiFetch('/api/admin/clear-images', { method: 'POST' });
     if (!r.ok) throw new Error();
     const { deleted } = await r.json();
     await loadRecords();
@@ -2710,13 +2713,13 @@ async function doClearImages() {
 // ── Wishlist ───────────────────────────────────────────────────────────────
 
 async function loadWishlist() {
-  if (!navigator.onLine) {
+  if (!navigator.onLine || !serverReachable) {
     if (currentView === 'wishlist') renderWishlist();
     updateStats();
     return;
   }
   try {
-    const r = await fetch('/api/wishlist?show_fulfilled=true');
+    const r = await apiFetch('/api/wishlist?show_fulfilled=true');
     if (!r.ok) throw new Error();
     wishlistItems = await r.json();
   } catch {
@@ -2777,7 +2780,7 @@ function renderWishlist() {
 }
 
 function openWishlistSearchModal(prefill = '') {
-  if (!navigator.onLine) { toast('Offline — wishlist search requires a connection', 'error'); return; }
+  if (!navigator.onLine || !serverReachable) { toast('Offline — wishlist search requires a connection', 'error'); return; }
   const input = document.getElementById('wishlist-search-input');
   input.value = prefill;
   document.getElementById('wishlist-search-results').innerHTML = '';
@@ -2795,7 +2798,7 @@ async function doWishlistSearch() {
   btn.innerHTML = '<span class="spinner"></span>';
   results.innerHTML = '<div style="color:var(--ink-light);font-size:13px;padding:0.5rem 0">Searching…</div>';
   try {
-    const r = await fetch(`/api/wishlist/search?q=${encodeURIComponent(q)}`);
+    const r = await apiFetch(`/api/wishlist/search?q=${encodeURIComponent(q)}`);
     if (!r.ok) throw new Error();
     const items = await r.json();
     items.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
@@ -2828,7 +2831,7 @@ async function doWishlistSearch() {
 
 async function addToWishlist(masterId) {
   try {
-    const r = await fetch('/api/wishlist', {
+    const r = await apiFetch('/api/wishlist', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ master_id: masterId, notes: '' }),
@@ -2846,7 +2849,7 @@ async function addToWishlist(masterId) {
 
 async function fulfillWishlistItem(id) {
   try {
-    const r = await fetch(`/api/wishlist/${id}`, {
+    const r = await apiFetch(`/api/wishlist/${id}`, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ fulfilled: true }),
@@ -2862,7 +2865,7 @@ async function fulfillWishlistItem(id) {
 async function deleteWishlistItem(id) {
   if (!confirm('Remove this item from your wishlist?')) return;
   try {
-    const r = await fetch(`/api/wishlist/${id}`, { method: 'DELETE' });
+    const r = await apiFetch(`/api/wishlist/${id}`, { method: 'DELETE' });
     if (!r.ok) throw new Error();
     await loadWishlist();
     toast('Removed from wishlist', 'success');
@@ -2921,7 +2924,7 @@ function openWishlistDetail(id) {
     if (!confirm('Remove this item from your wishlist?')) return;
     closeModal('modal-wishlist-detail');
     try {
-      await fetch(`/api/wishlist/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/wishlist/${id}`, { method: 'DELETE' });
       await loadWishlist();
       toast('Removed from wishlist', 'success');
     } catch {
@@ -2932,7 +2935,7 @@ function openWishlistDetail(id) {
   document.getElementById('wishlist-detail-save-btn').onclick = async () => {
     const notes = document.getElementById('wishlist-detail-notes').value;
     try {
-      const r = await fetch(`/api/wishlist/${id}`, {
+      const r = await apiFetch(`/api/wishlist/${id}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ notes }),
@@ -3076,11 +3079,23 @@ function toast(msg, type = '') {
   setTimeout(() => el.remove(), 3500);
 }
 
-// ── Offline / online state ─────────────────────────────────────────────────
+// ── Connectivity state ─────────────────────────────────────────────────────
 function updateOnlineState() {
-  const offline = !navigator.onLine;
+  const noInternet = !navigator.onLine;
+  const offline = noInternet || !serverReachable;
   document.body.classList.toggle('offline', offline);
-  document.getElementById('offline-banner').style.display = offline ? 'block' : 'none';
+  const banner = document.getElementById('offline-banner');
+  if (noInternet) {
+    banner.textContent = 'Read-Only Mode — no internet connection';
+    banner.style.background = '#7A4800';
+    banner.style.display = 'block';
+  } else if (!serverReachable) {
+    banner.textContent = 'Offline Mode — server unreachable';
+    banner.style.background = '#3D4A5C';
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
   const addBtn = document.getElementById('btn-add-record');
   if (addBtn) addBtn.disabled = offline;
   const syncBtn = document.getElementById('btn-sync-discogs');
@@ -3090,8 +3105,64 @@ function updateOnlineState() {
   const importInput = document.getElementById('input-import-csv');
   if (importInput) importInput.disabled = offline;
 }
-window.addEventListener('online', updateOnlineState);
-window.addEventListener('offline', updateOnlineState);
+
+async function checkHealth() {
+  try {
+    const r = await fetch('/api/health', { signal: AbortSignal.timeout(5000) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function probeHealth() {
+  if (!navigator.onLine) return;
+  setServerReachable(await checkHealth());
+}
+
+function setServerReachable(reachable) {
+  const wasUnreachable = !serverReachable;
+  serverReachable = reachable;
+  clearTimeout(_reachabilityPollTimer);
+  _reachabilityPollTimer = null;
+  updateOnlineState();
+  if (!reachable && !document.hidden) scheduleReachabilityCheck(0);
+  if (wasUnreachable && reachable) toast('Server reconnected', 'success');
+}
+
+function scheduleReachabilityCheck(attempt) {
+  const delay = [10000, 30000, 60000][Math.min(attempt, 2)];
+  _reachabilityPollTimer = setTimeout(async () => {
+    _reachabilityPollTimer = null;
+    if (document.hidden || !navigator.onLine) return;
+    if (await checkHealth()) setServerReachable(true);
+    else scheduleReachabilityCheck(attempt + 1);
+  }, delay);
+}
+
+async function apiFetch(url, opts) {
+  try {
+    return await fetch(url, opts);
+  } catch (e) {
+    if (e instanceof TypeError && navigator.onLine) probeHealth();
+    throw e;
+  }
+}
+
+window.addEventListener('online', () => { updateOnlineState(); probeHealth(); });
+window.addEventListener('offline', () => {
+  clearTimeout(_reachabilityPollTimer);
+  _reachabilityPollTimer = null;
+  updateOnlineState();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearTimeout(_reachabilityPollTimer);
+    _reachabilityPollTimer = null;
+  } else if (navigator.onLine) {
+    probeHealth();
+  }
+});
 
 // ── Service Worker ─────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
