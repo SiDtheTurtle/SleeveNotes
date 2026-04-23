@@ -171,7 +171,7 @@ All outbound Discogs API calls go through `discogs_get()` / `discogs_post()` wra
 
 ### Collection sync (`/api/collection/sync`)
 - Accepts `{to_sleevenotes: [...], to_discogs: [...]}` payload
-- New SN records trigger a background `_refresh_new_records` task (images + tracklist + valuation)
+- All SN records (created or updated) trigger a background `_refresh_new_records` task (images + tracklist + valuation)
 - Returns `sn_refreshing: N` when background fetch is in flight; frontend polls until covers appear
 
 ### Import CSV (`/api/import/csv`)

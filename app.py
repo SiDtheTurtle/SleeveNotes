@@ -663,11 +663,11 @@ async def _push_field_updates(client, username: str, hdrs: dict,
             errors.append({"error": str(e)})
     return errors
 
-async def _refresh_new_records(new_records: list[tuple[int, str]], hdrs: dict):
+async def _refresh_new_records(records: list[tuple[int, str]], hdrs: dict):
     async with httpx.AsyncClient(timeout=30) as client:
         await asyncio.gather(*[
             _refresh_from_discogs(client, hdrs, rec_id, did)
-            for rec_id, did in new_records
+            for rec_id, did in records
         ])
 
 @app.post("/api/collection/sync")
@@ -684,13 +684,13 @@ async def collection_sync(payload: SyncPayload, background_tasks: BackgroundTask
              "failed": 0, "errors": []}
 
     # SleeveNotes DB writes
-    new_records: list[tuple[int, str]] = []  # (record_id, discogs_id) for post-insert refresh
+    records_to_refresh: list[tuple[int, str]] = []  # (record_id, discogs_id) for background refresh
     with get_db() as conn:
         for item in payload.to_sleevenotes:
             try:
                 if item.action == "create":
                     row_id = _insert_record(conn, item.prospective)
-                    new_records.append((row_id, item.prospective.get("discogs_id", "")))
+                    records_to_refresh.append((row_id, item.prospective.get("discogs_id", "")))
                     stats["sn_created"] += 1
                 else:
                     p = item.prospective
@@ -700,14 +700,15 @@ async def collection_sync(payload: SyncPayload, background_tasks: BackgroundTask
                         clause = ", ".join(f"{k}=?" for k in update_fields)
                         conn.execute(f"UPDATE records SET {clause} WHERE id=?",
                                      [*update_fields.values(), item.record_id])
+                    records_to_refresh.append((item.record_id, item.prospective.get("discogs_id", "")))
                     stats["sn_updated"] += 1
             except Exception as e:
                 stats["failed"] += 1
                 stats["errors"].append({"side": "sleevenotes", "error": str(e)})
 
-    if new_records:
-        background_tasks.add_task(_refresh_new_records, new_records, hdrs)
-        stats["sn_refreshing"] = len(new_records)
+    if records_to_refresh:
+        background_tasks.add_task(_refresh_new_records, records_to_refresh, hdrs)
+        stats["sn_refreshing"] = len(records_to_refresh)
 
     # Discogs updates — rate limited
     async with httpx.AsyncClient(timeout=10) as client:
