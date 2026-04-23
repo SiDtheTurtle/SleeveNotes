@@ -298,7 +298,7 @@ Two distinct offline states need separate detection and banners:
 Design notes:
 - Backend needs a lightweight `GET /api/health` endpoint
 - Server reachability probed every ~30s + on any failed API call
-- Wishlist search calls Discogs directly from the browser (unauthenticated API, 25 req/min — fine for personal use) bypassing the backend
+- Wishlist search calls Discogs directly from the browser (unauthenticated API, 25 req/min — fine for personal use) bypassing the backend. The Discogs token is never sent to the frontend, so anonymous mode is a deliberate fallback — do not cache the token client-side to increase the rate limit
 - Adds queued as `{master_id, notes, queued_at}` in IndexedDB; displayed in wishlist as pending placeholders (no cover/metadata yet)
 - On reconnect, queue flushed via `POST /api/wishlist` per item; 409 (already exists) swallowed silently
 - Background Sync API can flush queue even when app is closed (Android only — iOS does not support it)
