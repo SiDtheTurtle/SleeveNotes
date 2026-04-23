@@ -1,11 +1,19 @@
 # SleeveNotes
 
-<!-- TODO: intro paragraph — purpose, Discogs dependency, hobby project framing, vibe-coded disclosure -->
-
 [![Latest release](https://img.shields.io/github/v/release/SiDtheTurtle/sleevenotes)](https://github.com/SiDtheTurtle/sleevenotes/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Docker image](https://img.shields.io/badge/docker-ghcr.io%2Fsidtheturtle%2Fsleevenotes-0db7ed?logo=docker&logoColor=white)](https://github.com/SiDtheTurtle/sleevenotes/pkgs/container/sleevenotes)
 [![vibe-coded](https://img.shields.io/badge/vibe--coded-Claude%20Code-D97757)](https://claude.ai/code)
+
+A single page, locally hosted web app to track your vinyl collection
+
+## Introduction
+
+I have a growing vinyl collection, and a growing home server setup to go with it. I wanted a simple app to track my collection and allow members of the household to add their wishlists, without having to navigate Discogs directly, or reach for the fantastic yet overkill other options out there, and to have something entirely local and not published out on the web. So inspired by [XKCD](https://xkcd.com/927/) I created my own!
+
+SleeveNotes is a single page web app hosted in Docker that serves up a list of the records you own, and those you'd like to own. It has deep integration with Discogs; add the records manually or grab the Discogs ID from the page URL and add it to the app, it'll then sync the cover art, record details and so on to your collection. For wishlist items I wanted something where you could add the generic album, rather than specifying the exact edition, and SleeveNotes does just that; you add the 'master release' from Discogs, then when you find the exact release in the wild and add it to your collection, the wishlist item is fulfilled.
+
+As a disclaimer I have a developer background but this was ripe for AI-assisted coding. This was built entirely through pair-programming with Claude Code. I made the design and architectural decisions, steered the AI to ensure there were no obvious security flaws and the UI was logical for humans, Claude Code did the typing.
 
 ---
 
