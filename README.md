@@ -37,7 +37,7 @@ As a disclaimer I have a developer background but this was ripe for AI-assisted 
 ### The wishlist view
 ![Wishlist](docs/screenshots/wishlist.png)
 
-## Adding to the wishlist
+### Adding to the wishlist
 ![Add to wishlist](docs/screenshots/add-wishlist.png)
 
 ---
