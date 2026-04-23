@@ -103,9 +103,9 @@
     letter-spacing: 0.05em;
   }
 
-  body.offline .row-actions button,
   body.offline #detail-edit-btn,
   body.offline #delete-btn,
+  body.offline #btn-save-settings,
   body.offline #wishlist-detail-delete-btn,
   body.offline #wishlist-detail-fulfill-btn,
   body.offline #wishlist-detail-save-btn {
@@ -1311,7 +1311,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-settings')">Close</button>
-      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+      <button id="btn-save-settings" class="btn btn-primary" onclick="saveSettings()">Save</button>
     </div>
   </div>
 </div>
@@ -1677,11 +1677,6 @@ function rowHtml(r) {
     <td class="text-mono text-right col-md">${r.valuation ? '£' + (r.valuation).toFixed(2) : '—'}</td>
     <td class="col-md"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></td>
     <td class="note-cell col-md" title="${esc(r.notes)}">${esc(r.notes)}</td>
-    <td>
-      <div class="row-actions">
-        <button class="btn btn-ghost btn-icon btn-sm" onclick="openEdit(${r.id})" title="Edit">✎</button>
-      </div>
-    </td>
   </tr>`;
 }
 
@@ -1733,7 +1728,6 @@ function renderTable() {
             ${th('valuation',     'Valuation',     'col-md text-right')}
             <th class="col-md">Discogs</th>
             <th class="col-md">Notes</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>${bodyHtml}</tbody>
