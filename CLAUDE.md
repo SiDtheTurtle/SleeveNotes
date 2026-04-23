@@ -220,8 +220,10 @@ serverReachable   // bool — false when internet present but server unreachable
 _reachabilityPollTimer // setTimeout handle for backoff reachability polling
 ```
 
+Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within Collection. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. Only `'table'`/`'tile'` are saved to localStorage — app always opens to collection.
+
 ### localStorage persistence
-All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers (prefixed `sn_`). `restoreLocalState()` runs on `DOMContentLoaded` before any data fetch. Persisted keys: `view`, `showValuations`, `showTags`, `groupByArtist`, `toolbarExpanded`, `showFulfilled`.
+All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers (prefixed `sn_`). `restoreLocalState()` runs on `DOMContentLoaded` before any data fetch. Persisted keys: `view` (table/tile only — wishlist never persisted as startup view), `showValuations`, `showTags`, `groupByArtist`, `showFulfilled`.
 
 ### Key functions
 
@@ -256,7 +258,8 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `fulfillWishlistItem(id)` | PUT fulfilled=true, reload wishlist |
 | `deleteWishlistItem(id)` | DELETE item, reload wishlist |
 | `openWishlistDetail(id)` | Open detail modal: cover, metadata (year/genres/styles/lowest price), notes textarea, Mark Fulfilled + Delete + Save buttons |
-| `applyToolbarSwitches(v)` | Show/hide collection vs wishlist toolbar sections; update search placeholder |
+| `setSection(section)` | Top-level nav: `'collection'` restores last table/tile, `'wishlist'` switches to wishlist |
+| `applyToolbarSwitches(v)` | Show/hide collection view-toggle and switches vs wishlist switches; update search placeholder |
 | `apiFetch(url, opts)` | Wrapper around `fetch` for all `/api/` calls — catches `TypeError` and triggers `probeHealth()` if online |
 | `checkHealth()` | `fetch('/api/health')` with 5s timeout; returns bool — uses plain `fetch`, not `apiFetch`, to avoid recursion |
 | `probeHealth()` | Calls `checkHealth()` and passes result to `setServerReachable()` |
@@ -270,7 +273,7 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 - **Wishlist:** Sortable table (artist, title, year, added date). No inline search filtering — the search bar is a CTA that opens the master release search modal on Enter. Switching views clears the search bar. Format filter bar hidden. Toolbar shows "Show fulfilled" toggle only.
 
 ### Toolbar
-Collapsible via the "Options ▾" button in the header. Collapsed by default on mobile (`< 768px`), expanded on desktop. State persisted to localStorage.
+Always visible (no collapse toggle). Two rows: a nav row (`[Collection] [Wishlist]`) that spans full width, followed by an options row (Table/Tile sub-views, search, toggles) that changes based on the active section.
 
 ### Modals
 - `modal-detail` — read-only record detail (tile click)
