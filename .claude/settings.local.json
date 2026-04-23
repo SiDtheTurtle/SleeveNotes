@@ -5,7 +5,27 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(git stash *)",
+      "Bash(gh pr *)",
+      "Bash(git config *)",
+      "Bash(docker compose *)",
+      "Bash(git rm *)",
+      "Bash(git revert *)",
+      "Bash(docker exec sleevenotes *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git rebase *)",
+      "Bash(git branch *)",
+      "Bash(curl -s -X POST http://localhost:2026/api/wishlist -H \"Content-Type: application/json\" -d \"{\\\\\"master_id\\\\\": \\\\\"3472783\\\\\", \\\\\"notes\\\\\": \\\\\"\\\\\"}\")",
+      "Bash(curl -s http://localhost:2026/api/wishlist)",
+      "Bash(python -m json.tool)",
+      "Bash(python generate_icons.py)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/manifest.json)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/sw.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-192.png)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-512.png)"
     ]
   }
 }

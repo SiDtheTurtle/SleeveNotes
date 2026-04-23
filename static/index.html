@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SleeveNotes</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1a1a'/><circle cx='50' cy='50' r='14' fill='%23B8962E'/></svg>">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1A1814">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SleeveNotes">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -79,6 +86,33 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+
+  /* ── Offline banner ── */
+  #offline-banner {
+    display: none;
+    position: sticky;
+    top: 56px;
+    z-index: 99;
+    background: #7A4800;
+    color: #F5F0E8;
+    text-align: center;
+    padding: 0.375rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+  }
+
+  body.offline #btn-settings,
+  body.offline #detail-edit-btn,
+  body.offline #delete-btn,
+  body.offline #btn-save-settings,
+  body.offline #wishlist-detail-delete-btn,
+  body.offline #wishlist-detail-fulfill-btn,
+  body.offline #wishlist-detail-save-btn {
+    opacity: 0.45;
+    pointer-events: none;
+    cursor: not-allowed;
   }
 
   /* ── Stats bar ── */
@@ -874,10 +908,12 @@
   </div>
   <div class="header-actions">
     <button class="btn btn-ghost btn-sm" id="toolbar-toggle-btn" onclick="toggleToolbar()"><span id="toolbar-toggle-icon">▾</span> Options</button>
-    <button class="btn btn-primary btn-sm" onclick="openAdd()">+ Add Record</button>
-    <button class="btn btn-ghost btn-icon" onclick="openSettings()" title="Settings" style="color:var(--groove)">⚙</button>
+    <button id="btn-add-record" class="btn btn-primary btn-sm" onclick="openAdd()">+ Add Record</button>
+    <button id="btn-settings" class="btn btn-ghost btn-icon" onclick="openSettings()" title="Settings" style="color:var(--groove)">⚙</button>
   </div>
 </header>
+
+<div id="offline-banner">Offline — read-only mode</div>
 
 <div class="stats-bar" id="stats-bar">
   <div class="stat-item"><span class="stat-label">Total Records</span><span class="stat-value" id="s-total">—</span></div>
@@ -1206,14 +1242,14 @@
           <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Two-way sync between SleeveNotes and your Discogs collection. Shows a full diff — choose per record which direction to sync, or skip.</div>
         </div>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync with Discogs…</button>
+          <button id="btn-sync-discogs" class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync with Discogs…</button>
         </div>
       </div>
 
       <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
         <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Data</div>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-          <label class="btn btn-secondary btn-sm" style="cursor:pointer">Import from CSV<input type="file" accept=".csv" style="display:none" onchange="importCsv(this)"></label>
+          <label id="btn-import-csv" class="btn btn-secondary btn-sm" style="cursor:pointer">Import from CSV<input id="input-import-csv" type="file" accept=".csv" style="display:none" onchange="importCsv(this)"></label>
           <button class="btn btn-secondary btn-sm" onclick="doExport()">Export to CSV</button>
         </div>
       </div>
@@ -1276,7 +1312,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-settings')">Close</button>
-      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+      <button id="btn-save-settings" class="btn btn-primary" onclick="saveSettings()">Save</button>
     </div>
   </div>
 </div>
@@ -1398,6 +1434,7 @@ function restoreLocalState() {
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   restoreLocalState();
+  updateOnlineState();
   await loadSettings();
   loadRecords();
   loadWishlist();
@@ -1641,11 +1678,6 @@ function rowHtml(r) {
     <td class="text-mono text-right col-md">${r.valuation ? '£' + (r.valuation).toFixed(2) : '—'}</td>
     <td class="col-md"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></td>
     <td class="note-cell col-md" title="${esc(r.notes)}">${esc(r.notes)}</td>
-    <td>
-      <div class="row-actions">
-        <button class="btn btn-ghost btn-icon btn-sm" onclick="openEdit(${r.id})" title="Edit">✎</button>
-      </div>
-    </td>
   </tr>`;
 }
 
@@ -1697,7 +1729,6 @@ function renderTable() {
             ${th('valuation',     'Valuation',     'col-md text-right')}
             <th class="col-md">Discogs</th>
             <th class="col-md">Notes</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>${bodyHtml}</tbody>
@@ -2679,8 +2710,13 @@ async function doClearImages() {
 // ── Wishlist ───────────────────────────────────────────────────────────────
 
 async function loadWishlist() {
+  if (!navigator.onLine) {
+    if (currentView === 'wishlist') renderWishlist();
+    updateStats();
+    return;
+  }
   try {
-    const r = await fetch(`/api/wishlist${showFulfilled ? '?show_fulfilled=true' : ''}`);
+    const r = await fetch('/api/wishlist?show_fulfilled=true');
     if (!r.ok) throw new Error();
     wishlistItems = await r.json();
   } catch {
@@ -2745,6 +2781,7 @@ function renderWishlist() {
 }
 
 function openWishlistSearchModal(prefill = '') {
+  if (!navigator.onLine) { toast('Offline — wishlist search requires a connection', 'error'); return; }
   const input = document.getElementById('wishlist-search-input');
   input.value = prefill;
   document.getElementById('wishlist-search-results').innerHTML = '';
@@ -2841,7 +2878,7 @@ async function deleteWishlistItem(id) {
 function onShowFulfilledToggle() {
   showFulfilled = document.getElementById('show-fulfilled').checked;
   lsSet('showFulfilled', showFulfilled);
-  if (currentView === 'wishlist') loadWishlist();
+  if (currentView === 'wishlist') renderWishlist();
 }
 
 function openWishlistDetail(id) {
@@ -3041,6 +3078,28 @@ function toast(msg, type = '') {
   el.textContent = msg;
   document.getElementById('toasts').appendChild(el);
   setTimeout(() => el.remove(), 3500);
+}
+
+// ── Offline / online state ─────────────────────────────────────────────────
+function updateOnlineState() {
+  const offline = !navigator.onLine;
+  document.body.classList.toggle('offline', offline);
+  document.getElementById('offline-banner').style.display = offline ? 'block' : 'none';
+  const addBtn = document.getElementById('btn-add-record');
+  if (addBtn) addBtn.disabled = offline;
+  const syncBtn = document.getElementById('btn-sync-discogs');
+  if (syncBtn) syncBtn.disabled = offline;
+  const importLabel = document.getElementById('btn-import-csv');
+  if (importLabel) { importLabel.style.opacity = offline ? '0.5' : ''; importLabel.style.pointerEvents = offline ? 'none' : ''; }
+  const importInput = document.getElementById('input-import-csv');
+  if (importInput) importInput.disabled = offline;
+}
+window.addEventListener('online', updateOnlineState);
+window.addEventListener('offline', updateOnlineState);
+
+// ── Service Worker ─────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 </script>
 </body>
