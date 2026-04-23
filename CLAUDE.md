@@ -279,3 +279,22 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **No schema migrations:** `init_db()` uses `CREATE TABLE IF NOT EXISTS` only. Assume fresh installs. To reset: delete `/data/sleevenotes.db`.
 - **Wishlist fulfilled prompt:** When saving a new collection record, if the fetched Discogs release has a `master_id` matching an unfulfilled wishlist item (`wishlist_match` in the fetch response), the user is prompted to mark it fulfilled.
 - **Wishlist cover prefix:** Master release covers are stored as `m{master_id}_01.jpeg` to avoid filename collision with release images (`r{release_id}_...`).
+- **PWA:** `static/manifest.json`, `static/sw.js` (minimal — satisfies Chrome install requirement), `static/icon.svg`, `static/icon-192.png`, `static/icon-512.png`. Offline detection via `navigator.onLine` + `window online/offline` events toggles a `body.offline` CSS class and an amber banner. Write actions (Add Record, Sync, Import, Settings Save, Edit, Delete) are disabled offline. Wishlist always fetches all items (`show_fulfilled=true`) and filters client-side so the fulfilled toggle works offline without re-fetching.
+
+## Feature Requests
+
+### Offline wishlist adding
+When the user is away from home on mobile (has internet but server is unreachable), they should be able to search for and queue wishlist items that sync to the server on reconnect.
+
+Two distinct offline states need separate detection and banners:
+- **No internet** (`navigator.onLine === false`) — fully read-only, Discogs unreachable
+- **Server unreachable** (`navigator.onLine === true` but `/api/health` probe fails) — read-only for collection, but wishlist adding possible
+
+Design notes:
+- Backend needs a lightweight `GET /api/health` endpoint
+- Server reachability probed every ~30s + on any failed API call
+- Wishlist search calls Discogs directly from the browser (unauthenticated API, 25 req/min — fine for personal use) bypassing the backend
+- Adds queued as `{master_id, notes, queued_at}` in IndexedDB; displayed in wishlist as pending placeholders (no cover/metadata yet)
+- On reconnect, queue flushed via `POST /api/wishlist` per item; 409 (already exists) swallowed silently
+- Background Sync API can flush queue even when app is closed (Android only — iOS does not support it)
+- Collision handling: if someone else added the same item while offline, user deletes the duplicate manually
