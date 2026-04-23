@@ -25,6 +25,10 @@ Runtime data (not in repo):
 /data/images/           # Cached Discogs cover images
 ```
 
+## Git Workflow
+
+Always create a feature branch before making any code or config changes. Never commit directly to `main`. Branch naming: `fix/<slug>` for bugs, `feat/<slug>` for features, `docs/<slug>` for documentation.
+
 ## Running Locally
 
 ```bash
