@@ -24,20 +24,32 @@ As a disclaimer I have a developer background but this was ripe for AI-assisted 
 ![Collection table view](docs/screenshots/collection-table.png)
 *Figure 1: The default view of your collection*
 
+&nbsp;
+
 ![Collection tile view](docs/screenshots/collection-tiles.png)
 *Figure 2: A large tile view alternative*
+
+&nbsp;
 
 ![Record card](docs/screenshots/record-card.png)
 *Figure 3: The detail view of each record*
 
+&nbsp;
+
 ![Tracklist](docs/screenshots/tracklist-card.png)
 *Figure 4: The tracklist view of each record*
+
+&nbsp;
 
 ![Add record](docs/screenshots/add-record.png)
 *Figure 5: The dialog to add a record*
 
+&nbsp;
+
 ![Wishlist](docs/screenshots/wishlist.png)
 *Figure 6: The wishlist view*
+
+&nbsp;
 
 ![Add to wishlist](docs/screenshots/add-wishlist.png)
 *Figure 7: Adding to the wishlist*
