@@ -1,4 +1,4 @@
-# ![SleeveNotes](docs/icon.png) SleeveNotes
+<h1><img src="docs/icon.png" height="36" alt="SleeveNotes"> SleeveNotes</h1>
 
 [![Latest release](https://img.shields.io/github/v/release/SiDtheTurtle/sleevenotes)](https://github.com/SiDtheTurtle/sleevenotes/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
