@@ -629,7 +629,7 @@ async def _refresh_from_discogs(client, hdrs: dict, record_id: int, discogs_id: 
             return
         data = release_resp.json()
         downloaded = await download_all_images(data.get("images", []), f"r{rid}", hdrs)
-        cover_file = upsert_images(f"r{rid}", downloaded, preserve_cover=False)
+        cover_file = upsert_images(f"r{rid}", downloaded, preserve_cover=True)
         upsert_tracklist(f"r{rid}", data.get("tracklist", []))
         stats = stats_resp.json() if stats_resp.status_code == 200 else {}
         lp = stats.get("lowest_price") or {}
@@ -777,7 +777,7 @@ async def fetch_discogs(release_id: str):
         raise HTTPException(status_code=release_resp.status_code, detail="Discogs fetch failed")
     data = release_resp.json()
     downloaded = await download_all_images(data.get("images", []), f"r{rid}", hdrs)
-    cover_file = upsert_images(f"r{rid}", downloaded, preserve_cover=False)
+    cover_file = upsert_images(f"r{rid}", downloaded, preserve_cover=True)
     upsert_tracklist(f"r{rid}", data.get("tracklist", []))
     labels = data.get("labels", [])
     label = labels[0].get("name", "") if labels else ""
