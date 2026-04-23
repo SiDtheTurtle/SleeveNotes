@@ -5,7 +5,7 @@
 [![Docker image](https://img.shields.io/badge/docker-ghcr.io%2Fsidtheturtle%2Fsleevenotes-0db7ed?logo=docker&logoColor=white)](https://github.com/SiDtheTurtle/sleevenotes/pkgs/container/sleevenotes)
 [![vibe-coded](https://img.shields.io/badge/vibe--coded-Claude%20Code-D97757)](https://claude.ai/code)
 
-A single page, locally hosted web app to track your vinyl collection
+_A single page, locally hosted web app to track your vinyl collection._
 
 ## Introduction
 
