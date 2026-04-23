@@ -29,6 +29,16 @@ Runtime data (not in repo):
 
 Always create a feature branch before making any code or config changes. Never commit directly to `main`. Branch naming: `fix/<slug>` for bugs, `feat/<slug>` for features, `docs/<slug>` for documentation.
 
+## Releases
+
+Docker images are published to `ghcr.io/sidtheturtle/sleevenotes` on version tag pushes only — main branch pushes do not trigger a build.
+
+**Version strategy:** `vMAJOR.MINOR.PATCH` — currently on `v1.x.y`. New features increment minor, bug fixes increment patch.
+
+**To cut a release:** `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..." --target main`
+
+This triggers CI to publish both `X.Y.Z` and `latest` to GHCR. Users pin their `compose.yml` to a specific version for rollback: `image: ghcr.io/sidtheturtle/sleevenotes:1.6.0`
+
 ## Running Locally
 
 ```bash
@@ -114,6 +124,7 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 
 | Method | Path | Description |
 |---|---|---|
+| GET | `/api/health` | Returns `{"status":"ok"}` — used for server reachability probing |
 | GET | `/api/records` | List records (excludes soft-deleted) |
 | POST | `/api/records` | Create record |
 | PUT | `/api/records/{id}` | Update record |
@@ -205,6 +216,8 @@ hideObviousFormats // bool — global on/off for format tag hiding
 hiddenFormatTags  // Set<string> — tags to hide from filter bar
 wishlistItems     // array — full wishlist dataset from API (loaded on demand)
 showFulfilled     // bool — show fulfilled items in wishlist view
+serverReachable   // bool — false when internet present but server unreachable
+_reachabilityPollTimer // setTimeout handle for backoff reachability polling
 ```
 
 ### localStorage persistence
@@ -236,7 +249,7 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `openSettings()` | Open settings modal; reloads field mapping in-place |
 | `saveSettings()` | Persist settings; stays open; refreshes field mapping if username changed |
 | `loadWishlist()` | Fetch `/api/wishlist`, update `wishlistItems`, update stats; calls `renderWishlist()` only if `currentView === 'wishlist'` |
-| `renderWishlist()` | Build sortable wishlist table (cover, Artist, Title, Year, Added, Notes, Status); no inline search filtering |
+| `renderWishlist()` | Build sortable wishlist table (cover, Artist, Title, Year, Added, Notes); no inline search filtering |
 | `openWishlistSearchModal(prefill)` | Open master release search modal; auto-searches if prefill provided |
 | `doWishlistSearch()` | POST to `/api/wishlist/search`, sort by year desc, render results with Add/On wishlist/Fulfilled state |
 | `addToWishlist(masterId)` | POST to `/api/wishlist`, close modal, clear search bar, reload wishlist |
@@ -244,6 +257,12 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `deleteWishlistItem(id)` | DELETE item, reload wishlist |
 | `openWishlistDetail(id)` | Open detail modal: cover, metadata (year/genres/styles/lowest price), notes textarea, Mark Fulfilled + Delete + Save buttons |
 | `applyToolbarSwitches(v)` | Show/hide collection vs wishlist toolbar sections; update search placeholder |
+| `apiFetch(url, opts)` | Wrapper around `fetch` for all `/api/` calls — catches `TypeError` and triggers `probeHealth()` if online |
+| `checkHealth()` | `fetch('/api/health')` with 5s timeout; returns bool — uses plain `fetch`, not `apiFetch`, to avoid recursion |
+| `probeHealth()` | Calls `checkHealth()` and passes result to `setServerReachable()` |
+| `setServerReachable(bool)` | Updates `serverReachable`, calls `updateOnlineState()`, starts/cancels backoff polling, toasts on reconnect |
+| `scheduleReachabilityCheck(attempt)` | Backoff poll: 10s → 30s → 60s; only runs while app is visible and server unreachable |
+| `updateOnlineState()` | Sets `body.offline` class and banner for both offline states; disables write actions |
 
 ### Views
 - **Table:** Clickable column headers cycle asc/desc/clear. "Group by artist" toggle overrides column sort with artist A-Z + year.
@@ -283,12 +302,12 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **No schema migrations:** `init_db()` uses `CREATE TABLE IF NOT EXISTS` only. Assume fresh installs. To reset: delete `/data/sleevenotes.db`.
 - **Wishlist fulfilled prompt:** When saving a new collection record, if the fetched Discogs release has a `master_id` matching an unfulfilled wishlist item (`wishlist_match` in the fetch response), the user is prompted to mark it fulfilled.
 - **Wishlist cover prefix:** Master release covers are stored as `m{master_id}_01.jpeg` to avoid filename collision with release images (`r{release_id}_...`).
-- **PWA:** `static/manifest.json`, `static/sw.js` (minimal — satisfies Chrome install requirement), `static/icon.svg`, `static/icon-192.png`, `static/icon-512.png`. Offline detection via `navigator.onLine` + `window online/offline` events toggles a `body.offline` CSS class and an amber banner. Write actions (Add Record, Sync, Import, Settings Save, Edit, Delete) are disabled offline. Wishlist always fetches all items (`show_fulfilled=true`) and filters client-side so the fulfilled toggle works offline without re-fetching.
-
-## Known Bugs
-
-### Offline banner doesn't trigger on mobile with 5G but no home server
-`navigator.onLine` returns `true` whenever the device has any internet connection, so the offline banner and read-only mode never activate when the user is away from home on mobile data. The fix requires active server reachability probing (see Offline wishlist adding feature request below for the full two-state design).
+- **PWA:** `static/manifest.json`, `static/sw.js` (minimal — satisfies Chrome install requirement), `static/icon.svg`, `static/icon-192.png`, `static/icon-512.png`. Wishlist always fetches all items (`show_fulfilled=true`) and filters client-side so the fulfilled toggle works offline without re-fetching.
+- **Two-state offline detection:** The app distinguishes two offline states, each with its own banner:
+  - **Read-Only Mode** (`navigator.onLine === false`) — no internet, amber banner `#7A4800`. Fully read-only.
+  - **Offline Mode** (`navigator.onLine === true` but `/api/health` fails) — server unreachable, slate banner `#3D4A5C`. Collection read-only; backbone for offline wishlist adding (#11).
+  - Both states set `body.offline` and disable all write actions.
+  - Detection is event-driven: probe on load, on `window 'online'`, on any `apiFetch` TypeError, and on `visibilitychange` visible. Backoff polling (10s → 30s → 60s) only runs while the app is visible and the server is unreachable — cancelled immediately on `visibilitychange` hidden so backgrounding the app stops all polling.
 
 ## Feature Requests
 
@@ -300,8 +319,7 @@ Two distinct offline states need separate detection and banners:
 - **Server unreachable** (`navigator.onLine === true` but `/api/health` probe fails) — read-only for collection, but wishlist adding possible
 
 Design notes:
-- Backend needs a lightweight `GET /api/health` endpoint
-- Server reachability probed every ~30s + on any failed API call
+- `GET /api/health` and two-state offline detection are already implemented (v1.6.0)
 - Wishlist search calls Discogs directly from the browser (unauthenticated API, 25 req/min — fine for personal use) bypassing the backend. The Discogs token is never sent to the frontend, so anonymous mode is a deliberate fallback — do not cache the token client-side to increase the rate limit
 - Adds queued as `{master_id, notes, queued_at}` in IndexedDB; displayed in wishlist as pending placeholders (no cover/metadata yet)
 - On reconnect, queue flushed via `POST /api/wishlist` per item; 409 (already exists) swallowed silently
