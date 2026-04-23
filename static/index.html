@@ -103,6 +103,17 @@
     letter-spacing: 0.05em;
   }
 
+  body.offline .row-actions button,
+  body.offline #detail-edit-btn,
+  body.offline #delete-btn,
+  body.offline #wishlist-detail-delete-btn,
+  body.offline #wishlist-detail-fulfill-btn,
+  body.offline #wishlist-detail-save-btn {
+    opacity: 0.45;
+    pointer-events: none;
+    cursor: not-allowed;
+  }
+
   /* ── Stats bar ── */
   .stats-bar {
     background: var(--ink-mid);
@@ -3072,6 +3083,7 @@ function toast(msg, type = '') {
 // ── Offline / online state ─────────────────────────────────────────────────
 function updateOnlineState() {
   const offline = !navigator.onLine;
+  document.body.classList.toggle('offline', offline);
   document.getElementById('offline-banner').style.display = offline ? 'block' : 'none';
   const addBtn = document.getElementById('btn-add-record');
   if (addBtn) addBtn.disabled = offline;
