@@ -9,9 +9,11 @@ _A single page, locally hosted web app to track your vinyl collection._
 
 ## Introduction
 
-I have a growing vinyl collection, and a growing home server setup to go with it. I wanted a simple app to track my collection and allow members of the household to add their wishlists, without having to navigate Discogs directly, or reach for the fantastic yet overkill other options out there, and to have something entirely local and not published out on the web. So inspired by [XKCD](https://xkcd.com/927/) I created my own!
+I have a growing vinyl collection, and a growing home lab setup to go with it. I wanted a simple app to track my collection and allow members of the household to add their wishlists, without having to navigate Discogs directly, or reach for the fantastic yet overkill other options out there, and to have something entirely local and not published out on the web. So inspired by [XKCD](https://xkcd.com/927/) I created my own!
 
 SleeveNotes is a single page web app hosted in Docker that serves up a list of the records you own, and those you'd like to own. It has deep integration with Discogs; add the records manually or grab the Discogs ID from the page URL and add it to the app, it'll then sync the cover art, record details and so on to your collection. For wishlist items I wanted something where you could add the generic album, rather than specifying the exact edition, and SleeveNotes does just that; you add the 'master release' from Discogs, then when you find the exact release in the wild and add it to your collection, the wishlist item is fulfilled.
+
+It's designed to sit on your home lab not exposed to the Internet, but then installed as a 'progressive web app' on your phone, so when you're out and listening to music you can quickly add it to your wishlist, then when you get home search Discogs for the release you want, buy it, then add it to your collection. When you're listening to a vinyl at home, you can look up its details, check the tracklist, and bounce over to Discogs for more details if you need to. It's not designed to be hosted publicly or have multiple users. I'm not planning on stacking it with features, supporting CDs or DVDs and so on, there are plenty of apps out there that do, this is primarily a hobby project for me, I've shared it here in case it helps anyone else.
 
 As a disclaimer I have a developer background but this was ripe for AI-assisted coding. This was built entirely through pair-programming with Claude Code. I made the design and architectural decisions, steered the AI to ensure there were no obvious security flaws and the UI was logical for humans, Claude Code did the typing.
 
@@ -19,25 +21,25 @@ As a disclaimer I have a developer background but this was ripe for AI-assisted 
 
 ## Screenshots
 
-### The default view of your collection
+The default view of your collection
 ![Collection table view](docs/screenshots/collection-table.png)
 
-### A large tile view alternative
+A large tile view alternative
 ![Collection tile view](docs/screenshots/collection-tiles.png)
 
-### The detail view of each record
+The detail view of each record
 ![Record card](docs/screenshots/record-card.png)
 
-### The tracklist view of each record
+The tracklist view of each record
 ![Tracklist](docs/screenshots/tracklist-card.png)
 
-### The dialog to add a record
+The dialog to add a record
 ![Add record](docs/screenshots/add-record.png)
 
-### The wishlist view
+The wishlist view
 ![Wishlist](docs/screenshots/wishlist.png)
 
-### Adding to the wishlist
+Adding to the wishlist
 ![Add to wishlist](docs/screenshots/add-wishlist.png)
 
 ---
