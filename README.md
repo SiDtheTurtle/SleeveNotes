@@ -54,7 +54,7 @@
 
 - [Docker](https://docs.docker.com/get-docker/)
 - A [Discogs account](https://www.discogs.com) (free) — required for metadata lookups and collection sync
-- A [Discogs API token](https://www.discogs.com/settings/developers) — generated in your Discogs developer settings
+- A [Discogs Personal Access Token](https://www.discogs.com/settings/developers) — generated in your Discogs developer settings under *Personal Access Tokens*
 
 ### Installation
 
@@ -91,8 +91,9 @@ Data is stored in a Docker volume (`sleevenotes_data`) and persists across resta
 ### Initial setup
 
 1. Open **Settings** (gear icon, top right).
-2. Under **Discogs**, enter your username and API token.
+2. Under **Discogs**, enter your username and Personal Access Token.
 3. Optionally configure display preferences: clean artist names (removes the bracketed numbers after some artists' names), hide obvious tags like vinyl and LP, show or hide how much you've spent on records that could have gone on food or rent, and more.
+4. If you track purchase details in Discogs custom fields — **retailer, order reference, purchase date, price, P&P, or new/pre-owned status** — set those up in your Discogs collection first, then map them to SleeveNotes fields under **Settings → Discogs → Field Mapping**. Without this, those fields won't be populated on sync or CSV import.
 
 ---
 
@@ -150,10 +151,10 @@ Wishlist search and adding records works when the server is unreachable. Items a
 
 SleeveNotes distinguishes two offline states:
 
-| State | Cause | Banner colour | What works |
-|---|---|---|---|
-| **Read-Only Mode** | No internet connection | Amber | Browse collection and wishlist from cache; no writes |
-| **Offline Mode** | Internet available, but server unreachable | Slate | Browse from cache; wishlist search, add, and edit queue locally |
+| State | Cause | What works |
+|---|---|---|
+| ![Read-Only Mode](https://img.shields.io/badge/Read--Only%20Mode-7A4800) | No internet connection | Browse collection and wishlist from cache; no writes |
+| ![Offline Mode](https://img.shields.io/badge/Offline%20Mode-3D4A5C) | Internet available, but server unreachable | Browse from cache; wishlist search, add, and edit queue locally |
 
 In both states, collection writes (add, edit, delete records) are disabled. The app detects reconnection automatically and flushes any queued wishlist changes.
 
@@ -205,7 +206,7 @@ Or use **Settings → Danger Zone → Clear Image Cache** from within the app.
 |---|---|
 | Backend | Python 3.12, FastAPI, SQLite |
 | Frontend | Vanilla JS SPA — no framework, no build step |
-| Container | Docker Compose |
+| Container | Docker |
 | Metadata | [Discogs API](https://www.discogs.com/developers) |
 
 ---
