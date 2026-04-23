@@ -1,4 +1,4 @@
-# SleeveNotes
+# ![SleeveNotes](docs/icon.png) SleeveNotes
 
 [![Latest release](https://img.shields.io/github/v/release/SiDtheTurtle/sleevenotes)](https://github.com/SiDtheTurtle/sleevenotes/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
@@ -19,7 +19,11 @@ As a disclaimer I have a developer background but this was ripe for AI-assisted 
 
 ## Screenshots
 
-<!-- TODO: screenshots — collection table view, tile view, wishlist, mobile view, settings modal -->
+![Collection table view](docs/screenshots/collection-table.png)
+![Collection tile view](docs/screenshots/collection-tiles.png)
+![Wishlist](docs/screenshots/wishlist.png)
+![Mobile view](docs/screenshots/mobile.png)
+![Settings](docs/screenshots/settings.png)
 
 ---
 
