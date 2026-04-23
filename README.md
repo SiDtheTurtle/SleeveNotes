@@ -21,26 +21,40 @@ As a disclaimer I have a developer background but this was ripe for AI-assisted 
 
 ## Screenshots
 
-The default view of your collection
-![Collection table view](docs/screenshots/collection-table.png)
+<figure>
+  <img src="docs/screenshots/collection-table.png" alt="Collection table view">
+  <figcaption>Figure 1: The default view of your collection</figcaption>
+</figure>
 
-A large tile view alternative
-![Collection tile view](docs/screenshots/collection-tiles.png)
+<figure>
+  <img src="docs/screenshots/collection-tiles.png" alt="Collection tile view">
+  <figcaption>Figure 2: A large tile view alternative</figcaption>
+</figure>
 
-The detail view of each record
-![Record card](docs/screenshots/record-card.png)
+<figure>
+  <img src="docs/screenshots/record-card.png" alt="Record card">
+  <figcaption>Figure 3: The detail view of each record</figcaption>
+</figure>
 
-The tracklist view of each record
-![Tracklist](docs/screenshots/tracklist-card.png)
+<figure>
+  <img src="docs/screenshots/tracklist-card.png" alt="Tracklist">
+  <figcaption>Figure 4: The tracklist view of each record</figcaption>
+</figure>
 
-The dialog to add a record
-![Add record](docs/screenshots/add-record.png)
+<figure>
+  <img src="docs/screenshots/add-record.png" alt="Add record">
+  <figcaption>Figure 5: The dialog to add a record</figcaption>
+</figure>
 
-The wishlist view
-![Wishlist](docs/screenshots/wishlist.png)
+<figure>
+  <img src="docs/screenshots/wishlist.png" alt="Wishlist">
+  <figcaption>Figure 6: The wishlist view</figcaption>
+</figure>
 
-Adding to the wishlist
-![Add to wishlist](docs/screenshots/add-wishlist.png)
+<figure>
+  <img src="docs/screenshots/add-wishlist.png" alt="Add to wishlist">
+  <figcaption>Figure 7: Adding to the wishlist</figcaption>
+</figure>
 
 ---
 
