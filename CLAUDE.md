@@ -164,6 +164,7 @@ All outbound Discogs API calls go through `discogs_get()` / `discogs_post()` wra
 - Accepts `r12345678` or `12345678`
 - Makes 2 concurrent Discogs calls: `/releases/{id}` + `/marketplace/stats/{id}`
 - Returns artist, title, label, cat_no, year, format, cover_file, valuation, and `wishlist_match` (unfulfilled wishlist item matching this release's `master_id`, or null)
+- `wishlist_match` includes `{id, artist, title, notes}` — notes used for porting to collection record on fulfillment
 - Downloads and caches all images (up to 8) to `/data/images/`; populates `tracklist` table
 
 ### Record refresh (`/api/records/{id}/refresh`)
@@ -216,10 +217,14 @@ diffData          // last sync diff payload
 syncSource        // 'discogs' | 'csv' — controls sync modal behaviour
 hideObviousFormats // bool — global on/off for format tag hiding
 hiddenFormatTags  // Set<string> — tags to hide from filter bar
-wishlistItems     // array — full wishlist dataset from API (loaded on demand)
+wishlistItems     // array — merged server + pending items for display (rebuilt by loadWishlist)
 showFulfilled     // bool — show fulfilled items in wishlist view
 serverReachable   // bool — false when internet present but server unreachable
 _reachabilityPollTimer // setTimeout handle for backoff reachability polling
+pendingQueue      // array — in-memory mirror of IDB wishlist_queue (new items queued offline)
+pendingUpdates    // array — in-memory mirror of IDB wishlist_updates (edits queued offline)
+_serverWishlistItems  // array — last fetched server wishlist data; pendingUpdates applied on top
+_lastSearchResults    // array — last wishlist search results; used by addToWishlist for metadata
 ```
 
 Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within **both** sections. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. Only `'table'`/`'tile'` are saved to localStorage — app always opens to collection.
@@ -252,21 +257,30 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `importCsv(input)` | POST CSV → sets `syncSource='csv'` → opens sync modal |
 | `openSettings()` | Open settings modal; reloads field mapping in-place |
 | `saveSettings()` | Persist settings; stays open; refreshes field mapping if username changed |
-| `loadWishlist()` | Fetch `/api/wishlist`, update `wishlistItems`, update stats; calls `renderWishlist()` only if `currentSection === 'wishlist'` |
-| `renderWishlist()` | Delegates to `renderWishlistTiles()` when `currentView === 'tile'`, otherwise builds sortable table (cover, Artist, Title, Year, Added, Notes); no inline search filtering |
-| `renderWishlistTiles()` | Build wishlist cover art grid sorted artist → year; clicking a tile opens detail modal directly |
-| `openWishlistSearchModal(prefill)` | Open master release search modal; auto-searches if prefill provided |
-| `doWishlistSearch()` | POST to `/api/wishlist/search`, sort by year desc, render results with Add/On wishlist/Fulfilled state |
-| `addToWishlist(masterId)` | POST to `/api/wishlist`, close modal, clear search bar, reload wishlist |
-| `fulfillWishlistItem(id)` | PUT fulfilled=true, reload wishlist |
+| `loadWishlist()` | Fetch `/api/wishlist` (always tries — SW serves from cache if server down), apply `pendingUpdates`, merge `pendingQueue` items, rebuild `wishlistItems`, render and update stats |
+| `renderWishlist()` | Delegates to `renderWishlistTiles()` when `currentView === 'tile'`, otherwise builds sortable table; pending items show Pending badge instead of added date |
+| `renderWishlistTiles()` | Build wishlist cover art grid sorted artist → year; pending items show corner Pending badge and ⏳ placeholder if no thumb |
+| `openWishlistSearchModal(prefill)` | Open master release search modal; blocked only when `!navigator.onLine`; shows offline info banner when server unreachable |
+| `doWishlistSearch()` | When server reachable: calls `/api/wishlist/search`. When offline: calls Discogs API directly (unauthenticated, 25 req/min). Stores results in `_lastSearchResults` |
+| `addToWishlist(masterId)` | When online: POST to `/api/wishlist`. When offline: saves to IDB `wishlist_queue` via `saveToQueue()`, shows pending in list |
 | `deleteWishlistItem(id)` | DELETE item, reload wishlist |
-| `openWishlistDetail(id)` | Open detail modal: cover, metadata (year/genres/styles/lowest price), notes textarea, Mark Fulfilled + Delete + Save buttons |
+| `openWishlistDetail(id)` | Negative id → `openPendingWishlistDetail`. Otherwise: cover, metadata, fulfilled checkbox + notes textarea, Save (queues offline) + Delete (disabled offline) |
+| `openPendingWishlistDetail(id)` | Detail modal for IDB-queued items: thumb, metadata, editable notes (saved to IDB), Delete removes from queue — all works offline |
+| `openOfflineDB()` | Open IndexedDB `sn_offline` v2; creates `wishlist_queue` (autoIncrement) and `wishlist_updates` (keyed by `wishlist_id`) on upgrade |
+| `initPendingQueue()` | Load both IDB stores into `pendingQueue` and `pendingUpdates` on startup |
+| `saveToQueue(item)` | Add new wishlist item to IDB `wishlist_queue`, update `pendingQueue` in memory |
+| `removeFromQueue(idbKey)` | Delete from IDB `wishlist_queue`, update `pendingQueue` |
+| `saveUpdateToQueue(update)` | Upsert `{wishlist_id, notes, fulfilled}` to IDB `wishlist_updates`, update `pendingUpdates` |
+| `removeUpdateFromQueue(wishlistId)` | Delete from IDB `wishlist_updates`, update `pendingUpdates` |
+| `updateQueueItemNotes(idbKey, notes)` | Update notes on an existing IDB `wishlist_queue` item in place |
+| `flushPendingQueue()` | On reconnect: POST each `wishlist_queue` item, PUT each `wishlist_updates` item; removes from IDB on success/409; reloads wishlist and toasts count |
+| `splitDiscogsTitle(combined)` | Split "Artist - Title" Discogs search string into `{artist, title}` for pending item display |
 | `setSection(section)` | Top-level nav: sets `currentSection`, updates nav buttons, calls `applyToolbarSwitches`, loads/renders appropriate view |
 | `applyToolbarSwitches(s)` | Show/hide collection vs wishlist switches; `collection-view-toggle` always visible (both sections support Table/Tile); update search placeholder |
 | `apiFetch(url, opts)` | Wrapper around `fetch` for all `/api/` calls — catches `TypeError` and triggers `probeHealth()` if online |
 | `checkHealth()` | `fetch('/api/health')` with 5s timeout; returns bool — uses plain `fetch`, not `apiFetch`, to avoid recursion |
 | `probeHealth()` | Calls `checkHealth()` and passes result to `setServerReachable()` |
-| `setServerReachable(bool)` | Updates `serverReachable`, calls `updateOnlineState()`, starts/cancels backoff polling, toasts on reconnect |
+| `setServerReachable(bool)` | Updates `serverReachable`, calls `updateOnlineState()`, starts/cancels backoff polling, toasts on reconnect, calls `flushPendingQueue()` on reconnect |
 | `scheduleReachabilityCheck(attempt)` | Backoff poll: 10s → 30s → 60s; only runs while app is visible and server unreachable |
 | `updateOnlineState()` | Sets `body.offline` class and banner for both offline states; disables write actions |
 
@@ -285,8 +299,8 @@ Always visible (no collapse toggle). Single nav row: `[Collection] [Wishlist]` p
 - `modal-form` — add/edit form with Discogs lookup
 - `modal-discogs-sync` — diff preview; shared between Discogs collection sync and CSV import. `syncSource` controls labels and available actions (CSV hides "Discogs →" direction)
 - `modal-settings` — Display settings, Discogs config + field mapping, Data (import/export), Danger Zone. **Save stays open** (reload fields in-place); Close button dismisses.
-- `modal-wishlist-search` — Discogs master release search; results show Add/On wishlist/Fulfilled per item
-- `modal-wishlist-detail` — Wishlist item detail: cover, metadata, notes editing, Mark Fulfilled, Delete
+- `modal-wishlist-search` — Discogs master release search; results show Add/Queued/On wishlist/Fulfilled per item. Shows slate info banner when server unreachable (searching Discogs directly)
+- `modal-wishlist-detail` — Wishlist item detail: cover, metadata, fulfilled checkbox, notes textarea, Save + Delete. Save queues offline for server items; Delete disabled offline for server items, always enabled for pending items
 
 ### Settings modal sections (top to bottom)
 1. **Display** — Clean artists, Include P&P, Show Valuations, Hide format tags (toggle + tag list). **All display toggles are staged — state only applies on Save, not on toggle.**
@@ -308,28 +322,24 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **SPA routing:** `GET /{full_path:path}` serves static files or falls back to `index.html`. API routes are defined before this catch-all.
 - **Empty DB:** `list_records` catches `OperationalError`, calls `init_db()`, returns `[]` rather than 500.
 - **No schema migrations:** `init_db()` uses `CREATE TABLE IF NOT EXISTS` only. Assume fresh installs. To reset: delete `/data/sleevenotes.db`.
-- **Wishlist fulfilled prompt:** When saving a new collection record, if the fetched Discogs release has a `master_id` matching an unfulfilled wishlist item (`wishlist_match` in the fetch response), the user is prompted to mark it fulfilled.
+- **Wishlist fulfilled prompt:** When saving a new collection record, if the fetched Discogs release has a `master_id` matching an unfulfilled wishlist item (`wishlist_match` in the fetch response), the user is prompted to mark it fulfilled. Wishlist `notes` are appended to the collection record's notes at the same time (empty collection notes → copy; existing notes → append with newline).
+- **Wishlist fulfilled toggle:** The detail modal shows a checkbox for fulfilled status, saved together with notes via the Save button. This replaces the former instant "Mark Fulfilled" action — changes are reversible until saved.
 - **Wishlist cover prefix:** Master release covers are stored as `m{master_id}_01.jpeg` to avoid filename collision with release images (`r{release_id}_...`).
-- **PWA:** `static/manifest.json`, `static/sw.js` (minimal — satisfies Chrome install requirement), `static/icon.svg`, `static/icon-192.png`, `static/icon-512.png`. Wishlist always fetches all items (`show_fulfilled=true`) and filters client-side so the fulfilled toggle works offline without re-fetching.
+- **Tracklist loading:** Fetched eagerly when a record detail modal opens (not gated on the Tracklist tab click), so the SW caches the response for offline use on that same visit.
+- **PWA / service worker (`static/sw.js`):**
+  - Install: precaches app shell (`/`, `manifest.json`, icons) — prevents pull-to-refresh showing the browser offline page
+  - `/images/*`: cache-first — cover images and any other record images load offline after first view
+  - `/api/records`, `/api/wishlist`, `/api/settings` (GET only): network-first with SW cache fallback — collection and wishlist survive page refresh with server down
+  - `/api/health`: always network-only — must hit the server for reachability detection
+  - All other `/api/*`: network-only (mutations, Discogs fetches, etc.)
+  - Background Sync: SW flushes both IDB queues (`wishlist-sync` tag) on Android when app is backgrounded
 - **Two-state offline detection:** The app distinguishes two offline states, each with its own banner:
   - **Read-Only Mode** (`navigator.onLine === false`) — no internet, amber banner `#7A4800`. Fully read-only.
-  - **Offline Mode** (`navigator.onLine === true` but `/api/health` fails) — server unreachable, slate banner `#3D4A5C`. Collection read-only; backbone for offline wishlist adding (#11).
-  - Both states set `body.offline` and disable all write actions.
+  - **Offline Mode** (`navigator.onLine === true` but `/api/health` fails) — server unreachable, slate banner `#3D4A5C`. Collection read-only from SW cache; wishlist search, add, and edit all work via IndexedDB queue.
+  - Both states set `body.offline` and disable collection write actions.
   - Detection is event-driven: probe on load, on `window 'online'`, on any `apiFetch` TypeError, and on `visibilitychange` visible. Backoff polling (10s → 30s → 60s) only runs while the app is visible and the server is unreachable — cancelled immediately on `visibilitychange` hidden so backgrounding the app stops all polling.
-
-## Feature Requests
-
-### Offline wishlist adding
-When the user is away from home on mobile (has internet but server is unreachable), they should be able to search for and queue wishlist items that sync to the server on reconnect.
-
-Two distinct offline states need separate detection and banners:
-- **No internet** (`navigator.onLine === false`) — fully read-only, Discogs unreachable
-- **Server unreachable** (`navigator.onLine === true` but `/api/health` probe fails) — read-only for collection, but wishlist adding possible
-
-Design notes:
-- `GET /api/health` and two-state offline detection are already implemented (v1.6.0)
-- Wishlist search calls Discogs directly from the browser (unauthenticated API, 25 req/min — fine for personal use) bypassing the backend. The Discogs token is never sent to the frontend, so anonymous mode is a deliberate fallback — do not cache the token client-side to increase the rate limit
-- Adds queued as `{master_id, notes, queued_at}` in IndexedDB; displayed in wishlist as pending placeholders (no cover/metadata yet)
-- On reconnect, queue flushed via `POST /api/wishlist` per item; 409 (already exists) swallowed silently
-- Background Sync API can flush queue even when app is closed (Android only — iOS does not support it)
-- Collision handling: if someone else added the same item while offline, user deletes the duplicate manually
+- **Offline wishlist queue (IndexedDB `sn_offline` v2):**
+  - `wishlist_queue` (autoIncrement key `idb_key`): new items added offline. Each record: `{master_id, notes, queued_at, title, year, thumb}`. Pending items merged into `wishlistItems` with negative IDs (`-(idb_key)`) for display.
+  - `wishlist_updates` (key `wishlist_id`): notes/fulfilled edits made offline. Upsert — only latest edit per item is kept. Applied to `_serverWishlistItems` before rendering so display reflects queued state immediately.
+  - Both queues flushed on reconnect via `flushPendingQueue()` and by Background Sync on Android.
+  - Discogs token never sent to browser; offline search uses unauthenticated Discogs API (25 req/min, no thumbnails returned — ♪ placeholder shown).

@@ -796,11 +796,11 @@ async def fetch_discogs(release_id: str):
     if master_id:
         with get_db() as conn:
             row = conn.execute(
-                "SELECT id, artist, title FROM wishlist WHERE master_id = ? AND fulfilled = 0",
+                "SELECT id, artist, title, notes FROM wishlist WHERE master_id = ? AND fulfilled = 0",
                 (master_id,)
             ).fetchone()
             if row:
-                wishlist_match = {"id": row["id"], "artist": row["artist"], "title": row["title"]}
+                wishlist_match = {"id": row["id"], "artist": row["artist"], "title": row["title"], "notes": row["notes"]}
     return {
         "discogs_id": f"r{rid}",
         "artist": ", ".join(a["name"] for a in data.get("artists", [])),
