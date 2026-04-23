@@ -1664,7 +1664,7 @@ function renderView() {
 function rowHtml(r) {
   return `<tr class="data-row" data-id="${r.id}" style="cursor:pointer">
     <td>${coverThumb(r)}</td>
-    <td title="${esc(displayArtist(r.artist))}">${esc(truncate(displayArtist(r.artist), 32))}</td>
+    <td class="overflow" title="${esc(displayArtist(r.artist))}">${esc(displayArtist(r.artist))}</td>
     <td class="overflow" title="${esc(r.title)}">${esc(r.title)}</td>
     <td class="text-mono col-sm">${r.year||''}</td>
     <td class="col-sm" style="white-space:nowrap">${fmtTagsCell(r.format)}</td>
@@ -2751,14 +2751,11 @@ function renderWishlist() {
   const rows = items.map(w => `
     <tr class="${w.fulfilled ? 'wishlist-row-fulfilled' : ''} data-row" style="cursor:pointer" onclick="openWishlistDetail(${w.id})">
       <td>${w.cover_file ? `<img class="cover-thumb" src="/images/${esc(w.cover_file)}" alt="" loading="lazy">` : `<div class="cover-placeholder">♡</div>`}</td>
-      <td title="${esc(w.artist)}">${esc(truncate(w.artist, 32))}</td>
+      <td class="overflow" title="${esc(w.artist)}">${esc(w.artist)}</td>
       <td class="overflow" title="${esc(w.title)}">${esc(w.title)}</td>
       <td class="text-mono col-sm">${w.year || '—'}</td>
       <td class="text-mono col-sm">${fmtDate(w.added_at ? w.added_at.split(' ')[0] : '')}</td>
       <td class="note-cell col-md" title="${esc(w.notes)}">${esc(w.notes)}</td>
-      <td>${w.fulfilled
-        ? '<span class="badge badge-fulfilled">Fulfilled</span>'
-        : '<span class="badge badge-want">Want</span>'}</td>
     </tr>`).join('');
 
   el.innerHTML = `
@@ -2772,7 +2769,6 @@ function renderWishlist() {
             ${th('year', 'Year', 'col-sm')}
             ${th('added_at', 'Added', 'col-sm')}
             <th class="col-md">Notes</th>
-            <th>Status</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
