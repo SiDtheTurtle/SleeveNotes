@@ -813,6 +813,13 @@ async def fetch_discogs(release_id: str):
         "wishlist_match": wishlist_match,
     }
 
+# ── Routes: Health ────────────────────────────────────────────────────────────
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
+
+
 # ── Routes: Records ───────────────────────────────────────────────────────────
 
 @app.get("/api/records")
