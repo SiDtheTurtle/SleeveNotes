@@ -2,14 +2,8 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*.*.*'
-    paths-ignore:
-      - 'CLAUDE.md'
-      - '**.md'
-      - '.claude/**'
 
 jobs:
   build-and-push:
