@@ -88,6 +88,7 @@ docker exec sleevenotes rm /data/sleevenotes.db
 |---|---|---|
 | `clean_artists` | `true` | Strip Discogs disambiguation numbers from display |
 | `include_pp` | `false` | Include P&P in Collection Cost KPI |
+| `show_valuations` | `true` | Show Collection Value KPI and per-record valuation column |
 | `hide_obvious_formats` | `true` | Global on/off for format tag hiding |
 | `hidden_format_tags` | `Album, LP, Stereo, Vinyl` | Comma-separated tags to hide from filter bar |
 | `discogs_username` | `` | Required for collection sync |
@@ -202,12 +203,13 @@ Everything lives in one file. No framework, no build step.
 ### Global state
 ```js
 records           // array — full dataset from API
-currentView       // 'table' | 'tile' | 'wishlist'
+currentSection    // 'collection' | 'wishlist'
+currentView       // 'table' | 'tile'
 editingId         // null or record id
 fetchedMeta       // Discogs preview data during add/edit
 sortCol           // active sort column key or null
 sortDir           // 'asc' | 'desc' | null
-showValuations    // bool — toggle collection value display
+showValuations    // bool — show Collection Value KPI and valuation column (DB-backed)
 showTags          // bool — toggle format filter bar visibility
 filterFormat      // active format tag string, or null
 diffData          // last sync diff payload
@@ -220,10 +222,10 @@ serverReachable   // bool — false when internet present but server unreachable
 _reachabilityPollTimer // setTimeout handle for backoff reachability polling
 ```
 
-Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within Collection. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. Only `'table'`/`'tile'` are saved to localStorage — app always opens to collection.
+Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within **both** sections. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. Only `'table'`/`'tile'` are saved to localStorage — app always opens to collection.
 
 ### localStorage persistence
-All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers (prefixed `sn_`). `restoreLocalState()` runs on `DOMContentLoaded` before any data fetch. Persisted keys: `view` (table/tile only — wishlist never persisted as startup view), `showValuations`, `showTags`, `groupByArtist`, `showFulfilled`.
+All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers (prefixed `sn_`). `restoreLocalState()` runs on `DOMContentLoaded` before any data fetch. Persisted keys: `view` (table/tile only — wishlist never persisted as startup view), `showTags`, `groupByArtist`, `showFulfilled`. `showValuations` is DB-backed via the `settings` table, not localStorage.
 
 ### Key functions
 
@@ -250,16 +252,17 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `importCsv(input)` | POST CSV → sets `syncSource='csv'` → opens sync modal |
 | `openSettings()` | Open settings modal; reloads field mapping in-place |
 | `saveSettings()` | Persist settings; stays open; refreshes field mapping if username changed |
-| `loadWishlist()` | Fetch `/api/wishlist`, update `wishlistItems`, update stats; calls `renderWishlist()` only if `currentView === 'wishlist'` |
-| `renderWishlist()` | Build sortable wishlist table (cover, Artist, Title, Year, Added, Notes); no inline search filtering |
+| `loadWishlist()` | Fetch `/api/wishlist`, update `wishlistItems`, update stats; calls `renderWishlist()` only if `currentSection === 'wishlist'` |
+| `renderWishlist()` | Delegates to `renderWishlistTiles()` when `currentView === 'tile'`, otherwise builds sortable table (cover, Artist, Title, Year, Added, Notes); no inline search filtering |
+| `renderWishlistTiles()` | Build wishlist cover art grid sorted artist → year; clicking a tile opens detail modal directly |
 | `openWishlistSearchModal(prefill)` | Open master release search modal; auto-searches if prefill provided |
 | `doWishlistSearch()` | POST to `/api/wishlist/search`, sort by year desc, render results with Add/On wishlist/Fulfilled state |
 | `addToWishlist(masterId)` | POST to `/api/wishlist`, close modal, clear search bar, reload wishlist |
 | `fulfillWishlistItem(id)` | PUT fulfilled=true, reload wishlist |
 | `deleteWishlistItem(id)` | DELETE item, reload wishlist |
 | `openWishlistDetail(id)` | Open detail modal: cover, metadata (year/genres/styles/lowest price), notes textarea, Mark Fulfilled + Delete + Save buttons |
-| `setSection(section)` | Top-level nav: `'collection'` restores last table/tile, `'wishlist'` switches to wishlist |
-| `applyToolbarSwitches(v)` | Show/hide collection view-toggle and switches vs wishlist switches; update search placeholder |
+| `setSection(section)` | Top-level nav: sets `currentSection`, updates nav buttons, calls `applyToolbarSwitches`, loads/renders appropriate view |
+| `applyToolbarSwitches(s)` | Show/hide collection vs wishlist switches; `collection-view-toggle` always visible (both sections support Table/Tile); update search placeholder |
 | `apiFetch(url, opts)` | Wrapper around `fetch` for all `/api/` calls — catches `TypeError` and triggers `probeHealth()` if online |
 | `checkHealth()` | `fetch('/api/health')` with 5s timeout; returns bool — uses plain `fetch`, not `apiFetch`, to avoid recursion |
 | `probeHealth()` | Calls `checkHealth()` and passes result to `setServerReachable()` |
@@ -268,12 +271,14 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `updateOnlineState()` | Sets `body.offline` class and banner for both offline states; disables write actions |
 
 ### Views
-- **Table:** Clickable column headers cycle asc/desc/clear. "Group by artist" toggle overrides column sort with artist A-Z + year.
-- **Tiles:** Always sorted artist A-Z → year. Clicking a tile opens detail modal.
-- **Wishlist:** Sortable table (artist, title, year, added date). No inline search filtering — the search bar is a CTA that opens the master release search modal on Enter. Switching views clears the search bar. Format filter bar hidden. Toolbar shows "Show fulfilled" toggle only.
+- **Table (Collection):** Clickable column headers cycle asc/desc/clear. "Group by artist" toggle overrides column sort with artist A-Z + year.
+- **Tiles (Collection):** Always sorted artist A-Z → year. First tap shows overlay; second tap (or overlay button) opens detail modal.
+- **Table (Wishlist):** Sortable table (artist, title, year, added date). No inline search filtering — the search bar is a CTA that opens the master release search modal on Enter.
+- **Tiles (Wishlist):** Cover art grid sorted artist → year. Single click opens detail modal directly (no two-tap selection model).
+- Both wishlist views: Format filter bar hidden. Toolbar shows "Show fulfilled" toggle only. Switching sections clears the search bar.
 
 ### Toolbar
-Always visible (no collapse toggle). Two rows: a nav row (`[Collection] [Wishlist]`) that spans full width, followed by an options row (Table/Tile sub-views, search, toggles) that changes based on the active section.
+Always visible (no collapse toggle). Single nav row: `[Collection] [Wishlist]` pair, separator, `[Table] [Tiles]` pair (always shown for both sections), then search and context-sensitive toggles.
 
 ### Modals
 - `modal-detail` — read-only record detail (tile click)
@@ -284,7 +289,7 @@ Always visible (no collapse toggle). Two rows: a nav row (`[Collection] [Wishlis
 - `modal-wishlist-detail` — Wishlist item detail: cover, metadata, notes editing, Mark Fulfilled, Delete
 
 ### Settings modal sections (top to bottom)
-1. **Display** — Clean artists, Include P&P, Hide format tags (toggle + tag list)
+1. **Display** — Clean artists, Include P&P, Show Valuations, Hide format tags (toggle + tag list). **All display toggles are staged — state only applies on Save, not on toggle.**
 2. **Discogs** — Username, Token, Refresh Metadata, Field Mapping, Sync Collection
 3. **Data** — Import from CSV, Export to CSV
 4. **Danger Zone** — Delete All Records (records only), Format Database (factory reset), Clear Image Cache
