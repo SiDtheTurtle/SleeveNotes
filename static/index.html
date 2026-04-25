@@ -1878,8 +1878,7 @@ function rowHtml(r) {
     <td class="text-mono col-sm">${r.year||''}</td>
     <td class="col-sm" title="${esc(formatTags(r.format).join(', '))}" style="white-space:nowrap;overflow:hidden">${fmtTagsCell(r.format)}</td>
     <td class="col-sm">
-      ${r.is_new ? `<span class="${/new/i.test(r.is_new) ? 'badge badge-new' : 'badge badge-used'}">${esc(r.is_new)}</span>` : ''}
-      <span style="font-size:10px;color:var(--ink-light);margin-left:4px">${esc(r.curr_cond||'—')}/${esc(r.sleeve_cond||'—')}</span>
+      <span style="font-size:10px;color:var(--ink-light)">${esc(r.curr_cond||'—')}/${esc(r.sleeve_cond||'—')}</span>
     </td>
     <td class="overflow col-md" title="${esc(r.retailer)}">${esc(r.retailer)}</td>
     <td class="text-mono col-md">${fmtDate(r.purchase_date)}</td>
@@ -2013,13 +2012,11 @@ async function openDetail(id) {
         <div class="detail-fields">
           <div class="detail-artist">${esc(displayArtist(r.artist))}</div>
           <div class="detail-title">${esc(r.title)}</div>
-          <div class="detail-meta">
-            ${r.is_new ? `<span class="${/new/i.test(r.is_new) ? 'badge badge-new' : 'badge badge-used'}">${esc(r.is_new)}</span>` : ''}
-          </div>
           <div class="detail-row"><span class="detail-key">Label</span><span class="detail-val">${esc(r.label)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Cat No.</span><span class="detail-val">${esc(r.cat_no)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${r.year||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Format</span><span class="detail-val">${fmtTagsHtml(r.format)||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Condition</span><span class="detail-val">${r.is_new || '—'}</span></div>
           <div class="detail-row"><span class="detail-key">Media</span><span class="detail-val">${esc(condLabel(r.curr_cond))}</span></div>
           <div class="detail-row"><span class="detail-key">Sleeve</span><span class="detail-val">${esc(condLabel(r.sleeve_cond))}</span></div>
           <div class="detail-row"><span class="detail-key">Retailer</span><span class="detail-val">${esc(r.retailer)||'—'}</span></div>
