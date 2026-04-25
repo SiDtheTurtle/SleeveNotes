@@ -1068,7 +1068,7 @@
       <div id="discogs-section">
         <div class="form-group form-full" style="margin-bottom:1rem">
           <label class="form-label">Discogs Release ID</label>
-          <input class="form-control" id="f-discogs-id" placeholder="e.g. r36875179 or 36875179">
+          <input class="form-control" type="text" id="f-discogs-id" placeholder="e.g. r36875179 or 36875179">
           <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
             <button class="btn btn-secondary btn-sm" onclick="fetchDiscogs()" id="fetch-btn">Fetch</button>
             <button class="btn btn-secondary btn-sm hidden" onclick="syncRecordFields(editingId)" id="sync-fields-btn">Sync Custom Fields</button>
@@ -1121,12 +1121,12 @@
 
         <div class="form-group">
           <label class="form-label">Purchase Condition</label>
-          <input class="form-control" id="f-is-new" placeholder="e.g. New, Pre-Owned">
+          <input class="form-control" type="text" id="f-is-new" placeholder="e.g. New, Pre-Owned">
         </div>
 
         <div class="form-group">
           <label class="form-label">Retailer</label>
-          <input class="form-control" id="f-retailer" list="retailers-list" autocomplete="off">
+          <input class="form-control" type="text" id="f-retailer" list="retailers-list" autocomplete="off">
           <datalist id="retailers-list"></datalist>
         </div>
 
@@ -1169,7 +1169,7 @@
 
         <div class="form-group">
           <label class="form-label">Order Ref</label>
-          <input class="form-control" id="f-order-ref">
+          <input class="form-control" type="text" id="f-order-ref">
         </div>
 
         <div class="form-group">
@@ -1190,7 +1190,7 @@
 
         <div class="form-group form-full">
           <label class="form-label">Notes</label>
-          <input class="form-control" id="f-notes">
+          <input class="form-control" type="text" id="f-notes">
         </div>
       </div>
     </div>
@@ -1259,7 +1259,7 @@
               <div class="toggle-thumb"></div>
             </label>
           </div>
-          <input class="form-control" id="hidden-format-tags-input" placeholder="e.g. Album, LP, Stereo, Vinyl" onchange="onHiddenTagsChange()">
+          <input class="form-control" type="text" id="hidden-format-tags-input" placeholder="e.g. Album, LP, Stereo, Vinyl" onchange="onHiddenTagsChange()">
         </div>
       </div>
 
@@ -1267,7 +1267,7 @@
         <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Discogs</div>
         <div class="form-group" style="margin:0">
           <label class="form-label">Username</label>
-          <input class="form-control" id="settings-discogs-username" placeholder="Your Discogs username">
+          <input class="form-control" type="text" id="settings-discogs-username" placeholder="Your Discogs username">
         </div>
         <div class="form-group" style="margin:0">
           <label class="form-label">API Token</label>
@@ -1425,7 +1425,7 @@
         Server unreachable — searching Discogs directly. Items you add will sync when you're back home.
       </div>
       <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
-        <input class="form-control" id="wishlist-search-input" placeholder="Artist, album title…" onkeydown="if(event.key==='Enter')doWishlistSearch()">
+        <input class="form-control" type="text" id="wishlist-search-input" placeholder="Artist, album title…" onkeydown="if(event.key==='Enter')doWishlistSearch()">
         <button class="btn btn-primary btn-sm" onclick="doWishlistSearch()" id="wishlist-search-btn">Search</button>
       </div>
       <div id="wishlist-search-results"></div>
