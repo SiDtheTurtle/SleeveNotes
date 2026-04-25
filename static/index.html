@@ -2536,17 +2536,19 @@ function renderSyncPreview(diff) {
       const skipNote = skips.length
         ? `<div style="font-size:11px;color:var(--gold);margin-top:0.3rem">⚠ ${skips.map(s => `${esc(s.fieldName)} ("${esc(s.value)}" not in Discogs dropdown)`).join(', ')} will be skipped</div>`
         : '';
+      const discogsCore = new Set(['artist', 'title', 'label', 'cat_no', 'year', 'format']);
+      const canPushToDiscogs = syncSource !== 'csv' && [...changedCols].some(c => !discogsCore.has(c));
       html += `<div style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
         <div style="font-size:13px;margin-bottom:0.25rem"><strong>${esc(r.current.artist)}</strong> — ${esc(r.current.title)}</div>
         <div style="margin-bottom:0.4rem">${changeList}</div>
         <div style="display:flex;gap:1rem;align-items:center">
           <label style="display:flex;align-items:center;gap:0.3rem;font-size:12px;cursor:pointer">
-            <input type="radio" name="sync-changed-${i}" class="sync-changed-radio" data-idx="${i}" value="to_sleevenotes"${syncSource === 'csv' ? ' checked' : ''}> ← SleeveNotes
+            <input type="radio" name="sync-changed-${i}" class="sync-changed-radio" data-idx="${i}" value="to_sleevenotes"${!canPushToDiscogs ? ' checked' : ''}> ← SleeveNotes
           </label>
           <label style="display:flex;align-items:center;gap:0.3rem;font-size:12px;cursor:pointer">
-            <input type="radio" name="sync-changed-${i}" class="sync-changed-radio" data-idx="${i}" value="skip"${syncSource !== 'csv' ? ' checked' : ''}> Skip
+            <input type="radio" name="sync-changed-${i}" class="sync-changed-radio" data-idx="${i}" value="skip"${canPushToDiscogs ? ' checked' : ''}> Skip
           </label>
-          ${syncSource !== 'csv' ? `<label style="display:flex;align-items:center;gap:0.3rem;font-size:12px;cursor:pointer">
+          ${canPushToDiscogs ? `<label style="display:flex;align-items:center;gap:0.3rem;font-size:12px;cursor:pointer">
             <input type="radio" name="sync-changed-${i}" class="sync-changed-radio" data-idx="${i}" value="to_discogs"> Discogs →
           </label>` : ''}
         </div>
