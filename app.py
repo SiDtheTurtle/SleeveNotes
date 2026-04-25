@@ -820,7 +820,7 @@ async def fetch_discogs(release_id: str):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "dev": bool(os.environ.get("SN_DEV"))}
+    return {"status": "ok", "dev": os.environ.get("SN_DEV", "").lower() == "true"}
 
 
 # ── Routes: Records ───────────────────────────────────────────────────────────
