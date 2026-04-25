@@ -1,3 +1,5 @@
 services:
   sleevenotes:
     build: .
+    environment:
+      - SN_DEV=true
