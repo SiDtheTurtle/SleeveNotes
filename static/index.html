@@ -283,7 +283,7 @@
   /* ── Table view ── */
   .table-wrap { overflow-x: auto; background: var(--warm-white); border-radius: 6px; border: 1px solid var(--border); }
 
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
 
   th {
     text-align: left;
@@ -893,9 +893,16 @@
 
   .hidden { display: none !important; }
 
+  .col-cover { width: 64px; }
+  .col-artist { width: 15%; }
+  .col-title { width: 15%; }
+  .col-year { width: 72px; }
+  .col-format { width: 128px; }
+
   /* ── Responsive column visibility ── */
   @media (max-width: 899px) {
     .col-md { display: none !important; }
+    .col-artist, .col-title { width: auto; }
   }
   @media (max-width: 599px) {
     .col-sm { display: none !important; }
@@ -1869,16 +1876,16 @@ function rowHtml(r) {
     <td class="overflow" title="${esc(displayArtist(r.artist))}">${esc(displayArtist(r.artist))}</td>
     <td class="overflow" title="${esc(r.title)}">${esc(r.title)}</td>
     <td class="text-mono col-sm">${r.year||''}</td>
-    <td class="col-sm" style="white-space:nowrap">${fmtTagsCell(r.format)}</td>
+    <td class="col-sm" title="${esc(formatTags(r.format).join(', '))}" style="white-space:nowrap;overflow:hidden">${fmtTagsCell(r.format)}</td>
     <td class="col-sm">
       ${r.is_new ? `<span class="${/new/i.test(r.is_new) ? 'badge badge-new' : 'badge badge-used'}">${esc(r.is_new)}</span>` : ''}
       <span style="font-size:10px;color:var(--ink-light);margin-left:4px">${esc(r.curr_cond||'—')}/${esc(r.sleeve_cond||'—')}</span>
     </td>
-    <td class="col-md">${esc(r.retailer)}</td>
+    <td class="overflow col-md" title="${esc(r.retailer)}">${esc(r.retailer)}</td>
     <td class="text-mono col-md">${fmtDate(r.purchase_date)}</td>
     <td class="text-mono text-right col-sm">£${(r.price||0).toFixed(2)}</td>
     <td class="text-mono text-right col-md">${r.valuation ? '£' + (r.valuation).toFixed(2) : '—'}</td>
-    <td class="col-md"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></td>
+    <td class="overflow col-md" title="${esc(r.discogs_id)}"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></td>
     <td class="note-cell col-md" title="${esc(r.notes)}">${esc(r.notes)}</td>
   </tr>`;
 }
@@ -1919,11 +1926,11 @@ function renderTable() {
       <table>
         <thead>
           <tr>
-            ${th('id', '', '')}
-            ${th('artist',        'Artist')}
-            ${th('title',         'Title')}
-            ${th('year',          'Year',          'col-sm')}
-            <th class="col-sm">Format</th>
+            ${th('id', '', 'col-cover')}
+            ${th('artist',        'Artist',        'col-artist')}
+            ${th('title',         'Title',         'col-title')}
+            ${th('year',          'Year',          'col-sm col-year')}
+            <th class="col-sm col-format">Format</th>
             <th class="col-sm">Cond.</th>
             ${th('retailer',      'Retailer',      'col-md')}
             ${th('purchase_date', 'Purchase Date', 'col-md')}
