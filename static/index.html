@@ -1646,24 +1646,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   loadRecords();
   loadWishlist();
-  document.getElementById('modal-detail').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal('modal-detail');
-  });
-  document.getElementById('modal-form').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal('modal-form');
-  });
-  document.getElementById('modal-settings').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal('modal-settings');
-  });
-  document.getElementById('modal-discogs-sync').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal('modal-discogs-sync');
-  });
-  document.getElementById('modal-wishlist-detail').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal('modal-wishlist-detail');
-  });
-  document.getElementById('modal-wishlist-search').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal('modal-wishlist-search');
-  });
   document.getElementById('search').addEventListener('keydown', e => {
     if (e.key === 'Enter' && currentSection === 'wishlist') {
       openWishlistSearchModal(document.getElementById('search').value.trim());
