@@ -2219,8 +2219,9 @@ function resetForm() {
 }
 
 async function fetchDiscogs() {
-  const rid = document.getElementById('f-discogs-id').value.trim();
+  const rid = document.getElementById('f-discogs-id').value.trim().replace(/^\[|\]$/g, '');
   if (!rid) { toast('Enter a Discogs release ID', 'error'); return; }
+  document.getElementById('f-discogs-id').value = rid;
   const btn = document.getElementById('fetch-btn');
   btn.innerHTML = '<span class="spinner"></span>';
   btn.disabled = true;
