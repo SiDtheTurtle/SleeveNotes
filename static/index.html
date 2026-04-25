@@ -382,8 +382,8 @@
 
   .text-mono { font-family: var(--font-mono); font-size: 11px; color: var(--ink-light); }
   .text-right { text-align: right; }
-  .overflow { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-  .note-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--ink-light); }
+  .overflow { max-width: 200px; min-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .note-cell { max-width: 160px; min-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--ink-light); }
 
   .row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
   tbody tr:hover .row-actions { opacity: 1; }
