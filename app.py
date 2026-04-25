@@ -830,7 +830,7 @@ def list_records():
     try:
         with get_db() as conn:
             rows = conn.execute(
-                "SELECT * FROM records WHERE deleted_at IS NULL ORDER BY CAST(instance_id AS INTEGER), id"
+                "SELECT * FROM records WHERE deleted_at IS NULL ORDER BY id"
             ).fetchall()
         return [row_to_dict(r) for r in rows]
     except sqlite3.OperationalError:
@@ -1105,7 +1105,7 @@ _EXPORT_SN_EXTRAS = ("id", "instance_id", "is_new", "cover_file")
 async def export_csv():
     with get_db() as conn:
         db_rows = conn.execute(
-            "SELECT * FROM records WHERE deleted_at IS NULL ORDER BY CAST(instance_id AS INTEGER), id"
+            "SELECT * FROM records WHERE deleted_at IS NULL ORDER BY id"
         ).fetchall()
         settings_rows = conn.execute("SELECT key, value FROM settings").fetchall()
     settings = {r["key"]: r["value"] for r in settings_rows}
