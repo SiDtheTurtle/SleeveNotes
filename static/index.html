@@ -903,6 +903,27 @@
     .modal-header { padding: 1rem; }
     .modal-footer { padding: 0.75rem 1rem; }
   }
+
+  /* ── Lightbox ── */
+  #lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 500;
+    cursor: zoom-out;
+    align-items: center;
+    justify-content: center;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox-img {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  }
+  .detail-cover-clickable { cursor: zoom-in; }
 </style>
 </head>
 <body>
@@ -1393,6 +1414,11 @@
 
 <!-- ── Toast container ── -->
 <div class="toast-container" id="toasts"></div>
+
+<!-- ── Lightbox ── -->
+<div id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="cover">
+</div>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
@@ -1954,7 +1980,7 @@ async function openDetail(id) {
       <div class="detail-layout">
         <div id="detail-cover-wrap">
           ${r.cover_file
-            ? `<img class="detail-cover" src="/images/${r.cover_file}" alt="cover">`
+            ? `<img class="detail-cover detail-cover-clickable" src="/images/${r.cover_file}" alt="cover" onclick="openLightbox('/images/${r.cover_file}')">`
             : `<div class="detail-cover-placeholder">♪</div>`}
         </div>
         <div class="detail-fields">
@@ -2066,7 +2092,7 @@ function setupCarousel(recordId, images, currentCover) {
     wrap.innerHTML = `
       <div class="carousel-wrap">
         <div class="carousel-img-wrap">
-          <img src="/images/${esc(img.filename)}" alt="cover ${idx+1}">
+          <img src="/images/${esc(img.filename)}" alt="cover ${idx+1}" class="detail-cover-clickable" onclick="openLightbox('/images/${esc(img.filename)}')" style="cursor:zoom-in">
           ${images.length > 1 ? `
             <button class="carousel-arrow prev" onclick="carouselStep(-1)">&#8249;</button>
             <button class="carousel-arrow next" onclick="carouselStep(1)">&#8250;</button>` : ''}
@@ -3141,7 +3167,7 @@ function openWishlistDetail(id) {
     <div class="detail-layout" style="margin-bottom:1.25rem">
       <div>
         ${w.cover_file
-          ? `<img class="detail-cover" src="/images/${esc(w.cover_file)}" alt="cover">`
+          ? `<img class="detail-cover detail-cover-clickable" src="/images/${esc(w.cover_file)}" alt="cover" onclick="openLightbox('/images/${esc(w.cover_file)}')">`
           : `<div class="detail-cover-placeholder">♡</div>`}
       </div>
       <div class="detail-fields">
@@ -3371,6 +3397,12 @@ function setField(id, v) { const el = document.getElementById(id); if (el) el.va
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
+
 function toast(msg, type = '') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
@@ -3453,6 +3485,7 @@ async function apiFetch(url, opts) {
 }
 
 window.addEventListener('online', () => { updateOnlineState(); probeHealth(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 window.addEventListener('offline', () => {
   clearTimeout(_reachabilityPollTimer);
   _reachabilityPollTimer = null;
