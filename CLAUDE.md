@@ -125,7 +125,7 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/health` | Returns `{"status":"ok"}` — used for server reachability probing |
+| GET | `/api/health` | Returns `{"status":"ok","dev":bool}` — used for server reachability probing; `dev` drives the dev banner |
 | GET | `/api/records` | List records (excludes soft-deleted) |
 | POST | `/api/records` | Create record |
 | PUT | `/api/records/{id}` | Update record |
@@ -188,7 +188,7 @@ All outbound Discogs API calls go through `discogs_get()` / `discogs_post()` wra
 - Standard Discogs column names for Discogs-sourced fields
 - `Collection [Field Name]` for mapped custom fields
 - `SN_{col}` prefix for unmapped SN fields (`SN_retailer`, `SN_price`, etc.) and SN extras (`SN_id`, `SN_instance_id`, `SN_is_new`, `SN_cover_file`)
-- Ordering: `instance_id` ASC, then `id` ASC
+- Ordering: `id` ASC
 
 ### Diff computation (`compute_diff`)
 - Compares prospective items (from Discogs or CSV) against the SN DB
@@ -297,7 +297,7 @@ Always visible (no collapse toggle). Single nav row: `[Collection] [Wishlist]` p
 ### Modals
 - `modal-detail` — read-only record detail (tile click)
 - `modal-form` — add/edit form with Discogs lookup
-- `modal-discogs-sync` — diff preview; shared between Discogs collection sync and CSV import. `syncSource` controls labels and available actions (CSV hides "Discogs →" direction)
+- `modal-discogs-sync` — diff preview; shared between Discogs collection sync and CSV import. `syncSource` controls labels and available actions. "Discogs →" direction is hidden for CSV imports and for records where only core fields (artist, title, label, cat_no, year, format) differ
 - `modal-settings` — Display settings, Discogs config + field mapping, Data (import/export), Danger Zone. **Save stays open** (reload fields in-place); Close button dismisses.
 - `modal-wishlist-search` — Discogs master release search; results show Add/Queued/On wishlist/Fulfilled per item. Shows slate info banner when server unreachable (searching Discogs directly)
 - `modal-wishlist-detail` — Wishlist item detail: cover, metadata, fulfilled checkbox, notes textarea, Save + Delete. Save queues offline for server items; Delete disabled offline for server items, always enabled for pending items
