@@ -88,6 +88,22 @@
     gap: 0.75rem;
   }
 
+  /* ── Dev banner ── */
+  #dev-banner {
+    display: none;
+    position: sticky;
+    top: 56px;
+    z-index: 100;
+    background: #B45309;
+    color: #FEF3C7;
+    text-align: center;
+    padding: 0.375rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+  }
+
   /* ── Offline banner ── */
   #offline-banner {
     display: none;
@@ -918,6 +934,7 @@
   </div>
 </header>
 
+<div id="dev-banner">DEV ENVIRONMENT</div>
 <div id="offline-banner">Offline — read-only mode</div>
 
 <div class="stats-bar" id="stats-bar">
@@ -1590,6 +1607,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initPendingQueue();
   updateOnlineState();
   probeHealth();
+  fetch('/api/health').then(r => r.json()).then(d => {
+    if (d.dev) document.getElementById('dev-banner').style.display = 'block';
+  }).catch(() => {});
   await loadSettings();
   loadRecords();
   loadWishlist();

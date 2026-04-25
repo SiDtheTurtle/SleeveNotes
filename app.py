@@ -1,6 +1,7 @@
 import io
 import csv
 import json
+import os
 import re
 import sqlite3
 import asyncio
@@ -819,7 +820,7 @@ async def fetch_discogs(release_id: str):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "dev": bool(os.environ.get("SN_DEV"))}
 
 
 # ── Routes: Records ───────────────────────────────────────────────────────────
