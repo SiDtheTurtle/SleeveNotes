@@ -3388,7 +3388,7 @@ function renderWishlist() {
 
   const rows = items.map(w => `
     <tr class="${w.fulfilled ? 'wishlist-row-fulfilled' : ''} data-row" style="cursor:pointer" onclick="openWishlistDetail(${w.id})">
-      <td>${w.pending
+      <td class="col-cover">${w.pending
         ? (w.thumb ? `<img class="cover-thumb" src="${esc(w.thumb)}" alt="" loading="lazy">` : `<div class="cover-placeholder">⏳</div>`)
         : (w.cover_file ? `<img class="cover-thumb" src="/images/${esc(w.cover_file)}" alt="" loading="lazy">` : `<div class="cover-placeholder">♡</div>`)}</td>
       <td class="overflow" title="${esc(w.artist)}">${esc(w.artist)}</td>
@@ -3403,7 +3403,7 @@ function renderWishlist() {
       <table>
         <thead>
           <tr>
-            <th></th>
+            <th class="col-cover"></th>
             ${th('artist', 'Artist')}
             ${th('title', 'Title')}
             ${th('year', 'Year', 'col-sm')}
