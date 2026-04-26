@@ -33,9 +33,7 @@ Always create a feature branch before making any code or config changes. Never c
 
 Docker images are published to `ghcr.io/sidtheturtle/sleevenotes` on version tag pushes only — main branch pushes do not trigger a build.
 
-**Version strategy:** `vMAJOR.MINOR.PATCH` — currently on `v1.x.y`, approaching `v1.9.0`. New features increment minor, bug fixes increment patch.
-
-**Remaining open FR:** #52 — Pagination (table default 50 rows, tiles default 25, page size configurable in settings).
+**Version strategy:** `vMAJOR.MINOR.PATCH` — currently on `v1.x.y`. New features increment minor, bug fixes increment patch.
 
 **To cut a release:** `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..." --target main`
 
@@ -219,6 +217,7 @@ HTTP middleware (`auth_middleware`) checks `X-API-Key` header on all `/api/` rou
 - Import All: combines both steps in one transaction
 - Frontend downloads via `apiFetch() → r.blob() → URL.createObjectURL()` to keep the auth header in play; slow exports show "Exporting…" state on the button
 
+
 ## Frontend Architecture (`static/index.html`)
 
 Everything lives in one file. No framework, no build step.
@@ -272,6 +271,7 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `startCoverPoll(n)` | Poll `loadRecords()` every 8s until n new covers appear (max 40 polls) |
 | `updateStats()` | Update KPI bar: Total Records, Collection Cost, Collection Value |
 | `formatTags(s, respectHide)` | Parse format string into tag array; filters `hiddenFormatTags` when enabled |
+| `formatExportValue(dbCol, value)` | Format a record field for Discogs push — prefixes price/pp with `currencySymbol` |
 | `condLabel(c)` | Expand condition code to label; returns `'Unknown'` for blank |
 | `fmtDate(s)` | YYYY-MM-DD → DD/MM/YYYY for display |
 | `toISODate(s)` | DD/MM/YYYY → YYYY-MM-DD for date input |
@@ -301,7 +301,7 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `splitDiscogsTitle(combined)` | Split "Artist - Title" Discogs search string into `{artist, title}` for pending item display |
 | `setSection(section)` | Top-level nav: sets `currentSection`, updates nav buttons, calls `applyToolbarSwitches`, loads/renders appropriate view |
 | `applyToolbarSwitches(s)` | Show/hide collection vs wishlist switches; `collection-view-toggle` always visible (both sections support Table/Tile); update search placeholder |
-| `apiFetch(url, opts)` | Wrapper around `fetch` for all `/api/` calls — catches `TypeError` and triggers `probeHealth()` if online |
+| `apiFetch(url, opts)` | Wrapper around `fetch` for all `/api/` calls — injects `X-API-Key`, handles 401 → auth screen, catches `TypeError` and triggers `probeHealth()` if online |
 | `checkHealth()` | `fetch('/api/health')` with 5s timeout; returns bool — uses plain `fetch`, not `apiFetch`, to avoid recursion |
 | `probeHealth()` | Calls `checkHealth()` and passes result to `setServerReachable()` |
 | `setServerReachable(bool)` | Updates `serverReachable`, calls `updateOnlineState()`, starts/cancels backoff polling, toasts on reconnect, calls `flushPendingQueue()` on reconnect |
@@ -346,10 +346,10 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **SPA routing:** `GET /{full_path:path}` serves static files or falls back to `index.html`. API routes are defined before this catch-all.
 - **Empty DB:** `list_records` catches `OperationalError`, calls `init_db()`, returns `[]` rather than 500.
 - **No schema migrations:** `init_db()` uses `CREATE TABLE IF NOT EXISTS` only. Assume fresh installs. To reset: delete `/data/sleevenotes.db`.
-- **Access key auth:** Opt-in — blank key means no auth. On first run with a blank key, the auth screen forces setup before the app loads. `api_key` is excluded from `SETTINGS_DEFAULTS` so normal settings save never touches it; factory reset clears it explicitly. Key is cached in `_cached_api_key` (process-wide) and invalidated on update.
-- **Sticky header:** `#sticky-top` wraps the header, banners, KPI bar, toolbar, and format filter bar — all stick together as one unit.
-- **Currency symbol:** Free text (default `£`). Applied in display only — prices are stored as plain `REAL` in DB. When pushing price/pp to Discogs, the symbol is prefixed to the value string. Diff comparison strips the configured symbol before numeric comparison; a missing or different symbol triggers a diff.
-- **Empty collection state:** Shows a "Restore from backup…" file picker that calls `/api/import/all` directly (no Danger Zone toggle required since there's nothing to overwrite).
+- **Access key auth:** Opt-in — blank key means no auth. On first run with a blank key, the auth screen forces setup. `api_key` excluded from `SETTINGS_DEFAULTS`; factory reset clears it explicitly.
+- **Currency symbol:** Free text (default `£`), display only — stored as plain `REAL` in DB. Prefixed to price/pp when pushing to Discogs. Diff strips configured symbol before numeric comparison; missing or mismatched symbol triggers a diff.
+- **Empty collection state:** Shows a "Restore from backup…" file picker calling `/api/import/all` directly — no safety toggle needed since there's nothing to overwrite.
+- **Sticky header:** `#sticky-top` wraps header, banners, KPI bar, toolbar, and format filter bar as one unit.
 - **Wishlist fulfilled prompt:** When saving a new collection record, if the fetched Discogs release has a `master_id` matching an unfulfilled wishlist item (`wishlist_match` in the fetch response), the user is prompted to mark it fulfilled. Wishlist `notes` are appended to the collection record's notes at the same time (empty collection notes → copy; existing notes → append with newline).
 - **Wishlist fulfilled toggle:** The detail modal shows a checkbox for fulfilled status, saved together with notes via the Save button. This replaces the former instant "Mark Fulfilled" action — changes are reversible until saved.
 - **Wishlist cover prefix:** Master release covers are stored as `m{master_id}_01.jpeg` to avoid filename collision with release images (`r{release_id}_...`).
