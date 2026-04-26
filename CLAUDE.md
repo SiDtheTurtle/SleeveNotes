@@ -33,7 +33,9 @@ Always create a feature branch before making any code or config changes. Never c
 
 Docker images are published to `ghcr.io/sidtheturtle/sleevenotes` on version tag pushes only — main branch pushes do not trigger a build.
 
-**Version strategy:** `vMAJOR.MINOR.PATCH` — currently on `v1.x.y`. New features increment minor, bug fixes increment patch.
+**Version strategy:** `vMAJOR.MINOR.PATCH` — currently on `v1.x.y`, approaching `v1.9.0`. New features increment minor, bug fixes increment patch.
+
+**Remaining open FR:** #52 — Pagination (table default 50 rows, tiles default 25, page size configurable in settings).
 
 **To cut a release:** `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..." --target main`
 
@@ -75,8 +77,8 @@ docker exec sleevenotes rm /data/sleevenotes.db
 | `retailer` | TEXT | |
 | `order_ref` | TEXT | |
 | `purchase_date` | TEXT | ISO 8601 (YYYY-MM-DD) |
-| `price` | REAL | Item cost (GBP); 0 means not entered |
-| `pp` | REAL | Postage & packaging (GBP); 0 means not entered |
+| `price` | REAL | Item cost; 0 means not entered |
+| `pp` | REAL | Postage & packaging; 0 means not entered |
 | `notes` | TEXT | |
 | `valuation` | REAL | Discogs lowest listing price; 0 means not fetched |
 | `created_at` | TEXT | Auto timestamp |
@@ -89,11 +91,13 @@ docker exec sleevenotes rm /data/sleevenotes.db
 | `clean_artists` | `true` | Strip Discogs disambiguation numbers from display |
 | `include_pp` | `false` | Include P&P in Collection Cost KPI |
 | `show_valuations` | `true` | Show Collection Value KPI and per-record valuation column |
+| `currency` | `£` | Currency symbol shown alongside prices; prefixed to price/pp when syncing to Discogs |
 | `hide_obvious_formats` | `true` | Global on/off for format tag hiding |
 | `hidden_format_tags` | `Album, LP, Stereo, Vinyl` | Comma-separated tags to hide from filter bar |
 | `discogs_username` | `` | Required for collection sync |
 | `discogs_token` | `` | Discogs API token (stored server-side, never sent to frontend) |
 | `discogs_field_mappings` | `{}` | JSON: `{field_id: db_col}` mapping custom Discogs fields → SN columns |
+| `api_key` | `` | Access key for HTTP middleware auth; blank = no auth. Excluded from `SETTINGS_DEFAULTS` so factory-reset clears it explicitly |
 
 `SETTINGS_DEFAULTS` in `app.py` is the single source of truth for defaults — used by both `init_db()` (INSERT OR IGNORE) and `POST /api/admin/factory-reset` (INSERT OR REPLACE).
 
@@ -140,7 +144,14 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 | POST | `/api/collection/sync` | Apply a sync payload (to SN and/or Discogs) |
 | POST | `/api/import/csv` | Upload Discogs-format CSV → returns diff preview |
 | GET | `/api/export` | Download CSV (all DB fields) |
-| GET | `/api/settings` | Get all settings |
+| GET | `/api/export/db` | Download SQL dump as `.zip` |
+| GET | `/api/export/images` | Download all cached images as `.zip` |
+| GET | `/api/export/all` | Download combined backup zip (SQL + images) |
+| POST | `/api/import/db` | Restore database from a `.zip` containing a `.sql` file |
+| POST | `/api/import/images` | Restore images from a `.zip` |
+| POST | `/api/import/all` | Restore database + images from a combined backup zip |
+| GET | `/api/auth/status` | Returns `{"configured": bool}` — unprotected; used to decide whether to show auth screen |
+| GET | `/api/settings` | Get all settings (excludes `api_key`) |
 | PUT | `/api/settings/{key}` | Update a setting |
 | POST | `/api/admin/format` | Delete all records (settings preserved) |
 | POST | `/api/admin/factory-reset` | Delete all records + restore all settings to defaults |
@@ -196,6 +207,17 @@ All outbound Discogs API calls go through `discogs_get()` / `discogs_post()` wra
 - Compares `DISCOGS_SOURCED` fields + any mapped custom fields
 - Uses `None`-safe string comparison: `None` → `""`, not `str(None or "")`
 - For `price`, `pp`, `valuation`: treats `None` (blank from source) as equivalent to `0` (DB default for "not entered") — avoids false positives when fields aren't mapped
+- **Currency-aware price comparison:** `parse_price_field()` strips the configured symbol from Discogs field values. A missing or mismatched symbol triggers a diff with `currency_mismatch: true` and `raw_to` (the original Discogs string) in the change entry — displayed as-is in the diff table
+
+### Authentication
+HTTP middleware (`auth_middleware`) checks `X-API-Key` header on all `/api/` routes except `/api/health` and `/api/auth/status`. Blank key = no auth enforced. Key is cached in `_cached_api_key`; invalidated on `PUT /api/settings/api_key` and on factory reset. Frontend `apiFetch()` injects the header and redirects to the auth screen on 401. On first run (blank key), the auth screen prompts for initial setup.
+
+### Export / Import
+- Exports stream via `StreamingResponse` with `zipfile.ZipFile` over an in-memory `io.BytesIO` buffer
+- Import DB: deletes `DB_PATH`, re-executes the SQL dump via `conn.executescript()`, resets `_cached_api_key`
+- Import Images: extracts flat files only (no subdirectories, no `.sql`) into `IMAGES_DIR`
+- Import All: combines both steps in one transaction
+- Frontend downloads via `apiFetch() → r.blob() → URL.createObjectURL()` to keep the auth header in play; slow exports show "Exporting…" state on the button
 
 ## Frontend Architecture (`static/index.html`)
 
@@ -217,6 +239,7 @@ diffData          // last sync diff payload
 syncSource        // 'discogs' | 'csv' — controls sync modal behaviour
 hideObviousFormats // bool — global on/off for format tag hiding
 hiddenFormatTags  // Set<string> — tags to hide from filter bar
+currencySymbol    // string — e.g. '£'; loaded from settings; applied to all price displays
 wishlistItems     // array — merged server + pending items for display (rebuilt by loadWishlist)
 showFulfilled     // bool — show fulfilled items in wishlist view
 serverReachable   // bool — false when internet present but server unreachable
@@ -225,6 +248,7 @@ pendingQueue      // array — in-memory mirror of IDB wishlist_queue (new items
 pendingUpdates    // array — in-memory mirror of IDB wishlist_updates (edits queued offline)
 _serverWishlistItems  // array — last fetched server wishlist data; pendingUpdates applied on top
 _lastSearchResults    // array — last wishlist search results; used by addToWishlist for metadata
+apiKey            // string — loaded from sessionStorage on auth; injected by apiFetch()
 ```
 
 Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within **both** sections. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. Only `'table'`/`'tile'` are saved to localStorage — app always opens to collection.
@@ -303,10 +327,10 @@ Always visible (no collapse toggle). Single nav row: `[Collection] [Wishlist]` p
 - `modal-wishlist-detail` — Wishlist item detail: cover, metadata, fulfilled checkbox, notes textarea, Save + Delete. Save queues offline for server items; Delete disabled offline for server items, always enabled for pending items
 
 ### Settings modal sections (top to bottom)
-1. **Display** — Clean artists, Include P&P, Show Valuations, Hide format tags (toggle + tag list). **All display toggles are staged — state only applies on Save, not on toggle.**
+1. **Display** — Clean artists, Include P&P, Show Valuations, Currency Symbol, Hide format tags (toggle + tag list). **All display toggles are staged — state only applies on Save, not on toggle.**
 2. **Discogs** — Username, Token, Refresh Metadata, Field Mapping, Sync Collection
-3. **Data** — Import from CSV, Export to CSV
-4. **Danger Zone** — Delete All Records (records only), Format Database (factory reset), Clear Image Cache
+3. **Data** — Import (CSV), Export (CSV, Database, Images, All). Slow exports show "Exporting…" state on the button.
+4. **Danger Zone** — Change Access Key, Restore from Backup (single toggle unlocks: Import Database / Import Images / Import All), Delete All Records, Factory Reset, Clear Image Cache
 
 ## Discogs Grading Scale
 S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
@@ -322,6 +346,10 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **SPA routing:** `GET /{full_path:path}` serves static files or falls back to `index.html`. API routes are defined before this catch-all.
 - **Empty DB:** `list_records` catches `OperationalError`, calls `init_db()`, returns `[]` rather than 500.
 - **No schema migrations:** `init_db()` uses `CREATE TABLE IF NOT EXISTS` only. Assume fresh installs. To reset: delete `/data/sleevenotes.db`.
+- **Access key auth:** Opt-in — blank key means no auth. On first run with a blank key, the auth screen forces setup before the app loads. `api_key` is excluded from `SETTINGS_DEFAULTS` so normal settings save never touches it; factory reset clears it explicitly. Key is cached in `_cached_api_key` (process-wide) and invalidated on update.
+- **Sticky header:** `#sticky-top` wraps the header, banners, KPI bar, toolbar, and format filter bar — all stick together as one unit.
+- **Currency symbol:** Free text (default `£`). Applied in display only — prices are stored as plain `REAL` in DB. When pushing price/pp to Discogs, the symbol is prefixed to the value string. Diff comparison strips the configured symbol before numeric comparison; a missing or different symbol triggers a diff.
+- **Empty collection state:** Shows a "Restore from backup…" file picker that calls `/api/import/all` directly (no Danger Zone toggle required since there's nothing to overwrite).
 - **Wishlist fulfilled prompt:** When saving a new collection record, if the fetched Discogs release has a `master_id` matching an unfulfilled wishlist item (`wishlist_match` in the fetch response), the user is prompted to mark it fulfilled. Wishlist `notes` are appended to the collection record's notes at the same time (empty collection notes → copy; existing notes → append with newline).
 - **Wishlist fulfilled toggle:** The detail modal shows a checkbox for fulfilled status, saved together with notes via the Save button. This replaces the former instant "Mark Fulfilled" action — changes are reversible until saved.
 - **Wishlist cover prefix:** Master release covers are stored as `m{master_id}_01.jpeg` to avoid filename collision with release images (`r{release_id}_...`).
