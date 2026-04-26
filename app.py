@@ -131,6 +131,7 @@ SETTINGS_DEFAULTS: dict[str, str] = {
     "hide_obvious_formats": "true",
     "hidden_format_tags":   "Album, LP, Stereo, Vinyl",
     "show_valuations":      "true",
+    "currency":             "£",
     "discogs_username":     "",
     "discogs_token":        "",
     "discogs_field_mappings": "{}",
@@ -357,10 +358,40 @@ DISCOGS_CONDITION_MAP = {
 
 def normalise_condition(val: str) -> str:
     return DISCOGS_CONDITION_MAP.get(val.strip(), val.strip())
+
+def get_currency() -> str:
+    try:
+        with get_db() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key='currency'").fetchone()
+            return (row["value"] if row else "£").strip() or "£"
+    except Exception:
+        return "£"
+
+def parse_price_field(raw: str, currency: str) -> tuple[float | None, bool]:
+    """Parse a Discogs custom field price value.
+    Returns (float_value, currency_ok).
+    currency_ok is False if the symbol is absent or mismatched.
+    """
+    s = str(raw).strip()
+    if not s:
+        return None, True
+    if currency and s.lower().startswith(currency.lower()):
+        remainder = s[len(currency):].strip()
+        currency_ok = True
+    else:
+        # No matching symbol — strip any leading non-numeric chars for the value
+        remainder = re.sub(r"^[^\d.]+", "", s)
+        currency_ok = False
+    try:
+        cleaned = re.sub(r"[^\d.]", "", remainder)
+        return (float(cleaned) if cleaned else None), currency_ok
+    except (ValueError, TypeError):
+        return None, currency_ok
+
 MAPPED_WRITEABLE = {"purchase_date", "price", "pp", "retailer", "order_ref",
                     "curr_cond", "sleeve_cond", "notes", "is_new"}
 
-def parse_collection_item(item: dict, field_mappings: dict) -> dict:
+def parse_collection_item(item: dict, field_mappings: dict, currency: str = "£") -> dict:
     info = item.get("basic_information", {})
     rid = f"r{info['id']}"
     labels = info.get("labels", [])
@@ -391,7 +422,13 @@ def parse_collection_item(item: dict, field_mappings: dict) -> dict:
         val: object = raw
         if db_col == "purchase_date":
             val = normalise_date(str(val))
-        elif db_col in ("price", "pp", "valuation"):
+        elif db_col in ("price", "pp"):
+            float_val, currency_ok = parse_price_field(str(raw), currency)
+            val = float_val
+            record[f"_raw_{db_col}"] = str(raw).strip()
+            if not currency_ok:
+                record[f"_currency_mismatch_{db_col}"] = True
+        elif db_col == "valuation":
             try:
                 cleaned = re.sub(r"[^\d.]", "", str(val))
                 val = float(cleaned) if cleaned else None
@@ -399,7 +436,7 @@ def parse_collection_item(item: dict, field_mappings: dict) -> dict:
                 val = None
         elif db_col in ("curr_cond", "sleeve_cond"):
             val = normalise_condition(str(val))
-        record[db_col] = str(val).strip() or None
+        record[db_col] = str(val).strip() if val is not None else None
     return record
 
 
@@ -433,6 +470,12 @@ def compute_diff(parsed_items: list[dict]) -> dict:
             for col in compare_cols:
                 new_val = prospective.get(col)
                 old_val = db_rec.get(col)
+                # Currency mismatch on price/pp fields always triggers a diff.
+                if col in ("price", "pp") and prospective.get(f"_currency_mismatch_{col}"):
+                    changes[col] = {"from": old_val, "to": new_val,
+                                    "raw_to": prospective.get(f"_raw_{col}"),
+                                    "currency_mismatch": True}
+                    continue
                 # Skip only when both sides are truly unset.
                 if col in ("price", "pp", "valuation"):
                     if new_val is None and old_val is None:
@@ -442,7 +485,8 @@ def compute_diff(parsed_items: list[dict]) -> dict:
                 if not new_str and not old_str:
                     continue
                 if new_str != old_str:
-                    changes[col] = {"from": old_val, "to": new_val}
+                    raw_to = prospective.get(f"_raw_{col}") if col in ("price", "pp") else None
+                    changes[col] = {"from": old_val, "to": new_val, **({"raw_to": raw_to} if raw_to else {})}
             if changes:
                 result["changed"].append({
                     "record_id": db_rec["id"],
@@ -597,8 +641,9 @@ async def collection_preview(record_id: int = None):
                 if resp.status_code == 200:
                     items.extend(resp.json()["releases"])
 
+    currency = settings.get("currency", "£").strip() or "£"
     items.sort(key=lambda x: x.get("instance_id", 0))
-    parsed = [parse_collection_item(item, field_mappings) for item in items]
+    parsed = [parse_collection_item(item, field_mappings, currency) for item in items]
     diff = compute_diff(parsed)
     if record_id is not None:
         diff["new"] = []
