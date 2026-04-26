@@ -947,9 +947,48 @@
     box-shadow: 0 8px 40px rgba(0,0,0,0.6);
   }
   .detail-cover-clickable { cursor: zoom-in; }
+  /* ── Auth screen ── */
+  #auth-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  #auth-screen.visible { display: flex; }
+  #auth-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    max-width: 360px;
+    width: calc(100% - 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
 </style>
 </head>
 <body>
+
+<div id="auth-screen">
+  <div id="auth-box">
+    <div style="display:flex;align-items:center;gap:0.5rem">
+      <span style="width:10px;height:10px;border-radius:50%;background:var(--groove);display:inline-block;flex-shrink:0"></span>
+      <span style="font-weight:700;font-size:1rem;color:var(--ink)">SleeveNotes</span>
+    </div>
+    <div id="auth-title" style="font-size:1.1rem;font-weight:600;color:var(--ink)"></div>
+    <div id="auth-desc" style="font-size:13px;color:var(--ink-light)"></div>
+    <div style="position:relative">
+      <input class="form-control" type="password" id="auth-key-input" placeholder="Access key" onkeydown="if(event.key==='Enter')submitAuthKey()" style="padding-right:2.5rem">
+      <button type="button" onclick="toggleAuthKeyVisibility()" style="position:absolute;right:0.5rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-light);font-size:14px;padding:0.25rem" id="auth-key-toggle" title="Show/hide key">👁</button>
+    </div>
+    <div id="auth-error" style="font-size:12px;color:var(--red);display:none"></div>
+    <button class="btn btn-primary" id="auth-submit-btn" onclick="submitAuthKey()">Continue</button>
+  </div>
+</div>
 
 <header>
   <div class="logo">
@@ -1320,6 +1359,30 @@
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
           <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Change Access Key</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Change the key required to access SleeveNotes. All devices will need to re-enter the new key.</div>
+          </div>
+          <label class="toggle" style="flex-shrink:0" title="Enable to unlock">
+            <input type="checkbox" id="access-key-safety-toggle" onchange="onAccessKeyToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+
+        <div id="access-key-change-section" style="display:none;flex-direction:column;gap:0.5rem;">
+          <div style="position:relative">
+            <input class="form-control" type="password" id="settings-access-key" placeholder="New access key…" style="padding-right:2.5rem">
+            <button type="button" onclick="toggleSettingsAccessKeyVisibility()" style="position:absolute;right:0.5rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-light);font-size:14px;padding:0.25rem" title="Show/hide key">👁</button>
+          </div>
+          <button class="btn btn-danger" id="change-access-key-btn" onclick="doChangeAccessKey()" style="align-self:flex-start">
+            Change Key
+          </button>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
             <div style="font-size:13px;font-weight:500;color:var(--ink)">Delete All Records</div>
             <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Permanently deletes all records. Settings and field mappings are preserved. Cannot be undone.</div>
           </div>
@@ -1465,6 +1528,8 @@ let wishlistItems = [];
 let showFulfilled = false;
 let serverReachable = true;
 let _reachabilityPollTimer = null;
+let apiKey = '';
+let _authMode = 'unlock'; // 'setup' | 'unlock'
 let pendingQueue = [];
 let pendingUpdates = [];
 let _serverWishlistItems = [];
@@ -1477,6 +1542,120 @@ function lsGet(key, fallback) {
 }
 function lsSet(key, val) {
   try { localStorage.setItem('sn_' + key, JSON.stringify(val)); } catch {}
+}
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+function showAuthScreen(mode) {
+  _authMode = mode;
+  const title = document.getElementById('auth-title');
+  const desc = document.getElementById('auth-desc');
+  document.getElementById('auth-error').style.display = 'none';
+  document.getElementById('auth-key-input').value = '';
+  document.getElementById('auth-submit-btn').disabled = false;
+  if (mode === 'setup') {
+    title.textContent = 'Choose an access key';
+    desc.textContent = 'Set a key to protect your SleeveNotes. Everyone who uses the app will need this key to get in.';
+  } else {
+    title.textContent = 'Enter access key';
+    desc.textContent = 'This SleeveNotes is protected. Enter the access key to continue.';
+  }
+  document.getElementById('auth-screen').classList.add('visible');
+  setTimeout(() => document.getElementById('auth-key-input').focus(), 50);
+}
+
+function hideAuthScreen() {
+  document.getElementById('auth-screen').classList.remove('visible');
+  document.getElementById('auth-key-input').type = 'password';
+}
+
+function toggleAuthKeyVisibility() {
+  const input = document.getElementById('auth-key-input');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+async function initAuth() {
+  apiKey = lsGet('apiKey', '');
+  let status;
+  try {
+    const r = await fetch('/api/auth/status');
+    status = await r.json();
+  } catch {
+    return true; // server unreachable — let health check handle it
+  }
+  if (!status.configured) {
+    showAuthScreen('setup');
+    return false;
+  }
+  if (!apiKey) {
+    showAuthScreen('unlock');
+    return false;
+  }
+  // Validate stored key
+  try {
+    const r = await fetch('/api/settings', { headers: { 'X-API-Key': apiKey } });
+    if (r.status === 401) {
+      apiKey = '';
+      lsSet('apiKey', '');
+      showAuthScreen('unlock');
+      return false;
+    }
+  } catch {
+    return true; // server unreachable — proceed, offline handling will kick in
+  }
+  return true;
+}
+
+async function submitAuthKey() {
+  const input = document.getElementById('auth-key-input');
+  const error = document.getElementById('auth-error');
+  const btn = document.getElementById('auth-submit-btn');
+  const key = input.value.trim();
+  if (!key) {
+    error.textContent = 'Please enter a key.';
+    error.style.display = '';
+    return;
+  }
+  error.style.display = 'none';
+  btn.disabled = true;
+  if (_authMode === 'setup') {
+    try {
+      const r = await fetch('/api/settings/api_key', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: key }),
+      });
+      if (!r.ok) throw new Error();
+    } catch {
+      error.textContent = 'Failed to save key — is the server running?';
+      error.style.display = '';
+      btn.disabled = false;
+      return;
+    }
+  } else {
+    try {
+      const r = await fetch('/api/settings', { headers: { 'X-API-Key': key } });
+      if (r.status === 401) {
+        error.textContent = 'Incorrect key. Try again.';
+        error.style.display = '';
+        input.value = '';
+        input.focus();
+        btn.disabled = false;
+        return;
+      }
+    } catch {
+      error.textContent = 'Server unreachable. Try again.';
+      error.style.display = '';
+      btn.disabled = false;
+      return;
+    }
+  }
+  apiKey = key;
+  lsSet('apiKey', key);
+  hideAuthScreen();
+  btn.disabled = false;
+  await loadSettings();
+  loadRecords();
+  loadWishlist();
 }
 
 // ── IndexedDB offline queue ─────────────────────────────────────────────────
@@ -1643,9 +1822,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   fetch('/api/health').then(r => r.json()).then(d => {
     if (d.dev) document.getElementById('dev-banner').style.display = 'block';
   }).catch(() => {});
-  await loadSettings();
-  loadRecords();
-  loadWishlist();
   document.getElementById('search').addEventListener('keydown', e => {
     if (e.key === 'Enter' && currentSection === 'wishlist') {
       openWishlistSearchModal(document.getElementById('search').value.trim());
@@ -1656,6 +1832,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const row = e.target.closest('tr.data-row');
     if (row) openDetail(Number(row.dataset.id));
   });
+  const authed = await initAuth();
+  if (!authed) return; // auth screen handles the rest
+  await loadSettings();
+  loadRecords();
+  loadWishlist();
 });
 
 // ── Data ───────────────────────────────────────────────────────────────────
@@ -2703,6 +2884,8 @@ function openSettings() {
   document.getElementById('hidden-format-tags-input').style.opacity = hideObviousFormats ? '1' : '0.4';
   document.getElementById('settings-discogs-username').value = discogsUsername;
   document.getElementById('settings-discogs-token').value = '';  // never pre-fill token
+  document.getElementById('access-key-safety-toggle').checked = false;
+  onAccessKeyToggle();
   document.getElementById('format-safety-toggle').checked = false;
   onFormatToggle();
   document.getElementById('factory-reset-safety-toggle').checked = false;
@@ -2750,7 +2933,7 @@ async function saveSettings() {
   if (newToken) puts.push(['discogs_token', newToken]);
 
   await Promise.all(puts.map(([key, value]) =>
-    fetch(`/api/settings/${key}`, {
+    apiFetch(`/api/settings/${key}`, {
       method: 'PUT', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ value }),
     })
@@ -2826,7 +3009,7 @@ async function doFetchBatch(batch) {
     const chunk = batch.slice(i, i + CONCURRENCY);
     label.textContent = `Fetching ${done + 1}–${Math.min(done + chunk.length, total)} of ${total}…`;
     await Promise.all(chunk.map(rec =>
-      fetch(`/api/records/${rec.id}/refresh`, { method: 'POST' }).catch(() => {})
+      apiFetch(`/api/records/${rec.id}/refresh`, { method: 'POST' }).catch(() => {})
     ));
     done += chunk.length;
     bar.style.width = `${Math.round(done / total * 100)}%`;
@@ -2836,6 +3019,40 @@ async function doFetchBatch(batch) {
   label.textContent = `Done — ${total} record${total !== 1 ? 's' : ''} refreshed`;
   document.querySelectorAll('.fetch-range-btn').forEach(b => b.disabled = false);
   await loadRecords();
+}
+
+function onAccessKeyToggle() {
+  const enabled = document.getElementById('access-key-safety-toggle').checked;
+  const section = document.getElementById('access-key-change-section');
+  section.style.display = enabled ? 'flex' : 'none';
+  const input = document.getElementById('settings-access-key');
+  input.value = '';
+  input.type = 'password';
+  if (enabled) input.focus();
+}
+
+function toggleSettingsAccessKeyVisibility() {
+  const input = document.getElementById('settings-access-key');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+async function doChangeAccessKey() {
+  const newKey = document.getElementById('settings-access-key').value.trim();
+  if (!newKey) { toast('Enter a new access key', 'error'); return; }
+  try {
+    const r = await apiFetch('/api/settings/api_key', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: newKey }),
+    });
+    if (!r.ok) throw new Error();
+    apiKey = newKey;
+    lsSet('apiKey', newKey);
+    document.getElementById('access-key-safety-toggle').checked = false;
+    onAccessKeyToggle();
+    toast('Access key changed');
+  } catch {
+    toast('Failed to change access key', 'error');
+  }
 }
 
 function onFormatToggle() {
@@ -2868,10 +3085,12 @@ function onFactoryResetToggle() {
 }
 
 async function doFactoryReset() {
-  if (!confirm('This will permanently delete all records and reset all settings to defaults. Are you sure?')) return;
+  if (!confirm('This will permanently delete all records and reset all settings to defaults, including the access key. Are you sure?')) return;
   try {
     const r = await apiFetch('/api/admin/factory-reset', { method: 'POST' });
     if (!r.ok) throw new Error();
+    apiKey = '';
+    lsSet('apiKey', '');
     closeModal('modal-settings');
     await loadRecords();
     toast('Database formatted', 'success');
@@ -3484,9 +3703,14 @@ function scheduleReachabilityCheck(attempt) {
   }, delay);
 }
 
-async function apiFetch(url, opts) {
+async function apiFetch(url, opts = {}) {
   try {
-    return await fetch(url, opts);
+    if (apiKey) {
+      opts = { ...opts, headers: { 'X-API-Key': apiKey, ...(opts.headers || {}) } };
+    }
+    const resp = await fetch(url, opts);
+    if (resp.status === 401) showAuthScreen('unlock');
+    return resp;
   } catch (e) {
     if (e instanceof TypeError && navigator.onLine) probeHealth();
     throw e;

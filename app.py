@@ -9,8 +9,8 @@ import logging
 import httpx
 from pathlib import Path
 from datetime import datetime
-from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, UploadFile, File
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
@@ -72,6 +72,39 @@ async def discogs_post(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.R
 
 
 app = FastAPI(title="SleeveNotes")
+
+# ── API key auth ──────────────────────────────────────────────────────────────
+
+_UNPROTECTED_PATHS = {"/api/health", "/api/auth/status"}
+_cached_api_key: str | None = None
+
+
+def get_api_key() -> str:
+    global _cached_api_key
+    if _cached_api_key is None:
+        try:
+            with get_db() as conn:
+                row = conn.execute("SELECT value FROM settings WHERE key='api_key'").fetchone()
+                _cached_api_key = (row["value"] if row else "").strip()
+        except Exception:
+            _cached_api_key = ""
+    return _cached_api_key
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    if path in _UNPROTECTED_PATHS or not path.startswith("/api/"):
+        return await call_next(request)
+    key = get_api_key()
+    if key and request.headers.get("X-API-Key", "") != key:
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
+
+@app.get("/api/auth/status")
+def auth_status():
+    return {"configured": bool(get_api_key())}
 
 def get_discogs_headers() -> dict:
     token = ""
@@ -171,6 +204,8 @@ def init_db():
         # Seed default settings (INSERT OR IGNORE preserves user changes)
         for key, value in SETTINGS_DEFAULTS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
+        # api_key is intentionally excluded from SETTINGS_DEFAULTS so factory-reset never clears it
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('api_key', '')")
 
 init_db()
 
@@ -936,16 +971,19 @@ class SettingIn(BaseModel):
 @app.get("/api/settings")
 def get_settings():
     with get_db() as conn:
-        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        rows = conn.execute("SELECT key, value FROM settings WHERE key != 'api_key'").fetchall()
     return {r["key"]: r["value"] for r in rows}
 
 @app.put("/api/settings/{key}")
 def update_setting(key: str, body: SettingIn):
+    global _cached_api_key
     with get_db() as conn:
         conn.execute(
             "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (key, body.value),
         )
+    if key == "api_key":
+        _cached_api_key = body.value.strip()
     return {"ok": True}
 
 # ── Routes: Admin ────────────────────────────────────────────────────────────
@@ -962,7 +1000,8 @@ def format_db():
 
 @app.post("/api/admin/factory-reset")
 def factory_reset():
-    """Delete all records and restore all settings to their defaults."""
+    """Delete all records and restore all settings to their defaults, including the access key."""
+    global _cached_api_key
     with get_db() as conn:
         conn.execute("DELETE FROM records")
         conn.execute("DELETE FROM tracklist")
@@ -972,6 +1011,10 @@ def factory_reset():
                 "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, value),
             )
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('api_key', '') ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+        )
+    _cached_api_key = ""
     return {"ok": True}
 
 @app.post("/api/admin/clear-images")
