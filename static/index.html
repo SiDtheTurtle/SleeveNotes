@@ -2077,7 +2077,7 @@ function renderTable() {
   for (const r of rows) {
     if (grouped && r.artist !== lastArtist) {
       lastArtist = r.artist;
-      bodyHtml += `<tr class="group-header"><td colspan="15">${esc(displayArtist(r.artist))}</td></tr>`;
+      bodyHtml += `<tr class="group-header"><td colspan="3">${esc(displayArtist(r.artist))}</td><td class="col-sm"></td><td class="col-sm"></td><td class="col-sm"></td><td class="col-md"></td><td class="col-md"></td><td class="col-sm"></td><td class="col-md"></td><td class="col-md"></td><td class="col-md"></td></tr>`;
     }
     bodyHtml += rowHtml(r);
   }
