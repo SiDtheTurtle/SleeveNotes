@@ -1150,7 +1150,7 @@
         <div class="form-group">
           <label class="form-label">Valuation — lowest listing</label>
           <div class="input-prefix-wrap">
-            <span class="input-prefix">£</span>
+            <span class="input-prefix currency-prefix">£</span>
             <input class="form-control" type="number" step="0.01" min="0" id="f-valuation" value="0.00">
           </div>
         </div>
@@ -1213,7 +1213,7 @@
         <div class="form-group">
           <label class="form-label">Price</label>
           <div class="input-prefix-wrap">
-            <span class="input-prefix">£</span>
+            <span class="input-prefix currency-prefix">£</span>
             <input class="form-control" type="number" step="0.01" min="0" id="f-price" value="0">
           </div>
         </div>
@@ -1221,7 +1221,7 @@
         <div class="form-group">
           <label class="form-label">P&amp;P</label>
           <div class="input-prefix-wrap">
-            <span class="input-prefix">£</span>
+            <span class="input-prefix currency-prefix">£</span>
             <input class="form-control" type="number" step="0.01" min="0" id="f-pp" value="0">
           </div>
         </div>
@@ -1284,6 +1284,13 @@
             <div class="toggle-track"></div>
             <div class="toggle-thumb"></div>
           </label>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Currency symbol</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Symbol shown alongside prices. Also used when syncing price and P&amp;P fields to Discogs.</div>
+          </div>
+          <input class="form-control" type="text" id="settings-currency" placeholder="e.g. £, $, €" style="width:80px;text-align:center">
         </div>
         <div style="display:flex;flex-direction:column;gap:0.4rem;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
@@ -1553,6 +1560,7 @@ let cleanArtists = true;
 let includePP = false;
 let hideObviousFormats = true;
 let hiddenFormatTags = new Set(['Album', 'LP', 'Stereo', 'Vinyl']);
+let currencySymbol = '£';
 let filterFormat = null; // active format tag string, or null
 let selectedTileId = null;
 let showValuations = false;
@@ -1901,6 +1909,10 @@ async function loadSettings() {
         showValuations = s.show_valuations === 'true';
         document.getElementById('show-valuations').checked = showValuations;
       }
+      if (s.currency !== undefined) {
+        currencySymbol = s.currency || '£';
+        document.querySelectorAll('.currency-prefix').forEach(el => el.textContent = currencySymbol);
+      }
       discogsUsername = s.discogs_username || '';
       try { discogsFieldMappings = JSON.parse(s.discogs_field_mappings || '{}'); } catch { discogsFieldMappings = {}; }
       // token is not surfaced to JS state — it stays in the DB and is read server-side
@@ -1951,9 +1963,9 @@ function updateStats() {
   const valuation = records.reduce((s,r) => s + (r.valuation||0), 0);
   document.getElementById('s-total').textContent = records.length;
   document.getElementById('s-cost').closest('.stat-item').style.display = showValuations ? '' : 'none';
-  document.getElementById('s-cost').textContent = '£' + cost.toFixed(2);
+  document.getElementById('s-cost').textContent = currencySymbol + cost.toFixed(2);
   document.getElementById('s-valuation').closest('.stat-item').style.display = showValuations ? '' : 'none';
-  document.getElementById('s-valuation').textContent = valuation ? '£' + valuation.toFixed(2) : '—';
+  document.getElementById('s-valuation').textContent = valuation ? currencySymbol + valuation.toFixed(2) : '—';
   const wCount = wishlistItems.filter(w => !w.fulfilled).length;
   document.getElementById('s-wishlist').textContent = wCount || '—';
 }
@@ -2086,8 +2098,8 @@ function rowHtml(r) {
     </td>
     <td class="overflow col-md" title="${esc(r.retailer)}">${esc(r.retailer)}</td>
     <td class="text-mono col-md">${fmtDate(r.purchase_date)}</td>
-    <td class="text-mono text-right col-sm">£${(r.price||0).toFixed(2)}</td>
-    <td class="text-mono text-right col-md">${r.valuation ? '£' + (r.valuation).toFixed(2) : '—'}</td>
+    <td class="text-mono text-right col-sm">${currencySymbol}${(r.price||0).toFixed(2)}</td>
+    <td class="text-mono text-right col-md">${r.valuation ? currencySymbol + (r.valuation).toFixed(2) : '—'}</td>
     <td class="overflow col-md" title="${esc(r.discogs_id)}"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></td>
     <td class="note-cell col-md" title="${esc(r.notes)}">${esc(r.notes)}</td>
   </tr>`;
@@ -2226,9 +2238,9 @@ async function openDetail(id) {
           <div class="detail-row"><span class="detail-key">Retailer</span><span class="detail-val">${esc(r.retailer)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Order Ref</span><span class="detail-val">${esc(r.order_ref)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Purchase Date</span><span class="detail-val">${fmtDate(r.purchase_date)||'—'}</span></div>
-          <div class="detail-row"><span class="detail-key">Price</span><span class="detail-val">${r.price != null ? `£${r.price.toFixed(2)}` : '—'}</span></div>
-          <div class="detail-row"><span class="detail-key">P&amp;P</span><span class="detail-val">${r.pp != null ? `£${r.pp.toFixed(2)}` : '—'}</span></div>
-          <div class="detail-row"><span class="detail-key">Valuation</span><span class="detail-val">${r.valuation ? `£${r.valuation.toFixed(2)} <span style="font-size:10px;color:var(--ink-light)">(lowest listing)</span>` : '—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Price</span><span class="detail-val">${r.price != null ? `${currencySymbol}${r.price.toFixed(2)}` : '—'}</span></div>
+          <div class="detail-row"><span class="detail-key">P&amp;P</span><span class="detail-val">${r.pp != null ? `${currencySymbol}${r.pp.toFixed(2)}` : '—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Valuation</span><span class="detail-val">${r.valuation ? `${currencySymbol}${r.valuation.toFixed(2)} <span style="font-size:10px;color:var(--ink-light)">(lowest listing)</span>` : '—'}</span></div>
           <div class="detail-row"><span class="detail-key">Discogs</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></span></div>
           <div class="detail-row"><span class="detail-key">Notes</span><span class="detail-val" style="white-space:pre-wrap">${esc(r.notes)||'—'}</span></div>
         </div>
@@ -2678,8 +2690,8 @@ async function doImportAllDirect(input) {
 const DISCOGS_DB_COLS = [
   ['purchase_date', 'Purchase Date'],
   ['is_new', 'Purchase Condition'],
-  ['price', 'Price (£)'],
-  ['pp', 'P&P (£)'],
+  ['price', () => `Price (${currencySymbol})`],
+  ['pp', () => `P&P (${currencySymbol})`],
   ['retailer', 'Retailer'],
   ['order_ref', 'Order Ref'],
   ['curr_cond', 'Media Condition'],
@@ -2703,7 +2715,7 @@ function formatExportValue(dbCol, value) {
   if (dbCol === 'purchase_date') return value ? fmtDate(value) : null;
   if (dbCol === 'price' || dbCol === 'pp') {
     const n = parseFloat(value);
-    return isNaN(n) ? null : n.toFixed(2);
+    return isNaN(n) ? null : currencySymbol + n.toFixed(2);
   }
   if (dbCol === 'curr_cond' || dbCol === 'sleeve_cond') {
     return CONDITION_TO_DISCOGS[String(value).trim()] || String(value).trim() || null;
@@ -2785,11 +2797,12 @@ function renderFieldMappings(fields, currentMappings) {
   const fieldOptions = [['', '— Not mapped —'], ...fields.map(f => [String(f.id), f.name])];
   rows.innerHTML = DISCOGS_DB_COLS.map(([dbCol, label]) => {
     const current = byDbCol[dbCol] || '';
+    const labelStr = typeof label === 'function' ? label() : label;
     const options = fieldOptions.map(([v, name]) =>
       `<option value="${v}"${v === current ? ' selected' : ''}>${esc(name)}</option>`
     ).join('');
     return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
-      <span style="flex:1;font-size:13px">${esc(label)}</span>
+      <span style="flex:1;font-size:13px">${esc(labelStr)}</span>
       <select class="form-control" style="width:200px;padding:0.25rem 0.5rem" data-db-col="${dbCol}">${options}</select>
     </div>`;
   }).join('');
@@ -2847,11 +2860,19 @@ function renderSyncPreview(diff) {
           <th style="font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-light);font-weight:500;text-align:left;padding:0 0.5rem 0.25rem;width:35%">SleeveNotes</th>
           <th style="font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-light);font-weight:500;text-align:left;padding:0 0 0.25rem 0.5rem;width:35%">Discogs</th>
         </tr></thead>
-        <tbody>${Object.entries(r.changes).map(([col, {from, to}]) => {
+        <tbody>${Object.entries(r.changes).map(([col, change]) => {
+          const {from, to, raw_to, currency_mismatch} = change;
           const label = DIFF_FIELD_LABELS[col] || col;
-          const snVal = (from !== null && from !== undefined && String(from).trim()) ? esc(String(from)) : '<span style="color:var(--ink-light)">—</span>';
-          const discogsVal = (to !== null && to !== undefined && String(to).trim())
-            ? `<span style="color:var(--green);font-weight:500">${esc(String(to))}</span>`
+          const isPrice = col === 'price' || col === 'pp' || col === 'valuation';
+          const fmtSnMoney = (v) => (v !== null && v !== undefined && String(v).trim()) ? currencySymbol + parseFloat(v).toFixed(2) : null;
+          const fromDisplay = isPrice ? fmtSnMoney(from) : (from !== null && from !== undefined && String(from).trim() ? String(from) : null);
+          // For Discogs side: use raw_to if available (preserves original symbol/format), else format with SN symbol
+          const toDisplay = raw_to != null ? raw_to
+            : isPrice ? fmtSnMoney(to)
+            : (to !== null && to !== undefined && String(to).trim() ? String(to) : null);
+          const snVal = fromDisplay ? esc(fromDisplay) : '<span style="color:var(--ink-light)">—</span>';
+          const discogsVal = toDisplay
+            ? `${esc(toDisplay)}${currency_mismatch ? ' <span style="color:var(--gold);font-weight:400">(currency mismatch)</span>' : ''}`
             : `<span style="color:var(--red);font-weight:500">Deleted</span>`;
           return `<tr>
             <td style="font-size:11px;color:var(--ink-light);padding:0.15rem 0.5rem 0.15rem 0">${esc(label)}</td>
@@ -3026,6 +3047,7 @@ function openSettings() {
   document.getElementById('clean-artists-toggle').checked = cleanArtists;
   document.getElementById('include-pp-toggle').checked = includePP;
   document.getElementById('show-valuations').checked = showValuations;
+  document.getElementById('settings-currency').value = currencySymbol;
   document.getElementById('hide-format-tags-toggle').checked = hideObviousFormats;
   document.getElementById('hidden-format-tags-input').value = [...hiddenFormatTags].join(', ');
   document.getElementById('hidden-format-tags-input').disabled = !hideObviousFormats;
@@ -3071,10 +3093,12 @@ async function saveSettings() {
   });
 
   const newShowValuations = document.getElementById('show-valuations').checked;
+  const newCurrency = document.getElementById('settings-currency').value.trim() || '£';
   const puts = [
     ['clean_artists', String(newCleanArtists)],
     ['include_pp', String(newIncludePP)],
     ['show_valuations', String(newShowValuations)],
+    ['currency', newCurrency],
     ['hide_obvious_formats', String(newHideFormatTags)],
     ['hidden_format_tags', newHiddenTags],
     ['discogs_username', newUsername],
@@ -3093,6 +3117,8 @@ async function saveSettings() {
   cleanArtists = newCleanArtists;
   includePP = newIncludePP;
   showValuations = newShowValuations;
+  currencySymbol = newCurrency;
+  document.querySelectorAll('.currency-prefix').forEach(el => el.textContent = currencySymbol);
   hideObviousFormats = newHideFormatTags;
   hiddenFormatTags = new Set(newHiddenTags.split(',').map(t => t.trim()).filter(Boolean));
   discogsUsername = newUsername;
@@ -3560,7 +3586,7 @@ function openWishlistDetail(id) {
         ${w.year ? `<div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${w.year}</span></div>` : ''}
         ${w.genres ? `<div class="detail-row"><span class="detail-key">Genres</span><span class="detail-val">${esc(w.genres)}</span></div>` : ''}
         ${w.styles ? `<div class="detail-row"><span class="detail-key">Styles</span><span class="detail-val">${esc(w.styles)}</span></div>` : ''}
-        ${w.lowest_price != null ? `<div class="detail-row"><span class="detail-key">Lowest price</span><span class="detail-val">£${w.lowest_price.toFixed(2)}${w.num_for_sale ? ` (${w.num_for_sale} for sale)` : ''}</span></div>` : ''}
+        ${w.lowest_price != null ? `<div class="detail-row"><span class="detail-key">Lowest price</span><span class="detail-val">${currencySymbol}${w.lowest_price.toFixed(2)}${w.num_for_sale ? ` (${w.num_for_sale} for sale)` : ''}</span></div>` : ''}
         <div class="detail-row"><span class="detail-key">Added</span><span class="detail-val">${fmtDate(w.added_at ? w.added_at.split(' ')[0] : '') || '—'}</span></div>
         <div class="detail-row"><span class="detail-key">Master</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/master/${esc(w.master_id)}" target="_blank">m${esc(w.master_id)}</a></span></div>
       </div>
