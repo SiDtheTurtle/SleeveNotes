@@ -6,6 +6,7 @@ import re
 import sqlite3
 import asyncio
 import logging
+import zipfile
 import httpx
 from pathlib import Path
 from datetime import datetime
@@ -1211,6 +1212,98 @@ async def export_csv():
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=sleevenotes_export.csv"},
     )
+
+
+@app.get("/api/export/db")
+def export_db():
+    buf = io.BytesIO()
+    with get_db() as conn:
+        sql = "\n".join(conn.iterdump())
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("sleevenotes.sql", sql)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=sleevenotes_db.zip"})
+
+
+@app.get("/api/export/images")
+def export_images():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(IMAGES_DIR.iterdir()):
+            if f.is_file():
+                zf.write(f, f.name)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=sleevenotes_images.zip"})
+
+
+@app.get("/api/export/all")
+def export_all():
+    buf = io.BytesIO()
+    with get_db() as conn:
+        sql = "\n".join(conn.iterdump())
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("sleevenotes.sql", sql)
+        for f in sorted(IMAGES_DIR.iterdir()):
+            if f.is_file():
+                zf.write(f, f.name)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=sleevenotes_backup.zip"})
+
+
+@app.post("/api/import/db")
+async def import_db(file: UploadFile = File(...)):
+    global _cached_api_key
+    content = await file.read()
+    with zipfile.ZipFile(io.BytesIO(content), "r") as zf:
+        sql_names = [n for n in zf.namelist() if n.endswith(".sql")]
+        if not sql_names:
+            raise HTTPException(status_code=400, detail="No .sql file found in zip")
+        sql = zf.read(sql_names[0]).decode("utf-8")
+    DB_PATH.unlink(missing_ok=True)
+    with get_db() as conn:
+        conn.executescript(sql)
+    _cached_api_key = None
+    return {"ok": True}
+
+
+@app.post("/api/import/images")
+async def import_images_zip(file: UploadFile = File(...)):
+    content = await file.read()
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    count = 0
+    with zipfile.ZipFile(io.BytesIO(content), "r") as zf:
+        for name in zf.namelist():
+            if name and "/" not in name and not name.endswith(".sql"):
+                (IMAGES_DIR / name).write_bytes(zf.read(name))
+                count += 1
+    return {"imported": count}
+
+
+@app.post("/api/import/all")
+async def import_all(file: UploadFile = File(...)):
+    global _cached_api_key
+    content = await file.read()
+    with zipfile.ZipFile(io.BytesIO(content), "r") as zf:
+        names = zf.namelist()
+        sql_names = [n for n in names if n.endswith(".sql")]
+        if not sql_names:
+            raise HTTPException(status_code=400, detail="No .sql file found in zip")
+        sql = zf.read(sql_names[0]).decode("utf-8")
+        DB_PATH.unlink(missing_ok=True)
+        with get_db() as conn:
+            conn.executescript(sql)
+        _cached_api_key = None
+        IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        img_count = 0
+        for name in names:
+            if name and "/" not in name and not name.endswith(".sql"):
+                (IMAGES_DIR / name).write_bytes(zf.read(name))
+                img_count += 1
+    return {"ok": True, "images": img_count}
+
 
 # ── Routes: Wishlist ─────────────────────────────────────────────────────────
 

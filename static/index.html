@@ -1344,9 +1344,18 @@
 
       <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
         <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Data</div>
+        <div style="font-size:12px;font-weight:500;color:var(--ink)">Import</div>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-          <label id="btn-import-csv" class="btn btn-secondary btn-sm" style="cursor:pointer">Import from CSV<input id="input-import-csv" type="file" accept=".csv" style="display:none" onchange="importCsv(this)"></label>
+          <label id="btn-import-csv" class="btn btn-secondary btn-sm" style="cursor:pointer">Import from CSV…<input id="input-import-csv" type="file" accept=".csv" style="display:none" onchange="importCsv(this)"></label>
+        </div>
+        <div style="font-size:12px;color:var(--ink-light)">To restore database or image backups, see <strong>Restore from Backup</strong> in the Danger Zone below.</div>
+        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
+        <div style="font-size:12px;font-weight:500;color:var(--ink)">Export</div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="doExport()">Export to CSV</button>
+          <button id="btn-export-db" class="btn btn-secondary btn-sm" onclick="doExportDb(this)">Export Database</button>
+          <button id="btn-export-images" class="btn btn-secondary btn-sm" onclick="doExportImages(this)">Export Images</button>
+          <button id="btn-export-all" class="btn btn-secondary btn-sm" onclick="doExportAll(this)">Export All</button>
         </div>
       </div>
 
@@ -1376,6 +1385,31 @@
           <button class="btn btn-danger" id="change-access-key-btn" onclick="doChangeAccessKey()" style="align-self:flex-start">
             Change Key
           </button>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--ink)">Restore from Backup</div>
+            <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Restore database, images, or both from a backup zip. Replaces existing data. Cannot be undone.</div>
+          </div>
+          <label class="toggle" style="flex-shrink:0" title="Enable to unlock">
+            <input type="checkbox" id="import-db-safety-toggle" onchange="onImportToggle()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <label id="import-db-btn" class="btn btn-danger btn-sm" disabled style="opacity:0.4;cursor:not-allowed">
+            Import Database…<input id="input-import-db" type="file" accept=".zip" style="display:none" onchange="doImportDb(this)">
+          </label>
+          <label id="import-images-btn" class="btn btn-danger btn-sm" disabled style="opacity:0.4;cursor:not-allowed">
+            Import Images…<input id="input-import-images" type="file" accept=".zip" style="display:none" onchange="doImportImages(this)">
+          </label>
+          <label id="import-all-btn" class="btn btn-danger btn-sm" disabled style="opacity:0.4;cursor:not-allowed">
+            Import All…<input id="input-import-all" type="file" accept=".zip" style="display:none" onchange="doImportAll(this)">
+          </label>
         </div>
 
         <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
@@ -2541,8 +2575,103 @@ async function importCsv(input) {
   }
 }
 
-function doExport() {
-  window.location.href = '/api/export';
+async function doExportDownload(url, filename, btn) {
+  const origText = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Exporting…'; }
+  try {
+    const r = await apiFetch(url);
+    if (!r.ok) throw new Error();
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch {
+    toast('Export failed', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+function doExport() { doExportDownload('/api/export', 'sleevenotes_export.csv'); }
+
+async function doExportDb(btn)     { await doExportDownload('/api/export/db',     'sleevenotes_db.zip',        btn); }
+async function doExportImages(btn) { await doExportDownload('/api/export/images', 'sleevenotes_images.zip',    btn); }
+async function doExportAll(btn)    { await doExportDownload('/api/export/all',    'sleevenotes_backup.zip',    btn); }
+
+function onImportToggle() {
+  const on = document.getElementById('import-db-safety-toggle').checked;
+  for (const id of ['import-db-btn', 'import-images-btn', 'import-all-btn']) {
+    const btn = document.getElementById(id);
+    btn.disabled = !on;
+    btn.style.opacity = on ? '1' : '0.4';
+    btn.style.cursor = on ? 'pointer' : 'not-allowed';
+  }
+}
+
+function onImportDbToggle()     { onImportToggle(); }
+function onImportImagesToggle() { onImportToggle(); }
+function onImportAllToggle()    { onImportToggle(); }
+
+async function doImportDb(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  if (!confirm(`Replace the entire database with "${file.name}"? This cannot be undone.`)) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await apiFetch('/api/import/db', { method: 'POST', body: fd });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.detail || 'Import failed', 'error'); return; }
+    toast('Database imported — reloading…');
+    setTimeout(() => location.reload(), 1200);
+  } catch { toast('Import failed', 'error'); }
+}
+
+async function doImportImages(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await apiFetch('/api/import/images', { method: 'POST', body: fd });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.detail || 'Import failed', 'error'); return; }
+    const d = await r.json();
+    toast(`Imported ${d.imported} image${d.imported !== 1 ? 's' : ''}`);
+    loadRecords();
+  } catch { toast('Import failed', 'error'); }
+}
+
+async function doImportAll(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  if (!confirm(`Replace the entire database and images with "${file.name}"? This cannot be undone.`)) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await apiFetch('/api/import/all', { method: 'POST', body: fd });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.detail || 'Import failed', 'error'); return; }
+    toast('Backup restored — reloading…');
+    setTimeout(() => location.reload(), 1200);
+  } catch { toast('Import failed', 'error'); }
+}
+
+async function doImportAllDirect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  if (!confirm(`Restore from "${file.name}"? This will replace your current database and images.`)) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await apiFetch('/api/import/all', { method: 'POST', body: fd });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.detail || 'Import failed', 'error'); return; }
+    toast('Backup restored — reloading…');
+    setTimeout(() => location.reload(), 1200);
+  } catch { toast('Import failed', 'error'); }
 }
 
 // ── Discogs Sync ──────────────────────────────────────────────────────────────
@@ -2911,6 +3040,8 @@ function openSettings() {
   onFactoryResetToggle();
   document.getElementById('clear-images-safety-toggle').checked = false;
   onClearImagesToggle();
+  document.getElementById('import-db-safety-toggle').checked = false;
+  onImportToggle();
   buildFetchRanges();
   document.getElementById('fetch-progress').classList.add('hidden');
   // Reset mapping section then fetch (or prompt if no username yet)
@@ -3542,6 +3673,11 @@ function emptyState() {
       <div class="empty-icon">♪</div>
       <div class="empty-text">Your collection is empty</div>
       <div class="empty-sub">Use <strong>Add Record</strong> or <strong>Import</strong> to get started</div>
+      <div class="empty-sub" style="margin-top:0.75rem">
+        <label class="btn btn-secondary btn-sm" style="cursor:pointer">
+          Restore from backup…<input type="file" accept=".zip" style="display:none" onchange="doImportAllDirect(this)">
+        </label>
+      </div>
     </div>`;
   }
   return `<div class="empty">
