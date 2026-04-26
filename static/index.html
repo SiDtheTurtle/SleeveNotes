@@ -48,6 +48,12 @@
   }
 
   /* ── Header ── */
+  #sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
   header {
     background: var(--ink);
     color: var(--cream);
@@ -56,9 +62,6 @@
     align-items: center;
     justify-content: space-between;
     height: 56px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
     border-bottom: 2px solid var(--gold);
   }
 
@@ -91,9 +94,6 @@
   /* ── Dev banner ── */
   #dev-banner {
     display: none;
-    position: sticky;
-    top: 56px;
-    z-index: 100;
     background: #B45309;
     color: #FEF3C7;
     text-align: center;
@@ -107,9 +107,6 @@
   /* ── Offline banner ── */
   #offline-banner {
     display: none;
-    position: sticky;
-    top: 56px;
-    z-index: 99;
     background: #7A4800;
     color: #F5F0E8;
     text-align: center;
@@ -990,6 +987,7 @@
   </div>
 </div>
 
+<div id="sticky-top">
 <header>
   <div class="logo">
     <span class="logo-dot"></span>
@@ -1072,6 +1070,7 @@
 </div>
 
 <div class="format-filter-bar" id="format-filter-bar" style="display:none"></div>
+</div><!-- #sticky-top -->
 
 <main id="main-content"></main>
 
