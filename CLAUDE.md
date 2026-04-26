@@ -33,9 +33,7 @@ Always create a feature branch before making any code or config changes. Never c
 
 Docker images are published to `ghcr.io/sidtheturtle/sleevenotes` on version tag pushes only — main branch pushes do not trigger a build.
 
-**Version strategy:** `vMAJOR.MINOR.PATCH` — currently on `v1.x.y`, approaching `v1.9.0`. New features increment minor, bug fixes increment patch.
-
-**Remaining open FR:** #52 — Pagination (table default 50 rows, tiles default 25, page size configurable in settings).
+**Version strategy:** `vMAJOR.MINOR.PATCH` — currently on `v1.x.y`. New features increment minor, bug fixes increment patch.
 
 **To cut a release:** `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..." --target main`
 
