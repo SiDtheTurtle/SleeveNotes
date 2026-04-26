@@ -1845,6 +1845,14 @@ let discogsFields = [];
 let diffData = null;
 let syncSource = 'discogs'; // 'discogs' | 'csv'
 
+const DIFF_FIELD_LABELS = {
+  artist: 'Artist', title: 'Title', label: 'Label', cat_no: 'Cat No.',
+  year: 'Year', format: 'Format', curr_cond: 'Media Cond.', sleeve_cond: 'Sleeve Cond.',
+  retailer: 'Retailer', order_ref: 'Order Ref', purchase_date: 'Purchase Date',
+  price: 'Price', pp: 'P&P', notes: 'Notes', is_new: 'New/Pre-owned',
+  valuation: 'Valuation', instance_id: 'Instance ID', folder_id: 'Folder',
+};
+
 async function loadSettings() {
   try {
     const r = await apiFetch('/api/settings');
@@ -2704,13 +2712,25 @@ function renderSyncPreview(diff) {
     html += `<div style="margin-bottom:1.25rem">
       <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--gold);font-weight:500;margin-bottom:0.5rem">Differences (${diff.changed.length})</div>`;
     diff.changed.forEach((r, i) => {
-      const changeList = Object.entries(r.changes).map(([col, {from, to}]) => {
-        const fromStr = (from !== null && from !== undefined && String(from).trim()) ? esc(String(from)) : '—';
-        const toStr = (to !== null && to !== undefined && String(to).trim())
-          ? `<strong>${esc(String(to))}</strong>`
-          : `<strong style="color:var(--red)">[Deleted]</strong>`;
-        return `<span style="font-size:11px;color:var(--ink-light)">${esc(col)}: <em>${fromStr}</em> → ${toStr}</span>`;
-      }).join(' &nbsp;·&nbsp; ');
+      const changeList = `<table style="width:100%;border-collapse:collapse;margin-bottom:0.4rem">
+        <thead><tr>
+          <th style="font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-light);font-weight:500;text-align:left;padding:0 0.5rem 0.25rem 0;width:30%">Field</th>
+          <th style="font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-light);font-weight:500;text-align:left;padding:0 0.5rem 0.25rem;width:35%">SleeveNotes</th>
+          <th style="font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-light);font-weight:500;text-align:left;padding:0 0 0.25rem 0.5rem;width:35%">Discogs</th>
+        </tr></thead>
+        <tbody>${Object.entries(r.changes).map(([col, {from, to}]) => {
+          const label = DIFF_FIELD_LABELS[col] || col;
+          const snVal = (from !== null && from !== undefined && String(from).trim()) ? esc(String(from)) : '<span style="color:var(--ink-light)">—</span>';
+          const discogsVal = (to !== null && to !== undefined && String(to).trim())
+            ? `<span style="color:var(--green);font-weight:500">${esc(String(to))}</span>`
+            : `<span style="color:var(--red);font-weight:500">Deleted</span>`;
+          return `<tr>
+            <td style="font-size:11px;color:var(--ink-light);padding:0.15rem 0.5rem 0.15rem 0">${esc(label)}</td>
+            <td style="font-size:11px;color:var(--ink-mid);padding:0.15rem 0.5rem;max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(String(from ?? ''))}">${snVal}</td>
+            <td style="font-size:11px;padding:0.15rem 0 0.15rem 0.5rem;max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(String(to ?? ''))}">${discogsVal}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
       const changedCols = new Set(Object.keys(r.changes));
       const skips = getDropdownSkips(r.current, changedCols);
       const skipNote = skips.length
