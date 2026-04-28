@@ -46,7 +46,9 @@
       "Bash(curl -s -H \"X-API-Key: HelloWorld\" \"http://localhost:2026/api/wishlist/13/versions/browse\")",
       "Bash(curl *)",
       "Bash(sqlite3 /data/sleevenotes.db \"SELECT value FROM settings WHERE key IN \\('discogs_token','discogs_username'\\);\")",
-      "Bash(sqlite3 /mnt/data/sleevenotes.db \"SELECT key, value FROM settings WHERE key IN \\('discogs_token','discogs_username'\\);\")"
+      "Bash(sqlite3 /mnt/data/sleevenotes.db \"SELECT key, value FROM settings WHERE key IN \\('discogs_token','discogs_username'\\);\")",
+      "Bash(git show *)",
+      "Read(//tmp/**)"
     ]
   }
 }
