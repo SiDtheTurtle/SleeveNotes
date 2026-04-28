@@ -440,10 +440,52 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
   - All queues flushed on reconnect via `flushPendingQueue()` and by Background Sync on Android.
   - Discogs token never sent to browser; offline search uses unauthenticated Discogs API (25 req/min, no thumbnails returned — ♪ placeholder shown).
 
-## Outstanding TODOs (feat/wishlist-versions branch)
+## FR #73 — Wishlist Versions + Wantlist Sync: First Attempt (branch: feat/wishlist-versions)
 
-1. **Find pressings broken in Offline Mode.** `openVersionsBrowse` calls `apiFetch('/api/wishlist/{id}/versions/browse')` which fails when server unreachable. Should hit Discogs API directly in Offline Mode (same pattern as `doWishlistSearch`). Button is already disabled in Read-Only Mode (`!navigator.onLine`), so only Offline Mode (`serverReachable === false`) needs the fallback.
+This feature was attempted on branch `feat/wishlist-versions` and shelved. The branch is preserved for reference. Do not merge. A second attempt should be designed from scratch using this summary.
 
-2. **Offline queue not flushing on reconnect.** Changes made in Offline Mode (e.g. unfulfilling a version, adding a wishlist item) are not persisting to the DB on reconnect. Likely regressed this session — investigate the full `flushPendingQueue()` path and the `loadWishlist()` / `_versionsByWishlistId` changes for anything that might short-circuit or swallow queue flush errors.
+### What was built
 
-3. **Full code review: compare wishlist/versions offline strategies against collection.** Audit all offline paths in the wishlist + versions feature against the collection's established patterns (SW caching, queue flush, error handling) to catch any remaining inconsistencies before merging.
+**Phase 1 — Schema + backend**
+- `wishlist_versions` table (see schema in Database section above)
+- Endpoints: `GET/POST /api/wishlist/{id}/versions`, `PUT/DELETE /api/wishlist/versions/{id}`, `GET /api/release/{id}/info`, `PATCH /api/wishlist/versions/{id}/info`
+- `GET /api/wantlist/preview` + `POST /api/wantlist/sync` — bidirectional Discogs wantlist sync
+
+**Phase 2 — Version browsing UI**
+- Versions tab inside `modal-wishlist-detail` (Details / Versions tabs)
+- "Find pressings" panel: paginated vinyl versions from Discogs, multi-select, add selected
+- Per-version ℹ info panel (identifiers, release notes, community rating)
+- Inline notes edit (✎ button), fulfilled checkbox per version
+- SW caching for `GET /api/wishlist/{id}/versions`
+- IDB `sn_offline` v3: five stores (`wishlist_queue`, `wishlist_updates`, `version_queue`, `version_updates`, `version_deletes`)
+- Offline queue flush via `flushPendingQueue()` in-page + SW Background Sync (Android)
+
+**Phase 3 — Wantlist sync UI**
+- Settings → Discogs: "Sync Wantlist…" button
+- Preview modal groups Discogs-only items by master, shows sn_only and fulfilled_in_discogs sections
+- Wantlist items with no `master_id` skipped; count shown
+
+### Key design decisions made
+
+- **`master_id` IS in wantlist list response** (`basic_information`) — no extra `/releases/{id}` calls needed per-item for preview
+- **`notes` IS in wantlist list response** — treat as SN-only on add; don't try to import from Discogs (notes only exist server-side after POST)
+- **Fulfilled logic moved to version level.** Master `fulfilled` is auto-computed: all versions fulfilled → master fulfilled. Masters with no versions keep manual fulfilled behaviour.
+- **Selected versions only** — user checks specific pressings to track; not all versions auto-added
+- **Discogs wantlist two-step write**: `PUT` to add, then `POST` to set notes (PUT query params don't stick)
+- **`discogs_synced` column not needed** — sync state checked live each run
+- **Releases with no `master_id`** skipped with a count surfaced in the sync modal
+
+### What didn't work / why it was shelved
+
+1. **Fulfilled does not add to collection.** Marking a version as fulfilled only flags it; it does not prompt or route the user to add the record to their collection. This is the core UX gap — the whole point of tracking versions is to buy one, and the app has no flow for "I bought this, add it to my collection." The existing `wishlist_match` flow goes the wrong direction (add record → prompted to mark wishlist fulfilled, not the other way).
+
+2. **Offline queue had a silent no-flush bug.** `serverReachable` initialises to `true`. On page reload with items queued from a previous offline session, `flushPendingQueue()` was guarded by `wasUnreachable && reachable` — a condition that never fires on a fresh load. Fix was applied (flush on any `setServerReachable(true)`) but exposed that the feature had been tested with a stale server assumption.
+
+3. **Overall quality.** The implementation accumulated bugs across phases, had inconsistencies with collection patterns identified in a post-hoc audit, and required repeated patching. The feature was never stable enough to ship.
+
+### Recommendations for second attempt
+
+- **Design the fulfilled → collection flow first.** When a version is marked fulfilled, it should open the add-record form pre-filled with the release's Discogs ID. The existing `fetchDiscogs()` + `wishlist_match` prompt flow already handles the reverse direction — the second attempt should make the versions tab a first-class entry point into that flow.
+- **Write the spec before any code.** The phased build approach led to design decisions being made incrementally; the fulfilled UX was never fully thought through.
+- **Simplify offline scope.** The five-store IDB queue was over-engineered for a feature that rarely needs offline writes. Consider whether version edits need offline queuing at all, or whether read-only offline (SW cache) is sufficient.
+- **Keep the `wishlist_versions` schema** — it is sound. The DB work from Phase 1 is reusable.
