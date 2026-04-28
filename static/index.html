@@ -1368,19 +1368,12 @@
         </div>
         <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
         <div>
-          <div style="font-size:13px;font-weight:500;color:var(--ink)">Sync Collection</div>
-          <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Two-way sync between SleeveNotes and your Discogs collection. Shows a full diff — choose per record which direction to sync, or skip.</div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Sync with Discogs</div>
+          <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Two-way sync between SleeveNotes and Discogs. Each shows a full diff before making any changes.</div>
         </div>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-          <button id="btn-sync-discogs" class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync with Discogs…</button>
-        </div>
-        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
-        <div>
-          <div style="font-size:13px;font-weight:500;color:var(--ink)">Sync Wantlist</div>
-          <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Two-way sync between your SN wishlist versions and your Discogs wantlist. Shows a diff — choose what to add or remove.</div>
-        </div>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-          <button id="btn-sync-wantlist" class="btn btn-secondary btn-sm" onclick="openWantlistSync()">Sync Wantlist…</button>
+          <button id="btn-sync-discogs" class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync Collection…</button>
+          <button id="btn-sync-wantlist" class="btn btn-secondary btn-sm" onclick="openWantlistSync()">Sync Wishlist…</button>
         </div>
       </div>
 
@@ -1537,7 +1530,7 @@
 <div class="modal-backdrop" id="modal-wantlist-sync">
   <div class="modal" style="max-width:680px">
     <div class="modal-header">
-      <span class="modal-title">Wantlist Sync Preview</span>
+      <span class="modal-title">Wishlist Sync Preview</span>
       <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-wantlist-sync')">✕</button>
     </div>
     <div class="modal-body">
@@ -3274,9 +3267,28 @@ function renderWantlistSyncPreview(diff) {
     return `<div class="version-thumb-placeholder">♪</div>`;
   };
 
-  const masterLabel = (item) => {
-    if (item.new_master) return `<span style="color:var(--green);font-size:11px;font-family:var(--font-mono)">New: ${esc(item.artist)} — ${esc(item.title)}</span>`;
-    if (item.wishlist_artist) return `<span style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${esc(item.wishlist_artist)} — ${esc(item.wishlist_title)}</span>`;
+  // Group discogs_only by master
+  const masterGroups = {};
+  diff.discogs_only.forEach(item => {
+    const key = item.master_id || item.discogs_id;
+    if (!masterGroups[key]) masterGroups[key] = [];
+    masterGroups[key].push(item);
+  });
+  const masterGroupList = Object.entries(masterGroups).sort(([, a], [, b]) => {
+    const ra = a[0], rb = b[0];
+    const artistA = (ra.wishlist_artist || ra.artist || '').toLowerCase();
+    const artistB = (rb.wishlist_artist || rb.artist || '').toLowerCase();
+    if (artistA !== artistB) return artistA < artistB ? -1 : 1;
+    const titleA = (ra.wishlist_title || ra.title || '').toLowerCase();
+    const titleB = (rb.wishlist_title || rb.title || '').toLowerCase();
+    return titleA < titleB ? -1 : 1;
+  });
+
+  const masterLabel = (rep) => {
+    const n = masterGroups[rep.master_id || rep.discogs_id].length;
+    const vBadge = `<span style="font-size:10px;font-family:var(--font-mono);color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:1px 5px;margin-left:0.4rem">${n} version${n !== 1 ? 's' : ''}</span>`;
+    if (rep.new_master) return `<span style="font-size:11px;font-family:var(--font-mono)"><span style="color:var(--green);font-weight:600">New wishlist item + pressing</span> — ${esc(rep.artist)} — ${esc(rep.title)}${vBadge}</span>`;
+    if (rep.wishlist_artist) return `<span style="font-size:11px;font-family:var(--font-mono);color:var(--green)"><span style="font-weight:600">New wishlist pressing</span> — ${esc(rep.wishlist_artist)} — ${esc(rep.wishlist_title)}${vBadge}</span>`;
     return `<span style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">Master unknown</span>`;
   };
 
@@ -3284,19 +3296,17 @@ function renderWantlistSyncPreview(diff) {
     html += `<div style="margin-bottom:1.25rem">
       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
         <input type="checkbox" id="wl-check-discogs-all" onchange="toggleWantlistSection('discogs-only',this.checked)" checked>
-        <span style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--green);font-weight:500">In Discogs wantlist, not in SN (${diff.discogs_only.length})</span>
+        <span style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--green);font-weight:500">In Discogs wantlist, not in SN (${masterGroupList.length} release${masterGroupList.length !== 1 ? 's' : ''}, ${diff.discogs_only.length} version${diff.discogs_only.length !== 1 ? 's' : ''})</span>
       </div>`;
-    diff.discogs_only.forEach((item, i) => {
-      const sec = item.label ? `${esc(item.label)}${item.cat_no ? ' · ' + esc(item.cat_no) : ''}` : '';
-      const meta2 = [item.year, item.country, item.format].filter(Boolean).join(' · ');
+    masterGroupList.forEach(([key, items]) => {
+      const rep = items[0];
       html += `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);cursor:pointer">
-        <input type="checkbox" class="wl-check-discogs-only" data-idx="${i}" checked>
-        ${versionThumb(item)}
+        <input type="checkbox" class="wl-check-discogs-only" data-master-key="${esc(key)}" checked>
+        ${versionThumb(rep)}
         <div style="flex:1;min-width:0">
-          <div style="font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.title)}</div>
-          ${sec ? `<div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${sec}</div>` : ''}
-          ${meta2 ? `<div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${meta2}</div>` : ''}
-          ${masterLabel(item)}
+          <div style="font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rep.new_master ? rep.title : (rep.wishlist_title || rep.title))}</div>
+          <div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${esc(rep.new_master ? rep.artist : (rep.wishlist_artist || rep.artist))}</div>
+          ${masterLabel(rep)}
         </div>
         <span style="font-size:11px;color:var(--green);flex-shrink:0">→ SN</span>
       </label>`;
@@ -3367,7 +3377,7 @@ async function applyWantlistSync() {
   btn.textContent = 'Applying…';
 
   const toSn = [...document.querySelectorAll('.wl-check-discogs-only:checked')]
-    .map(el => _wantlistDiff.discogs_only[+el.dataset.idx]);
+    .flatMap(el => _wantlistDiff.discogs_only.filter(item => (item.master_id || item.discogs_id) === el.dataset.masterKey));
   const toDiscogs = [...document.querySelectorAll('.wl-check-sn-only:checked')]
     .map(el => _wantlistDiff.sn_only[+el.dataset.idx].version_id);
   const removeFromDiscogs = [...document.querySelectorAll('.wl-check-fulfilled:checked')]
@@ -3386,10 +3396,10 @@ async function applyWantlistSync() {
     if (result.pushed_to_discogs)     parts.push(`${result.pushed_to_discogs} pushed to Discogs`);
     if (result.removed_from_discogs)  parts.push(`${result.removed_from_discogs} removed from Discogs`);
     if (result.errors?.length)        parts.push(`${result.errors.length} error(s)`);
-    toast(parts.length ? `Wantlist sync: ${parts.join(', ')}` : 'Wantlist sync complete', result.errors?.length ? 'error' : 'success');
+    toast(parts.length ? `Wishlist sync: ${parts.join(', ')}` : 'Wishlist sync complete', result.errors?.length ? 'error' : 'success');
     if (result.added_to_sn) loadWishlist();
   } catch(e) {
-    toast('Wantlist sync failed: ' + e.message, 'error');
+    toast('Wishlist sync failed: ' + e.message, 'error');
     btn.disabled = false;
     btn.textContent = 'Apply Sync';
   }
@@ -3936,6 +3946,7 @@ function openWishlistDetail(id) {
         ${w.styles ? `<div class="detail-row"><span class="detail-key">Styles</span><span class="detail-val">${esc(w.styles)}</span></div>` : ''}
         ${w.lowest_price != null ? `<div class="detail-row"><span class="detail-key">Lowest price</span><span class="detail-val">${currencySymbol}${w.lowest_price.toFixed(2)}${w.num_for_sale ? ` (${w.num_for_sale} for sale)` : ''}</span></div>` : ''}
         <div class="detail-row"><span class="detail-key">Added</span><span class="detail-val">${fmtDate(w.added_at ? w.added_at.split(' ')[0] : '') || '—'}</span></div>
+        <div class="detail-row"><span class="detail-key">Fulfilled</span><span class="detail-val">${w.fulfilled ? 'Yes' : 'No'}</span></div>
         <div class="detail-row"><span class="detail-key">Master</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/master/${esc(w.master_id)}" target="_blank">m${esc(w.master_id)}</a></span></div>
       </div>
     </div>
@@ -3944,12 +3955,13 @@ function openWishlistDetail(id) {
       <button class="detail-tab" onclick="switchWishlistTab(this,'tab-versions')">Versions${w.version_count ? ` (${w.version_count})` : ''}</button>
     </div>
     <div class="detail-tab-panel active" id="tab-details">
+      ${!w.version_count ? `
       <div style="margin-bottom:1rem">
         <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:13px">
           <input type="checkbox" id="wishlist-detail-fulfilled" ${w.fulfilled ? 'checked' : ''}>
           Fulfilled
         </label>
-      </div>
+      </div>` : ''}
       <div class="form-group">
         <label class="form-label">Notes</label>
         <textarea class="form-control" id="wishlist-detail-notes" rows="3" style="resize:vertical">${esc(w.notes || '')}</textarea>
@@ -3981,9 +3993,22 @@ function openWishlistDetail(id) {
 
   document.getElementById('wishlist-detail-save-btn').onclick = async () => {
     const notes = document.getElementById('wishlist-detail-notes').value;
-    const fulfilled = document.getElementById('wishlist-detail-fulfilled').checked;
+    const fulfilledEl = document.getElementById('wishlist-detail-fulfilled');
+    const fulfilled = fulfilledEl ? fulfilledEl.checked : w.fulfilled;
+
+    // Collect any open version edit rows
+    const versionEdits = [...document.querySelectorAll('.version-edit-row')].map(row => {
+      const ta = row.querySelector('textarea');
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (!ta || !cb) return null;
+      const versionId = parseInt(ta.id.replace('vedit-', ''));
+      return { versionId, notes: ta.value, fulfilled: cb.checked };
+    }).filter(Boolean);
+
     if (!serverReachable) {
       await saveUpdateToQueue({ wishlist_id: id, notes, fulfilled });
+      for (const ve of versionEdits)
+        await saveVersionUpdateToQueue(ve.versionId, ve.notes);
       if ('serviceWorker' in navigator && 'SyncManager' in window)
         navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
       await loadWishlist();
@@ -3991,13 +4016,20 @@ function openWishlistDetail(id) {
       return;
     }
     try {
-      const r = await apiFetch(`/api/wishlist/${id}`, {
+      await apiFetch(`/api/wishlist/${id}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ notes, fulfilled }),
       });
-      if (!r.ok) throw new Error();
+      await Promise.all(versionEdits.map(ve =>
+        apiFetch(`/api/wishlist/versions/${ve.versionId}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ notes: ve.notes, fulfilled: ve.fulfilled }),
+        })
+      ));
       await loadWishlist();
+      await openWishlistDetail(id);
       toast('Saved', 'success');
     } catch {
       toast('Failed to save', 'error');
@@ -4070,7 +4102,7 @@ async function loadSavedVersions(wishlistId) {
     }).join('');
 
     const savedRows = versions.map(v => `
-      <div class="version-row" id="vrow-${v.id}">
+      <div class="version-row" id="vrow-${v.id}" style="${v.fulfilled ? 'opacity:0.5' : ''}">
         ${v.thumb_file
           ? `<img class="version-thumb" src="/images/${esc(v.thumb_file)}" alt="">`
           : `<div class="version-thumb-placeholder">♪</div>`}
@@ -4096,6 +4128,7 @@ async function loadSavedVersions(wishlistId) {
     panel.innerHTML = `<div style="color:var(--red);font-size:12px">Failed to load versions.</div>`;
   }
 }
+
 
 async function deleteVersion(wishlistId, versionId) {
   if (!confirm('Remove this version?')) return;
@@ -4145,43 +4178,17 @@ function openVersionEdit(wishlistId, versionId) {
   editRow.style.cssText = 'padding:0.5rem;border:1px solid var(--border);border-top:none;border-radius:0 0 4px 4px;background:var(--surface);margin-top:-1px';
   editRow.innerHTML = `
     <textarea class="form-control" id="vedit-${versionId}" rows="2" style="resize:vertical;font-size:12px">${esc(v.notes || '')}</textarea>
-    <div style="display:flex;gap:0.5rem;margin-top:0.4rem;justify-content:flex-end">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.4rem">
+      <label style="display:flex;align-items:center;gap:0.4rem;font-size:12px;cursor:pointer">
+        <input type="checkbox" id="vedit-fulfilled-${versionId}" ${v.fulfilled ? 'checked' : ''}>
+        Fulfilled
+      </label>
       <button class="btn btn-secondary btn-sm" onclick="this.closest('.version-edit-row').remove()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="saveVersionNotes(${wishlistId}, ${versionId})">Save</button>
     </div>`;
   row.after(editRow);
   editRow.querySelector('textarea').focus();
 }
 
-async function saveVersionNotes(wishlistId, versionId) {
-  const notes = document.getElementById(`vedit-${versionId}`)?.value ?? '';
-  if (versionId < 0) {
-    await updateVersionQueueItemNotes(-versionId, notes);
-    await loadSavedVersions(wishlistId);
-    toast('Saved', 'success');
-    return;
-  }
-  if (!serverReachable) {
-    await saveVersionUpdateToQueue(versionId, notes);
-    if ('serviceWorker' in navigator && 'SyncManager' in window)
-      navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
-    await loadSavedVersions(wishlistId);
-    toast('Saved — will sync when back home', 'success');
-    return;
-  }
-  try {
-    const r = await apiFetch(`/api/wishlist/versions/${versionId}`, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ notes }),
-    });
-    if (!r.ok) throw new Error();
-    await loadSavedVersions(wishlistId);
-    toast('Saved', 'success');
-  } catch {
-    toast('Failed to save', 'error');
-  }
-}
 
 async function openVersionsBrowse(wishlistId) {
   const panel = document.getElementById('versions-browse-panel');
@@ -4249,7 +4256,7 @@ async function toggleVersionInfo(panelId, discogsId, versionId = null) {
   panel.style.display = 'block';
 
   // Use cached data if available
-  if (_releaseInfo[discogsId]) { renderVersionInfoPanel(panelId, _releaseInfo[discogsId]); return; }
+  if (_releaseInfo[discogsId]) { renderVersionInfoPanel(panelId, _releaseInfo[discogsId], discogsId); return; }
 
   // For saved versions, use stored DB data if populated
   if (versionId !== null) {
@@ -4263,7 +4270,7 @@ async function toggleVersionInfo(panelId, discogsId, versionId = null) {
         rating_count: v.rating_count || 0,
       };
       _releaseInfo[discogsId] = data;
-      renderVersionInfoPanel(panelId, data);
+      renderVersionInfoPanel(panelId, data, discogsId);
       return;
     }
   }
@@ -4278,7 +4285,7 @@ async function toggleVersionInfo(panelId, discogsId, versionId = null) {
     const r = await apiFetch(`/api/release/${discogsId}/info`);
     const data = await r.json();
     _releaseInfo[discogsId] = data;
-    renderVersionInfoPanel(panelId, data);
+    renderVersionInfoPanel(panelId, data, discogsId);
     // Persist to DB if this is a saved version
     if (versionId !== null) {
       apiFetch(`/api/wishlist/versions/${versionId}/info`, {
@@ -4297,7 +4304,7 @@ async function toggleVersionInfo(panelId, discogsId, versionId = null) {
   }
 }
 
-function renderVersionInfoPanel(panelId, data) {
+function renderVersionInfoPanel(panelId, data, discogsId) {
   const panel = document.getElementById(panelId);
   if (!panel) return;
   const sections = [];
@@ -4323,6 +4330,12 @@ function renderVersionInfoPanel(panelId, data) {
       <div class="info-section">
         <div class="version-info-label">Community rating</div>
         <div style="color:var(--ink)">${data.rating_average?.toFixed(2)} / 5 <span style="color:var(--ink-light)">(${data.rating_count} rating${data.rating_count !== 1 ? 's' : ''})</span></div>
+      </div>`);
+  }
+  if (discogsId) {
+    sections.push(`
+      <div class="info-section">
+        <a href="https://www.discogs.com/release/${esc(discogsId)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">View on Discogs ↗</a>
       </div>`);
   }
   panel.innerHTML = sections.length

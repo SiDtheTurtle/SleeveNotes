@@ -1736,7 +1736,21 @@ async def update_wishlist_version(version_id: int, body: WishlistVersionUpdateIn
             "UPDATE wishlist_versions SET notes = ?, fulfilled = ? WHERE id = ?",
             (notes, fulfilled, version_id),
         )
+        # Auto-compute master fulfilled when there are versions
+        wishlist_id = row["wishlist_id"]
+        total = conn.execute(
+            "SELECT COUNT(*) FROM wishlist_versions WHERE wishlist_id = ?", (wishlist_id,)
+        ).fetchone()[0]
+        if total > 0:
+            unfulfilled = conn.execute(
+                "SELECT COUNT(*) FROM wishlist_versions WHERE wishlist_id = ? AND fulfilled = 0", (wishlist_id,)
+            ).fetchone()[0]
+            conn.execute(
+                "UPDATE wishlist SET fulfilled = ? WHERE id = ?",
+                (0 if unfulfilled else 1, wishlist_id),
+            )
     newly_fulfilled = body.fulfilled is True and row["fulfilled"] == 0
+    newly_unfulfilled = body.fulfilled is False and row["fulfilled"] == 1
     if username:
         hdrs = get_discogs_headers()
         try:
@@ -1747,6 +1761,11 @@ async def update_wishlist_version(version_id: int, body: WishlistVersionUpdateIn
                         f"https://api.discogs.com/users/{username}/wants/{discogs_id}",
                         headers=hdrs,
                     )
+                elif newly_unfulfilled:
+                    url = f"https://api.discogs.com/users/{username}/wants/{discogs_id}"
+                    await discogs_put(client, url, headers=hdrs)
+                    if notes:
+                        await discogs_post(client, url, json={"notes": notes}, headers=hdrs)
                 elif body.notes is not None:
                     await discogs_post(
                         client,
@@ -1985,15 +2004,55 @@ async def wantlist_sync(body: WantlistSyncIn):
                 if not wishlist_id:
                     results["errors"].append(f"Could not resolve wishlist item for {item.discogs_id}")
                     continue
+
+                # Download thumbnail
+                thumb_file = ""
+                if item.thumb:
+                    try:
+                        ext = item.thumb.rsplit(".", 1)[-1].split("?")[0].lower() or "jpeg"
+                        fname = f"wv{item.discogs_id}.{ext}"
+                        dest = IMAGES_DIR / fname
+                        if not dest.exists():
+                            tr = await client.get(item.thumb, timeout=10)
+                            if tr.status_code == 200:
+                                dest.write_bytes(tr.content)
+                        thumb_file = fname
+                    except Exception:
+                        pass
+
+                # Fetch extended release info
+                release_notes, identifiers, rating_average, rating_count = "", "[]", None, 0
+                in_wantlist, in_collection = None, None
+                try:
+                    ri = await discogs_get(
+                        client,
+                        f"https://api.discogs.com/releases/{item.discogs_id}",
+                        headers=hdrs,
+                    )
+                    if ri.status_code == 200:
+                        rd = ri.json()
+                        release_notes = rd.get("notes", "") or ""
+                        identifiers = json.dumps(rd.get("identifiers", []))
+                        community = rd.get("community", {})
+                        rating = community.get("rating", {})
+                        rating_average = rating.get("average")
+                        rating_count = rating.get("count", 0)
+                        in_wantlist = community.get("want")
+                        in_collection = community.get("have")
+                except Exception as e:
+                    log.warning("Failed to fetch release info for %s: %s", item.discogs_id, e)
+
                 with get_db() as conn:
                     conn.execute(
                         """INSERT OR IGNORE INTO wishlist_versions
                            (wishlist_id, discogs_id, title, label, cat_no, year, format,
-                            country, thumb_file, notes, in_wantlist, in_collection)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)""",
+                            country, thumb_file, notes, in_wantlist, in_collection,
+                            release_notes, identifiers, rating_average, rating_count)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (wishlist_id, item.discogs_id, item.title or "", item.label or "",
                          item.cat_no or "", item.year, item.format or "", item.country or "",
-                         "", item.notes or ""),
+                         thumb_file, item.notes or "", in_wantlist, in_collection,
+                         release_notes, identifiers, rating_average, rating_count),
                     )
                 results["added_to_sn"] += 1
             except Exception as e:

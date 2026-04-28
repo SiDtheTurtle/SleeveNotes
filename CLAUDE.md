@@ -116,12 +116,39 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 | `cover_file` | TEXT | Cached image filename — prefixed `m{master_id}` to avoid collision with release images |
 | `added_at` | TEXT | Auto timestamp |
 | `notes` | TEXT | |
-| `fulfilled` | INTEGER | 0 = wanted, 1 = fulfilled |
+| `fulfilled` | INTEGER | 0 = wanted, 1 = fulfilled. Auto-computed from version states when versions exist; manual otherwise |
 | `year` | INTEGER | Master release year |
 | `genres` | TEXT | Comma-separated genres from Discogs |
 | `styles` | TEXT | Comma-separated styles from Discogs |
 | `lowest_price` | REAL | Discogs lowest listing price at time of add |
 | `num_for_sale` | INTEGER | Discogs for-sale count at time of add |
+
+`GET /api/wishlist` returns a `version_count` field per item (LEFT JOIN count from `wishlist_versions`).
+
+### `wishlist_versions` table
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | Auto-increment |
+| `wishlist_id` | INTEGER FK | → `wishlist.id` |
+| `discogs_id` | TEXT | Release ID (plain numeric) |
+| `title` | TEXT | |
+| `label` | TEXT | |
+| `cat_no` | TEXT | |
+| `year` | INTEGER | |
+| `format` | TEXT | e.g. `12", 33 ⅓ RPM` |
+| `country` | TEXT | |
+| `thumb_file` | TEXT | Cached 150×150 thumbnail (`wv{discogs_id}.jpg`) |
+| `notes` | TEXT | SN-only; pushed to Discogs wantlist on add; ported to collection record on fulfillment |
+| `in_wantlist` | INTEGER | community.in_wantlist at time of add |
+| `in_collection` | INTEGER | community.in_collection at time of add |
+| `fulfilled` | INTEGER | 0 = wanted, 1 = fulfilled. When all versions fulfilled → master auto-fulfills |
+| `release_notes` | TEXT | From Discogs `/releases/{id}` — cached at add time or on first ℹ open |
+| `identifiers` | TEXT | JSON array of `{type, value}` from Discogs `/releases/{id}` |
+| `rating_average` | REAL | Community rating average at time of cache |
+| `rating_count` | INTEGER | Community rating count at time of cache |
+| `added_at` | TEXT | Auto timestamp |
+| UNIQUE | `(wishlist_id, discogs_id)` | |
 
 ## API Endpoints
 
@@ -159,6 +186,30 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 | POST | `/api/wishlist` | Add a master release to the wishlist (fetches `/masters/{id}`, downloads cover) |
 | PUT | `/api/wishlist/{id}` | Update notes and/or fulfilled status |
 | DELETE | `/api/wishlist/{id}` | Delete a wishlist item |
+| GET | `/api/wishlist/{id}/versions/browse` | Fetch vinyl versions from Discogs (paginated); marks which are already saved |
+| GET | `/api/wishlist/{id}/versions` | List saved versions from DB |
+| POST | `/api/wishlist/{id}/versions` | Save selected versions + push to Discogs wantlist |
+| PUT | `/api/wishlist/versions/{id}` | Update notes / fulfilled; auto-computes master fulfilled; syncs to Discogs wantlist |
+| DELETE | `/api/wishlist/versions/{id}` | Remove version + remove from Discogs wantlist |
+| GET | `/api/release/{id}/info` | Fetch notes, identifiers, rating from Discogs `/releases/{id}` (DB fast-path first) |
+| PATCH | `/api/wishlist/versions/{id}/info` | Persist cached release info to DB |
+| GET | `/api/wantlist/preview` | Fetch all Discogs wantlist pages; compute diff vs SN versions (discogs_only / sn_only / fulfilled_in_discogs) |
+| POST | `/api/wantlist/sync` | Apply wantlist sync payload: add to SN, push to Discogs, or remove from Discogs |
+
+### Wishlist versions (`/api/wishlist/{id}/versions/browse`, `POST /api/wishlist/{id}/versions`)
+- Browse uses `GET /masters/{id}/versions?format=Vinyl` — paginated, marks which discogs_ids are already saved
+- Save accepts `[{discogs_id, title, label, cat_no, year, format, country, thumb, in_wantlist, in_collection, notes}]`; downloads thumbnail (`wv{discogs_id}.jpg`); fetches extended release info from `/releases/{id}` (identifiers, release_notes, rating); PUTs each to Discogs wantlist; POSTs notes if non-empty
+
+### Wishlist version update (`PUT /api/wishlist/versions/{id}`)
+- Accepts `{notes?, fulfilled?}`
+- Auto-computes master `fulfilled`: if all versions fulfilled → master fulfilled; if any unfulfilled → master unfulfilled
+- `newly_fulfilled`: DELETEs from Discogs wantlist; `newly_unfulfilled`: PUTs back to Discogs wantlist (+ POSTs notes if present); notes-only change: POSTs notes to Discogs wantlist
+
+### Wantlist sync (`GET /api/wantlist/preview`, `POST /api/wantlist/sync`)
+- Preview fetches all Discogs wantlist pages; cross-references `wishlist_versions.discogs_id`; `master_id` and `notes` are in the wantlist list response — no extra per-release calls needed for preview
+- Buckets: `discogs_only` (in Discogs, not in SN), `sn_only` (in SN unfulfilled, not in Discogs), `fulfilled_in_discogs` (SN fulfilled version still in Discogs wantlist)
+- Sync to-SN path downloads thumbnail and fetches full `/releases/{id}` for rich data (identifiers, release_notes, rating, in_wantlist, in_collection)
+- UI groups `discogs_only` by master (one row per master, version count badge); "New wishlist item + pressing" for new masters, "New wishlist pressing" for existing masters
 
 ### Wishlist add (`POST /api/wishlist`)
 - Accepts `{master_id, notes}`; strips leading `m` from master_id
@@ -167,7 +218,7 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 - Returns 409 if master_id already on wishlist
 
 ### Discogs rate limiter
-All outbound Discogs API calls go through `discogs_get()` / `discogs_post()` wrappers that enforce a 55 req/min sliding-window limit (buffer under Discogs' 60/min). The limiter is process-wide — no manual sleep/batch logic anywhere else. On a 429 response, it waits 60 s and retries once. Image CDN calls (`i.discogs.com`) bypass the limiter — they are not API calls.
+All outbound Discogs API calls go through `discogs_get()` / `discogs_post()` / `discogs_put()` / `discogs_delete()` wrappers that enforce a 55 req/min sliding-window limit (buffer under Discogs' 60/min). The limiter is process-wide — no manual sleep/batch logic anywhere else. On a 429 response, it waits 60 s and retries once. Image CDN calls (`i.discogs.com`) bypass the limiter — they are not API calls.
 
 ### Discogs fetch (`/api/discogs/{id}`)
 - Accepts `r12345678` or `12345678`
@@ -247,6 +298,9 @@ pendingUpdates    // array — in-memory mirror of IDB wishlist_updates (edits q
 _serverWishlistItems  // array — last fetched server wishlist data; pendingUpdates applied on top
 _lastSearchResults    // array — last wishlist search results; used by addToWishlist for metadata
 apiKey            // string — loaded from sessionStorage on auth; injected by apiFetch()
+pendingVersionUpdates // array — in-memory mirror of IDB version_updates (version edits queued offline)
+_wantlistDiff     // last wantlist sync diff payload from /api/wantlist/preview
+_releaseInfo      // object — cache of fetched release info keyed by discogs_id
 ```
 
 Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within **both** sections. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. Only `'table'`/`'tile'` are saved to localStorage — app always opens to collection.
@@ -286,15 +340,21 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `doWishlistSearch()` | When server reachable: calls `/api/wishlist/search`. When offline: calls Discogs API directly (unauthenticated, 25 req/min). Stores results in `_lastSearchResults` |
 | `addToWishlist(masterId)` | When online: POST to `/api/wishlist`. When offline: saves to IDB `wishlist_queue` via `saveToQueue()`, shows pending in list |
 | `deleteWishlistItem(id)` | DELETE item, reload wishlist |
-| `openWishlistDetail(id)` | Negative id → `openPendingWishlistDetail`. Otherwise: cover, metadata, fulfilled checkbox + notes textarea, Save (queues offline) + Delete (disabled offline) |
+| `openWishlistDetail(id)` | Negative id → `openPendingWishlistDetail`. Otherwise: Details tab (cover, metadata, fulfilled as property when versions exist, notes, Save + Delete) + Versions tab (saved versions + "Find pressings" panel) |
 | `openPendingWishlistDetail(id)` | Detail modal for IDB-queued items: thumb, metadata, editable notes (saved to IDB), Delete removes from queue — all works offline |
-| `openOfflineDB()` | Open IndexedDB `sn_offline` v2; creates `wishlist_queue` (autoIncrement) and `wishlist_updates` (keyed by `wishlist_id`) on upgrade |
-| `initPendingQueue()` | Load both IDB stores into `pendingQueue` and `pendingUpdates` on startup |
+| `loadSavedVersions(wishlistId)` | Fetch `/api/wishlist/{id}/versions`, render version rows with ✎ edit panel (notes + fulfilled checkbox) and ℹ info panel |
+| `renderVersionInfoPanel(panelId, data, discogsId)` | Render identifiers, release notes, community rating + "View on Discogs ↗" link |
+| `openWantlistSync()` | Open `modal-wantlist-sync`; calls `/api/wantlist/preview`; renders grouped diff |
+| `renderWantlistSyncPreview(diff)` | Groups `discogs_only` by master (one row per master, version count badge); renders sn_only and fulfilled_in_discogs sections |
+| `applyWantlistSync()` | Collect checked master groups (expanding back to all version items via flatMap); POST to `/api/wantlist/sync` |
+| `openOfflineDB()` | Open IndexedDB `sn_offline` v3; creates `wishlist_queue`, `wishlist_updates`, `version_queue`, `version_updates`, `version_deletes` on upgrade |
+| `initPendingQueue()` | Load IDB stores into `pendingQueue`, `pendingUpdates`, `pendingVersionUpdates` on startup |
 | `saveToQueue(item)` | Add new wishlist item to IDB `wishlist_queue`, update `pendingQueue` in memory |
 | `removeFromQueue(idbKey)` | Delete from IDB `wishlist_queue`, update `pendingQueue` |
 | `saveUpdateToQueue(update)` | Upsert `{wishlist_id, notes, fulfilled}` to IDB `wishlist_updates`, update `pendingUpdates` |
 | `removeUpdateFromQueue(wishlistId)` | Delete from IDB `wishlist_updates`, update `pendingUpdates` |
 | `updateQueueItemNotes(idbKey, notes)` | Update notes on an existing IDB `wishlist_queue` item in place |
+| `saveVersionUpdateToQueue(versionId, notes)` | Upsert `{version_id, notes}` to IDB `version_updates` |
 | `flushPendingQueue()` | On reconnect: POST each `wishlist_queue` item, PUT each `wishlist_updates` item; removes from IDB on success/409; reloads wishlist and toasts count |
 | `splitDiscogsTitle(combined)` | Split "Artist - Title" Discogs search string into `{artist, title}` for pending item display |
 | `setSection(section)` | Top-level nav: sets `currentSection`, updates nav buttons, calls `applyToolbarSwitches`, loads/renders appropriate view |
@@ -322,11 +382,12 @@ Always visible (no collapse toggle). Single nav row: `[Collection] [Wishlist]` p
 - `modal-discogs-sync` — diff preview; shared between Discogs collection sync and CSV import. `syncSource` controls labels and available actions. "Discogs →" direction is hidden for CSV imports and for records where only core fields (artist, title, label, cat_no, year, format) differ
 - `modal-settings` — Display settings, Discogs config + field mapping, Data (import/export), Danger Zone. **Save stays open** (reload fields in-place); Close button dismisses.
 - `modal-wishlist-search` — Discogs master release search; results show Add/Queued/On wishlist/Fulfilled per item. Shows slate info banner when server unreachable (searching Discogs directly)
-- `modal-wishlist-detail` — Wishlist item detail: cover, metadata, fulfilled checkbox, notes textarea, Save + Delete. Save queues offline for server items; Delete disabled offline for server items, always enabled for pending items
+- `modal-wishlist-detail` — Wishlist item detail with two tabs: **Details** (cover, metadata, fulfilled as property field when versions exist / manual checkbox when no versions, notes textarea, Save + Delete) and **Versions** (saved version rows + "Find pressings" panel with paginated vinyl versions from Discogs). Save button collects all open version edit panels and fires parallel PUTs alongside the master notes/fulfilled save.
+- `modal-wantlist-sync` — Discogs wantlist sync preview: three collapsible sections (discogs_only grouped by master, sn_only per version, fulfilled_in_discogs). Cancel + Apply Sync buttons.
 
 ### Settings modal sections (top to bottom)
 1. **Display** — Clean artists, Include P&P, Show Valuations, Currency Symbol, Hide format tags (toggle + tag list). **All display toggles are staged — state only applies on Save, not on toggle.**
-2. **Discogs** — Username, Token, Refresh Metadata, Field Mapping, Sync Collection
+2. **Discogs** — Username, Token, Refresh Metadata, Field Mapping, then a "Sync with Discogs" section with two buttons side by side: **Sync Collection…** (`openDiscogsSync()`) and **Sync Wishlist…** (`openWantlistSync()`)
 3. **Data** — Import (CSV), Export (CSV, Database, Images, All). Slow exports show "Exporting…" state on the button.
 4. **Danger Zone** — Change Access Key, Restore from Backup (single toggle unlocks: Import Database / Import Images / Import All), Delete All Records, Factory Reset, Clear Image Cache
 
@@ -349,23 +410,29 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **Currency symbol:** Free text (default `£`). Applied in display only — prices are stored as plain `REAL` in DB. When pushing price/pp to Discogs, the symbol is prefixed to the value string. Diff comparison strips the configured symbol before numeric comparison; a missing or different symbol triggers a diff.
 - **Empty collection state:** Shows a "Restore from backup…" file picker that calls `/api/import/all` directly (no Danger Zone toggle required since there's nothing to overwrite).
 - **Wishlist fulfilled prompt:** When saving a new collection record, if the fetched Discogs release has a `master_id` matching an unfulfilled wishlist item (`wishlist_match` in the fetch response), the user is prompted to mark it fulfilled. Wishlist `notes` are appended to the collection record's notes at the same time (empty collection notes → copy; existing notes → append with newline).
-- **Wishlist fulfilled toggle:** The detail modal shows a checkbox for fulfilled status, saved together with notes via the Save button. This replaces the former instant "Mark Fulfilled" action — changes are reversible until saved.
+- **Wishlist fulfilled toggle:** For masters without versions, the detail modal shows a fulfilled checkbox saved with notes via Save. For masters with versions, fulfilled is auto-computed: all versions fulfilled → master fulfilled; any version unfulfilled → master unfulfilled. Fulfilled state shows as a property field ("Yes/No") in the Details tab.
+- **Version fulfilled:** Toggled in the ✎ edit panel (labeled checkbox). The detail modal's Save button collects all open edit panels and fires parallel PUTs. When a version becomes fulfilled, it is removed from the Discogs wantlist; when un-fulfilled, it is re-added (with notes if present).
+- **Wishlist version cover prefix:** Version thumbnails stored as `wv{discogs_id}.jpg` to avoid filename collision with release images (`r...`) and master images (`m...`).
 - **Wishlist cover prefix:** Master release covers are stored as `m{master_id}_01.jpeg` to avoid filename collision with release images (`r{release_id}_...`).
 - **Tracklist loading:** Fetched eagerly when a record detail modal opens (not gated on the Tracklist tab click), so the SW caches the response for offline use on that same visit.
 - **PWA / service worker (`static/sw.js`):**
   - Install: precaches app shell (`/`, `manifest.json`, icons) — prevents pull-to-refresh showing the browser offline page
   - `/images/*`: cache-first — cover images and any other record images load offline after first view
   - `/api/records`, `/api/wishlist`, `/api/settings` (GET only): network-first with SW cache fallback — collection and wishlist survive page refresh with server down
+  - `/api/wishlist/{id}/versions` (GET only, matched by regex): network-first with SW cache fallback — saved versions survive server down after first view
   - `/api/health`: always network-only — must hit the server for reachability detection
   - All other `/api/*`: network-only (mutations, Discogs fetches, etc.)
-  - Background Sync: SW flushes both IDB queues (`wishlist-sync` tag) on Android when app is backgrounded
+  - Background Sync: SW flushes all IDB queues (`wishlist-sync` tag) on Android — handles `wishlist_queue`, `wishlist_updates`, `version_queue`, `version_updates`, `version_deletes`
 - **Two-state offline detection:** The app distinguishes two offline states, each with its own banner:
   - **Read-Only Mode** (`navigator.onLine === false`) — no internet, amber banner `#7A4800`. Fully read-only.
   - **Offline Mode** (`navigator.onLine === true` but `/api/health` fails) — server unreachable, slate banner `#3D4A5C`. Collection read-only from SW cache; wishlist search, add, and edit all work via IndexedDB queue.
   - Both states set `body.offline` and disable collection write actions.
   - Detection is event-driven: probe on load, on `window 'online'`, on any `apiFetch` TypeError, and on `visibilitychange` visible. Backoff polling (10s → 30s → 60s) only runs while the app is visible and the server is unreachable — cancelled immediately on `visibilitychange` hidden so backgrounding the app stops all polling.
-- **Offline wishlist queue (IndexedDB `sn_offline` v2):**
-  - `wishlist_queue` (autoIncrement key `idb_key`): new items added offline. Each record: `{master_id, notes, queued_at, title, year, thumb}`. Pending items merged into `wishlistItems` with negative IDs (`-(idb_key)`) for display.
-  - `wishlist_updates` (key `wishlist_id`): notes/fulfilled edits made offline. Upsert — only latest edit per item is kept. Applied to `_serverWishlistItems` before rendering so display reflects queued state immediately.
-  - Both queues flushed on reconnect via `flushPendingQueue()` and by Background Sync on Android.
+- **Offline wishlist + version queue (IndexedDB `sn_offline` v3):**
+  - `wishlist_queue` (autoIncrement key `idb_key`): new wishlist items added offline. Each record: `{master_id, notes, queued_at, title, year, thumb}`. Pending items merged into `wishlistItems` with negative IDs (`-(idb_key)`) for display.
+  - `wishlist_updates` (key `wishlist_id`): wishlist notes/fulfilled edits made offline. Upsert — only latest edit per item. Applied to `_serverWishlistItems` before rendering.
+  - `version_queue` (autoIncrement): new versions added while server unreachable (Find pressings disabled in Read-Only Mode).
+  - `version_updates` (key `version_id`): version notes edits queued offline. Fulfilled state is not yet queued — only notes (known gap).
+  - `version_deletes`: version deletions queued offline.
+  - All queues flushed on reconnect via `flushPendingQueue()` and by Background Sync on Android.
   - Discogs token never sent to browser; offline search uses unauthenticated Discogs API (25 req/min, no thumbnails returned — ♪ placeholder shown).
