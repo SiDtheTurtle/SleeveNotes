@@ -207,6 +207,7 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 
 ### Wantlist sync (`GET /api/wantlist/preview`, `POST /api/wantlist/sync`)
 - Preview fetches all Discogs wantlist pages; cross-references `wishlist_versions.discogs_id`; `master_id` and `notes` are in the wantlist list response — no extra per-release calls needed for preview
+- Wantlist items with no `master_id` are skipped entirely; count returned as `skipped_count` in preview response and shown in modal
 - Buckets: `discogs_only` (in Discogs, not in SN), `sn_only` (in SN unfulfilled, not in Discogs), `fulfilled_in_discogs` (SN fulfilled version still in Discogs wantlist)
 - Sync to-SN path downloads thumbnail and fetches full `/releases/{id}` for rich data (identifiers, release_notes, rating, in_wantlist, in_collection)
 - UI groups `discogs_only` by master (one row per master, version count badge); "New wishlist item + pressing" for new masters, "New wishlist pressing" for existing masters
@@ -301,6 +302,7 @@ apiKey            // string — loaded from sessionStorage on auth; injected by 
 pendingVersionUpdates // array — in-memory mirror of IDB version_updates (version edits queued offline)
 _wantlistDiff     // last wantlist sync diff payload from /api/wantlist/preview
 _releaseInfo      // object — cache of fetched release info keyed by discogs_id
+_versionsByWishlistId // object — {wishlist_id: versions[]} fetched eagerly in loadWishlist(); used by loadSavedVersions() to avoid a live fetch when offline
 ```
 
 Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within **both** sections. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. Only `'table'`/`'tile'` are saved to localStorage — app always opens to collection.
@@ -333,7 +335,7 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `importCsv(input)` | POST CSV → sets `syncSource='csv'` → opens sync modal |
 | `openSettings()` | Open settings modal; reloads field mapping in-place |
 | `saveSettings()` | Persist settings; stays open; refreshes field mapping if username changed |
-| `loadWishlist()` | Fetch `/api/wishlist` (always tries — SW serves from cache if server down), apply `pendingUpdates`, merge `pendingQueue` items, rebuild `wishlistItems`, render and update stats |
+| `loadWishlist()` | Fetch `/api/wishlist`, apply `pendingUpdates`, merge `pendingQueue` items, rebuild `wishlistItems`, render and update stats. Then fetches all versions for items with `version_count > 0` in parallel (populates `_versionsByWishlistId`); items with no versions set to `[]` directly. Finally pre-fetches version thumbnails so the SW image cache is warm for offline use. |
 | `renderWishlist()` | Delegates to `renderWishlistTiles()` when `currentView === 'tile'`, otherwise builds sortable table; pending items show Pending badge instead of added date |
 | `renderWishlistTiles()` | Build wishlist cover art grid sorted artist → year; pending items show corner Pending badge and ⏳ placeholder if no thumb |
 | `openWishlistSearchModal(prefill)` | Open master release search modal; blocked only when `!navigator.onLine`; shows offline info banner when server unreachable |
@@ -354,7 +356,7 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `saveUpdateToQueue(update)` | Upsert `{wishlist_id, notes, fulfilled}` to IDB `wishlist_updates`, update `pendingUpdates` |
 | `removeUpdateFromQueue(wishlistId)` | Delete from IDB `wishlist_updates`, update `pendingUpdates` |
 | `updateQueueItemNotes(idbKey, notes)` | Update notes on an existing IDB `wishlist_queue` item in place |
-| `saveVersionUpdateToQueue(versionId, notes)` | Upsert `{version_id, notes}` to IDB `version_updates` |
+| `saveVersionUpdateToQueue(versionId, notes, fulfilled)` | Upsert `{version_id, notes, fulfilled}` to IDB `version_updates` |
 | `flushPendingQueue()` | On reconnect: POST each `wishlist_queue` item, PUT each `wishlist_updates` item; removes from IDB on success/409; reloads wishlist and toasts count |
 | `splitDiscogsTitle(combined)` | Split "Artist - Title" Discogs search string into `{artist, title}` for pending item display |
 | `setSection(section)` | Top-level nav: sets `currentSection`, updates nav buttons, calls `applyToolbarSwitches`, loads/renders appropriate view |
@@ -419,20 +421,21 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
   - Install: precaches app shell (`/`, `manifest.json`, icons) — prevents pull-to-refresh showing the browser offline page
   - `/images/*`: cache-first — cover images and any other record images load offline after first view
   - `/api/records`, `/api/wishlist`, `/api/settings` (GET only): network-first with SW cache fallback — collection and wishlist survive page refresh with server down
-  - `/api/wishlist/{id}/versions` (GET only, matched by regex): network-first with SW cache fallback — saved versions survive server down after first view
+  - `/api/wishlist/{id}/versions` (GET only, matched by regex): network-first with SW cache fallback — saved versions survive server down. Cache warmed eagerly by `loadWishlist()`. If no cache entry exists, returns `[]` rather than a network error.
+  - SW cache version: `sn-v2`
   - `/api/health`: always network-only — must hit the server for reachability detection
   - All other `/api/*`: network-only (mutations, Discogs fetches, etc.)
   - Background Sync: SW flushes all IDB queues (`wishlist-sync` tag) on Android — handles `wishlist_queue`, `wishlist_updates`, `version_queue`, `version_updates`, `version_deletes`
 - **Two-state offline detection:** The app distinguishes two offline states, each with its own banner:
   - **Read-Only Mode** (`navigator.onLine === false`) — no internet, amber banner `#7A4800`. Fully read-only.
   - **Offline Mode** (`navigator.onLine === true` but `/api/health` fails) — server unreachable, slate banner `#3D4A5C`. Collection read-only from SW cache; wishlist search, add, and edit all work via IndexedDB queue.
-  - Both states set `body.offline` and disable collection write actions.
+  - Both states set `body.offline` and disable collection write actions. Read-Only Mode additionally sets `body.readonly`, which disables the wishlist detail Save/Delete buttons and all per-version action buttons.
   - Detection is event-driven: probe on load, on `window 'online'`, on any `apiFetch` TypeError, and on `visibilitychange` visible. Backoff polling (10s → 30s → 60s) only runs while the app is visible and the server is unreachable — cancelled immediately on `visibilitychange` hidden so backgrounding the app stops all polling.
 - **Offline wishlist + version queue (IndexedDB `sn_offline` v3):**
   - `wishlist_queue` (autoIncrement key `idb_key`): new wishlist items added offline. Each record: `{master_id, notes, queued_at, title, year, thumb}`. Pending items merged into `wishlistItems` with negative IDs (`-(idb_key)`) for display.
   - `wishlist_updates` (key `wishlist_id`): wishlist notes/fulfilled edits made offline. Upsert — only latest edit per item. Applied to `_serverWishlistItems` before rendering.
   - `version_queue` (autoIncrement): new versions added while server unreachable (Find pressings disabled in Read-Only Mode).
-  - `version_updates` (key `version_id`): version notes edits queued offline. Fulfilled state is not yet queued — only notes (known gap).
+  - `version_updates` (key `version_id`): version notes/fulfilled edits queued offline. Flushed with `{notes, fulfilled}` on reconnect.
   - `version_deletes`: version deletions queued offline.
   - All queues flushed on reconnect via `flushPendingQueue()` and by Background Sync on Android.
   - Discogs token never sent to browser; offline search uses unauthenticated Discogs API (25 req/min, no thumbnails returned — ♪ placeholder shown).

@@ -1874,9 +1874,13 @@ async def wantlist_preview():
 
     discogs_only = []
     fulfilled_in_discogs = []
+    skipped_count = 0
     for did, w in discogs_by_id.items():
         bi = w["basic_information"]
         master_id = str(bi.get("master_id", "")) if bi.get("master_id") else None
+        if not master_id:
+            skipped_count += 1
+            continue
         artist_list = bi.get("artists", [])
         artist = artist_list[0]["name"] if artist_list else ""
         label_list = bi.get("labels", [])
@@ -1900,14 +1904,13 @@ async def wantlist_preview():
             "wishlist_title": None,
             "new_master": False,
         }
-        if master_id:
-            wl = wishlist_by_master_id.get(master_id)
-            if wl:
-                item["wishlist_id"] = wl["id"]
-                item["wishlist_artist"] = wl["artist"]
-                item["wishlist_title"] = wl["title"]
-            else:
-                item["new_master"] = True
+        wl = wishlist_by_master_id.get(master_id)
+        if wl:
+            item["wishlist_id"] = wl["id"]
+            item["wishlist_artist"] = wl["artist"]
+            item["wishlist_title"] = wl["title"]
+        else:
+            item["new_master"] = True
 
         if did in sn_by_discogs_id:
             ver = sn_by_discogs_id[did]
@@ -1940,6 +1943,7 @@ async def wantlist_preview():
         "discogs_only": discogs_only,
         "sn_only": sn_only,
         "fulfilled_in_discogs": fulfilled_in_discogs,
+        "skipped_count": skipped_count,
     }
 
 

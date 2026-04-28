@@ -1,4 +1,4 @@
-const CACHE = 'sn-v1';
+const CACHE = 'sn-v2';
 const SHELL = ['/', '/manifest.json', '/icon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -31,7 +31,13 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return resp;
-      }).catch(() => caches.match(e.request))
+      }).catch(async () => {
+        const cached = await caches.match(e.request);
+        if (cached) return cached;
+        // No cache — return empty payload so the frontend can still render pending items
+        const empty = isVersionsList ? '[]' : '{}';
+        return new Response(empty, { status: 200, headers: { 'Content-Type': 'application/json' } });
+      })
     );
     return;
   }
@@ -152,7 +158,7 @@ async function flushOfflineQueue() {
         const r = await fetch(`/api/wishlist/versions/${upd.version_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notes: upd.notes }),
+          body: JSON.stringify({ notes: upd.notes, fulfilled: upd.fulfilled }),
         });
         if (r.ok) await swDelete(db, 'version_updates', upd.version_id);
       } catch { /* retry on next sync */ }

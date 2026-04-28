@@ -125,6 +125,14 @@
     cursor: not-allowed;
   }
 
+  body.readonly #wishlist-detail-save-btn,
+  body.readonly #wishlist-detail-delete-btn,
+  body.readonly .version-actions button {
+    opacity: 0.45;
+    pointer-events: none;
+    cursor: not-allowed;
+  }
+
   /* ── Stats bar ── */
   .stats-bar {
     background: var(--ink-mid);
@@ -1627,6 +1635,7 @@ let _releaseInfo = {};
 let pendingVersionQueue = [];
 let pendingVersionUpdates = [];
 let pendingVersionDeletes = [];
+let _versionsByWishlistId = {};
 
 // ── localStorage helpers ────────────────────────────────────────────────────
 function lsGet(key, fallback) {
@@ -1840,8 +1849,8 @@ async function removeVersionFromQueue(idbKey) {
   pendingVersionQueue = pendingVersionQueue.filter(v => v.idb_key !== idbKey);
 }
 
-async function saveVersionUpdateToQueue(versionId, notes) {
-  const entry = { version_id: versionId, notes, queued_at: new Date().toISOString() };
+async function saveVersionUpdateToQueue(versionId, notes, fulfilled) {
+  const entry = { version_id: versionId, notes, fulfilled, queued_at: new Date().toISOString() };
   const db = await openOfflineDB();
   await new Promise((resolve, reject) => {
     const tx = db.transaction('version_updates', 'readwrite');
@@ -1991,7 +2000,7 @@ async function flushPendingQueue() {
       const r = await apiFetch(`/api/wishlist/versions/${upd.version_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: upd.notes }),
+        body: JSON.stringify({ notes: upd.notes, fulfilled: upd.fulfilled }),
       });
       if (r.ok) { await removeVersionUpdateFromQueue(upd.version_id); synced++; }
       else failed++;
@@ -3255,8 +3264,11 @@ function renderWantlistSyncPreview(diff) {
   let html = '';
 
   const total = diff.discogs_only.length + diff.sn_only.length + diff.fulfilled_in_discogs.length;
+  const skippedNote = diff.skipped_count > 0
+    ? `<div style="text-align:center;font-size:12px;color:var(--ink-light);margin-top:0.75rem">${diff.skipped_count} item${diff.skipped_count !== 1 ? 's' : ''} in your Discogs wantlist skipped — no master release</div>`
+    : '';
   if (!total) {
-    content.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--ink-light);font-size:13px">Your SN wishlist versions and Discogs wantlist are in sync.</div>';
+    content.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--ink-light);font-size:13px">Your SN wishlist versions and Discogs wantlist are in sync.</div>' + skippedNote;
     document.getElementById('wantlist-sync-apply-btn').disabled = true;
     return;
   }
@@ -3359,7 +3371,7 @@ function renderWantlistSyncPreview(diff) {
     html += '</div>';
   }
 
-  content.innerHTML = html;
+  content.innerHTML = html + skippedNote;
   document.getElementById('wantlist-sync-apply-btn').disabled = false;
 }
 
@@ -3697,6 +3709,22 @@ async function loadWishlist() {
   wishlistItems = [..._serverWishlistItems, ...pending];
   if (currentSection === 'wishlist') renderWishlist();
   updateStats();
+  // Populate _versionsByWishlistId for all items so loadSavedVersions never falls back to a live fetch
+  _serverWishlistItems.filter(w => !w.version_count).forEach(w => { _versionsByWishlistId[w.id] = []; });
+  const itemsWithVersions = _serverWishlistItems.filter(w => w.version_count > 0);
+  if (navigator.onLine && itemsWithVersions.length) {
+    await Promise.all(itemsWithVersions.map(async w => {
+      try {
+        const r = await apiFetch(`/api/wishlist/${w.id}/versions`);
+        if (r.ok) _versionsByWishlistId[w.id] = await r.json();
+      } catch {}
+    }));
+    // Pre-fetch thumbnails so the SW image cache is warm for offline use
+    const thumbFiles = [...new Set(
+      Object.values(_versionsByWishlistId).flat().map(v => v.thumb_file).filter(Boolean)
+    )];
+    thumbFiles.forEach(f => fetch(`/images/${f}`).then(r => r.blob()).catch(() => {}));
+  }
 }
 
 function renderWishlistTiles() {
@@ -4008,7 +4036,7 @@ function openWishlistDetail(id) {
     if (!serverReachable) {
       await saveUpdateToQueue({ wishlist_id: id, notes, fulfilled });
       for (const ve of versionEdits)
-        await saveVersionUpdateToQueue(ve.versionId, ve.notes);
+        await saveVersionUpdateToQueue(ve.versionId, ve.notes, ve.fulfilled);
       if ('serviceWorker' in navigator && 'SyncManager' in window)
         navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
       await loadWishlist();
@@ -4051,8 +4079,11 @@ async function loadSavedVersions(wishlistId) {
   if (!panel) return;
   panel.innerHTML = `<div style="color:var(--ink-light);font-size:12px">Loading…</div>`;
   try {
-    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions`);
-    let versions = await r.json();
+    let versions = _versionsByWishlistId[wishlistId];
+    if (versions === undefined) {
+      const r = await apiFetch(`/api/wishlist/${wishlistId}/versions`);
+      versions = await r.json();
+    }
 
     // Apply pending notes edits
     versions = versions.map(v => {
@@ -4601,6 +4632,7 @@ function updateOnlineState() {
   const noInternet = !navigator.onLine;
   const offline = noInternet || !serverReachable;
   document.body.classList.toggle('offline', offline);
+  document.body.classList.toggle('readonly', noInternet);
   const banner = document.getElementById('offline-banner');
   if (noInternet) {
     banner.textContent = 'Read-Only Mode — no internet connection';
