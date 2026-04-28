@@ -2002,9 +2002,10 @@ async def wantlist_sync(body: WantlistSyncIn):
                                    VALUES (?,?,?,?,?,?,?,?,?,'',0)""",
                                 (item.master_id, ma, mt, my, mg, ms, mlp, mnfs, cover_file),
                             )
-                            wishlist_id = cur.lastrowid or conn.execute(
+                            _wrow = conn.execute(
                                 "SELECT id FROM wishlist WHERE master_id=?", (item.master_id,)
-                            ).fetchone()["id"]
+                            ).fetchone()
+                            wishlist_id = cur.lastrowid or (_wrow["id"] if _wrow else None)
                 if not wishlist_id:
                     results["errors"].append(f"Could not resolve wishlist item for {item.discogs_id}")
                     continue

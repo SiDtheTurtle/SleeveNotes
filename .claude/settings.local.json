@@ -25,7 +25,28 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/manifest.json)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/sw.js)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-192.png)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-512.png)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-512.png)",
+      "Bash(GIT_EDITOR=true git rebase origin/main)",
+      "Bash(ssh noveria *)",
+      "Bash(python3 *)",
+      "Bash(gh issue *)",
+      "Bash(curl -s http://localhost:2026/api/health)",
+      "Bash(curl -s http://localhost:2026/api/settings)",
+      "Bash(curl -s -H 'X-API-Key: __TRACKED_VAR__' http://localhost:2026/api/settings)",
+      "Bash(gh release *)",
+      "Bash(gh api *)",
+      "Bash(ssh kieran@noveria *)",
+      "Bash(gh run *)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:discogs.github.io)",
+      "WebFetch(domain:api.discogs.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python *)",
+      "Bash(curl -s -H \"X-API-Key: HelloWorld\" \"http://localhost:2026/api/wishlist/13/versions/browse\")",
+      "Bash(curl *)",
+      "Bash(sqlite3 /data/sleevenotes.db \"SELECT value FROM settings WHERE key IN \\('discogs_token','discogs_username'\\);\")",
+      "Bash(sqlite3 /mnt/data/sleevenotes.db \"SELECT key, value FROM settings WHERE key IN \\('discogs_token','discogs_username'\\);\")"
     ]
   }
 }

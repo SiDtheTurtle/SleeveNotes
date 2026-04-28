@@ -1632,6 +1632,7 @@ let _serverWishlistItems = [];
 let _lastSearchResults = [];
 let _savedVersions = [];
 let _browseVersions = [];
+let _browseMasterId = null;
 let _releaseInfo = {};
 let pendingVersionQueue = [];
 let pendingVersionUpdates = [];
@@ -4222,13 +4223,58 @@ function openVersionEdit(wishlistId, versionId) {
 }
 
 
+async function _fetchVersionsDirect(masterId, page, wishlistId) {
+  const resp = await fetch(
+    `https://api.discogs.com/masters/${masterId}/versions?format=Vinyl&page=${page}&per_page=50`,
+    { headers: { 'User-Agent': 'SleeveNotes/1.0' } }
+  );
+  if (!resp.ok) throw new Error();
+  const data = await resp.json();
+  const savedIds = new Set((_versionsByWishlistId[wishlistId] || []).map(v => String(v.discogs_id)));
+  const versions = (data.versions || []).map(v => {
+    const community = (v.stats || {}).community || {};
+    return {
+      discogs_id: String(v.id),
+      title: v.title || '',
+      label: v.label || '',
+      cat_no: v.catno || '',
+      year: v.released || null,
+      format: v.format || '',
+      country: v.country || '',
+      thumb: v.thumb || '',
+      in_wantlist: community.in_wantlist ?? null,
+      in_collection: community.in_collection ?? null,
+      saved: savedIds.has(String(v.id)),
+    };
+  });
+  const pg = data.pagination || {};
+  return {
+    versions,
+    pagination: {
+      page: pg.page || page,
+      pages: pg.pages || 1,
+      per_page: pg.per_page || 50,
+      items: pg.items || versions.length,
+    },
+  };
+}
+
 async function openVersionsBrowse(wishlistId) {
   const panel = document.getElementById('versions-browse-panel');
   panel.style.display = 'block';
   panel.innerHTML = `<div style="color:var(--ink-light);font-size:12px">Fetching from Discogs…</div>`;
   try {
-    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions/browse`);
-    const data = await r.json();
+    let data;
+    if (!serverReachable) {
+      const item = wishlistItems.find(w => w.id === wishlistId);
+      if (!item?.master_id) { panel.innerHTML = `<div style="color:var(--red);font-size:12px">Master ID not available offline.</div>`; return; }
+      _browseMasterId = item.master_id;
+      data = await _fetchVersionsDirect(item.master_id, 1, wishlistId);
+    } else {
+      _browseMasterId = null;
+      const r = await apiFetch(`/api/wishlist/${wishlistId}/versions/browse`);
+      data = await r.json();
+    }
     renderVersionsBrowse(wishlistId, data);
   } catch {
     panel.innerHTML = `<div style="color:var(--red);font-size:12px">Failed to fetch versions from Discogs.</div>`;
@@ -4379,8 +4425,13 @@ async function browseVersionsPage(wishlistId, page) {
   const panel = document.getElementById('versions-browse-panel');
   panel.innerHTML = `<div style="color:var(--ink-light);font-size:12px">Loading…</div>`;
   try {
-    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions/browse?page=${page}`);
-    const data = await r.json();
+    let data;
+    if (!serverReachable && _browseMasterId) {
+      data = await _fetchVersionsDirect(_browseMasterId, page, wishlistId);
+    } else {
+      const r = await apiFetch(`/api/wishlist/${wishlistId}/versions/browse?page=${page}`);
+      data = await r.json();
+    }
     renderVersionsBrowse(wishlistId, data, page);
   } catch {
     panel.innerHTML = `<div style="color:var(--red);font-size:12px">Failed to load page.</div>`;
@@ -4672,17 +4723,15 @@ async function probeHealth() {
   setServerReachable(await checkHealth());
 }
 
-function setServerReachable(reachable) {
+async function setServerReachable(reachable) {
   const wasUnreachable = !serverReachable;
   serverReachable = reachable;
   clearTimeout(_reachabilityPollTimer);
   _reachabilityPollTimer = null;
   updateOnlineState();
   if (!reachable && !document.hidden) scheduleReachabilityCheck(0);
-  if (wasUnreachable && reachable) {
-    toast('Server reconnected', 'success');
-    flushPendingQueue();
-  }
+  if (wasUnreachable && reachable) toast('Server reconnected', 'success');
+  if (reachable) await flushPendingQueue();
 }
 
 function scheduleReachabilityCheck(attempt) {
