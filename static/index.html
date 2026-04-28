@@ -3353,11 +3353,11 @@ function renderWishlistTiles() {
   el.innerHTML = `<div class="tile-grid">${items.map(w => `
     <div class="tile" onclick="openWishlistDetail(${w.id})">
       ${w.pending
-        ? (w.thumb ? `<img class="tile-img" src="${esc(w.thumb)}" alt="${esc(w.artist)} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">⏳</div>`)
-        : (w.cover_file ? `<img class="tile-img" src="/images/${esc(w.cover_file)}" alt="${esc(w.artist)} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">♡</div>`)}
+        ? (w.thumb ? `<img class="tile-img" src="${esc(w.thumb)}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">⏳</div>`)
+        : (w.cover_file ? `<img class="tile-img" src="/images/${esc(w.cover_file)}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">♡</div>`)}
       ${w.pending ? `<div class="tile-pending-badge">Pending</div>` : ''}
       <div class="tile-overlay">
-        <div class="tile-overlay-artist">${esc(w.artist)}</div>
+        <div class="tile-overlay-artist">${esc(displayArtist(w.artist))}</div>
         <div class="tile-overlay-title">${esc(w.title)}</div>
         ${w.year ? `<div style="font-size:11px;color:var(--cream);opacity:0.8;font-family:var(--font-mono);margin-top:0.15rem">${w.year}</div>` : ''}
       </div>
@@ -3391,7 +3391,7 @@ function renderWishlist() {
       <td class="col-cover">${w.pending
         ? (w.thumb ? `<img class="cover-thumb" src="${esc(w.thumb)}" alt="" loading="lazy">` : `<div class="cover-placeholder">⏳</div>`)
         : (w.cover_file ? `<img class="cover-thumb" src="/images/${esc(w.cover_file)}" alt="" loading="lazy">` : `<div class="cover-placeholder">♡</div>`)}</td>
-      <td class="overflow" title="${esc(w.artist)}">${esc(w.artist)}</td>
+      <td class="overflow" title="${esc(displayArtist(w.artist))}">${esc(displayArtist(w.artist))}</td>
       <td class="overflow" title="${esc(w.title)}">${esc(w.title)}</td>
       <td class="text-mono col-sm">${w.year || '—'}</td>
       <td class="text-mono col-sm">${w.pending ? '<span class="badge badge-pending">Pending</span>' : fmtDate(w.added_at ? w.added_at.split(' ')[0] : '')}</td>
@@ -3566,7 +3566,7 @@ function openWishlistDetail(id) {
   const w = wishlistItems.find(x => x.id === id);
   if (!w) return;
 
-  document.getElementById('wishlist-detail-title').textContent = w.artist;
+  document.getElementById('wishlist-detail-title').textContent = displayArtist(w.artist);
   document.getElementById('wishlist-detail-body').innerHTML = `
     <div class="detail-layout" style="margin-bottom:1.25rem">
       <div>
@@ -3575,7 +3575,7 @@ function openWishlistDetail(id) {
           : `<div class="detail-cover-placeholder">♡</div>`}
       </div>
       <div class="detail-fields">
-        <div class="detail-artist">${esc(w.artist)}</div>
+        <div class="detail-artist">${esc(displayArtist(w.artist))}</div>
         <div class="detail-title">${esc(w.title)}</div>
         <div style="margin:0.5rem 0">
           <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:13px">
@@ -3642,7 +3642,7 @@ function openPendingWishlistDetail(id) {
   const w = wishlistItems.find(x => x.id === id);
   if (!w) return;
 
-  document.getElementById('wishlist-detail-title').textContent = w.artist || w.title;
+  document.getElementById('wishlist-detail-title').textContent = displayArtist(w.artist) || w.title;
   document.getElementById('wishlist-detail-body').innerHTML = `
     <div class="detail-layout" style="margin-bottom:1.25rem">
       <div>
@@ -3651,7 +3651,7 @@ function openPendingWishlistDetail(id) {
           : `<div class="detail-cover-placeholder">⏳</div>`}
       </div>
       <div class="detail-fields">
-        <div class="detail-artist">${esc(w.artist)}</div>
+        <div class="detail-artist">${esc(displayArtist(w.artist))}</div>
         <div class="detail-title">${esc(w.title)}</div>
         <div style="margin:0.5rem 0"><span class="badge badge-pending">Pending sync</span></div>
         ${w.year ? `<div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${w.year}</span></div>` : ''}
