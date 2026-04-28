@@ -318,6 +318,25 @@ class WishlistVersionInfoIn(BaseModel):
     rating_average: Optional[float] = None
     rating_count: Optional[int] = 0
 
+class WantlistSyncItem(BaseModel):
+    discogs_id: str
+    master_id: Optional[str] = None
+    title: Optional[str] = ""
+    artist: Optional[str] = ""
+    label: Optional[str] = ""
+    cat_no: Optional[str] = ""
+    year: Optional[int] = None
+    format: Optional[str] = ""
+    country: Optional[str] = ""
+    thumb: Optional[str] = ""
+    notes: Optional[str] = ""
+    wishlist_id: Optional[int] = None
+
+class WantlistSyncIn(BaseModel):
+    to_sn: list[WantlistSyncItem] = []
+    to_discogs: list[int] = []          # wishlist_versions.id values
+    remove_from_discogs: list[str] = [] # discogs_id values
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def normalise_date(s: str) -> str:
@@ -1717,17 +1736,26 @@ async def update_wishlist_version(version_id: int, body: WishlistVersionUpdateIn
             "UPDATE wishlist_versions SET notes = ?, fulfilled = ? WHERE id = ?",
             (notes, fulfilled, version_id),
         )
-    if username and body.notes is not None:
+    newly_fulfilled = body.fulfilled is True and row["fulfilled"] == 0
+    if username:
+        hdrs = get_discogs_headers()
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                await discogs_post(
-                    client,
-                    f"https://api.discogs.com/users/{username}/wants/{discogs_id}",
-                    json={"notes": notes},
-                    headers=get_discogs_headers(),
-                )
+                if newly_fulfilled:
+                    await discogs_delete(
+                        client,
+                        f"https://api.discogs.com/users/{username}/wants/{discogs_id}",
+                        headers=hdrs,
+                    )
+                elif body.notes is not None:
+                    await discogs_post(
+                        client,
+                        f"https://api.discogs.com/users/{username}/wants/{discogs_id}",
+                        json={"notes": notes},
+                        headers=hdrs,
+                    )
         except Exception as e:
-            log.warning("Failed to update notes for version %s on Discogs: %s", discogs_id, e)
+            log.warning("Failed to update Discogs wantlist for version %s: %s", discogs_id, e)
     return {"ok": True}
 
 
@@ -1768,6 +1796,240 @@ async def delete_wishlist_version(version_id: int):
         except Exception as e:
             log.warning("Failed to remove version %s from Discogs wantlist: %s", discogs_id, e)
     return {"ok": True}
+
+
+# ── Routes: Wantlist sync ────────────────────────────────────────────────────
+
+@app.get("/api/wantlist/preview")
+async def wantlist_preview():
+    with get_db() as conn:
+        rows = conn.execute("SELECT key, value FROM settings WHERE key IN ('discogs_username','discogs_token')").fetchall()
+    settings = {r["key"]: r["value"] for r in rows}
+    username = settings.get("discogs_username", "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Discogs username not configured")
+
+    # Fetch all Discogs wantlist pages
+    hdrs = get_discogs_headers()
+    async with httpx.AsyncClient(timeout=20) as client:
+        first = await discogs_get(
+            client,
+            f"https://api.discogs.com/users/{username}/wants",
+            params={"per_page": 100, "page": 1},
+            headers=hdrs,
+        )
+        if first.status_code != 200:
+            raise HTTPException(status_code=first.status_code, detail="Discogs API error")
+        data = first.json()
+        pages = data["pagination"]["pages"]
+        wants = list(data["wants"])
+        if pages > 1:
+            responses = await asyncio.gather(*[
+                discogs_get(
+                    client,
+                    f"https://api.discogs.com/users/{username}/wants",
+                    params={"per_page": 100, "page": p},
+                    headers=hdrs,
+                )
+                for p in range(2, pages + 1)
+            ])
+            for resp in responses:
+                if resp.status_code == 200:
+                    wants.extend(resp.json()["wants"])
+
+    # Build lookup of Discogs wantlist by release_id
+    discogs_by_id = {str(w["id"]): w for w in wants}
+
+    # Load SN versions + wishlist items
+    with get_db() as conn:
+        ver_rows = conn.execute(
+            "SELECT wv.id, wv.discogs_id, wv.wishlist_id, wv.fulfilled, wv.notes, "
+            "       wv.title, wv.label, wv.cat_no, wv.year, wv.format, wv.country, wv.thumb_file "
+            "FROM wishlist_versions wv"
+        ).fetchall()
+        wl_rows = conn.execute("SELECT id, master_id, artist, title FROM wishlist").fetchall()
+
+    sn_by_discogs_id = {r["discogs_id"]: dict(r) for r in ver_rows}
+    wishlist_by_master_id = {r["master_id"]: dict(r) for r in wl_rows}
+    wishlist_by_id = {r["id"]: dict(r) for r in wl_rows}
+
+    discogs_only = []
+    fulfilled_in_discogs = []
+    for did, w in discogs_by_id.items():
+        bi = w["basic_information"]
+        master_id = str(bi.get("master_id", "")) if bi.get("master_id") else None
+        artist_list = bi.get("artists", [])
+        artist = artist_list[0]["name"] if artist_list else ""
+        label_list = bi.get("labels", [])
+        label = label_list[0]["name"] if label_list else ""
+        cat_no = label_list[0]["catno"] if label_list else ""
+        fmt_list = bi.get("formats", [])
+        fmt = ", ".join([fmt_list[0]["name"]] + fmt_list[0].get("descriptions", [])) if fmt_list else ""
+        item = {
+            "discogs_id": did,
+            "master_id": master_id,
+            "title": bi.get("title", ""),
+            "artist": artist,
+            "label": label,
+            "cat_no": cat_no,
+            "year": bi.get("year"),
+            "format": fmt,
+            "thumb": bi.get("thumb", ""),
+            "notes": w.get("notes", "") or "",
+            "wishlist_id": None,
+            "wishlist_artist": None,
+            "wishlist_title": None,
+            "new_master": False,
+        }
+        if master_id:
+            wl = wishlist_by_master_id.get(master_id)
+            if wl:
+                item["wishlist_id"] = wl["id"]
+                item["wishlist_artist"] = wl["artist"]
+                item["wishlist_title"] = wl["title"]
+            else:
+                item["new_master"] = True
+
+        if did in sn_by_discogs_id:
+            ver = sn_by_discogs_id[did]
+            if ver["fulfilled"]:
+                fulfilled_in_discogs.append({**item, "version_id": ver["id"]})
+        else:
+            discogs_only.append(item)
+
+    sn_only = []
+    for did, ver in sn_by_discogs_id.items():
+        if not ver["fulfilled"] and did not in discogs_by_id:
+            wl = wishlist_by_id.get(ver["wishlist_id"])
+            sn_only.append({
+                "version_id": ver["id"],
+                "discogs_id": did,
+                "title": ver["title"],
+                "label": ver["label"],
+                "cat_no": ver["cat_no"],
+                "year": ver["year"],
+                "format": ver["format"],
+                "country": ver["country"],
+                "thumb_file": ver["thumb_file"],
+                "notes": ver["notes"],
+                "wishlist_id": ver["wishlist_id"],
+                "wishlist_artist": wl["artist"] if wl else "",
+                "wishlist_title": wl["title"] if wl else "",
+            })
+
+    return {
+        "discogs_only": discogs_only,
+        "sn_only": sn_only,
+        "fulfilled_in_discogs": fulfilled_in_discogs,
+    }
+
+
+@app.post("/api/wantlist/sync")
+async def wantlist_sync(body: WantlistSyncIn):
+    with get_db() as conn:
+        rows = conn.execute("SELECT key, value FROM settings WHERE key IN ('discogs_username','discogs_token')").fetchall()
+    settings = {r["key"]: r["value"] for r in rows}
+    username = settings.get("discogs_username", "").strip()
+    hdrs = get_discogs_headers()
+
+    results = {"added_to_sn": 0, "pushed_to_discogs": 0, "removed_from_discogs": 0, "errors": []}
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        # to_sn: add versions to SN (create parent wishlist item if needed)
+        for item in body.to_sn:
+            try:
+                wishlist_id = item.wishlist_id
+                if not wishlist_id and item.master_id:
+                    # Fetch master metadata to create wishlist entry
+                    mr = await discogs_get(
+                        client,
+                        f"https://api.discogs.com/masters/{item.master_id}",
+                        headers=hdrs,
+                    )
+                    if mr.status_code == 200:
+                        md = mr.json()
+                        ma = md.get("artists", [{}])[0].get("name", item.artist)
+                        mt = md.get("title", item.title)
+                        my = md.get("year")
+                        mg = ", ".join(md.get("genres", []))
+                        ms = ", ".join(md.get("styles", []))
+                        mlp = md.get("lowest_price")
+                        mnfs = md.get("num_for_sale")
+                        cover_file = ""
+                        images = md.get("images", [])
+                        if images:
+                            img_url = images[0].get("uri", "")
+                            if img_url:
+                                try:
+                                    ext = img_url.rsplit(".", 1)[-1].split("?")[0] or "jpeg"
+                                    fname = f"m{item.master_id}_01.{ext}"
+                                    dest = IMAGES_DIR / fname
+                                    if not dest.exists():
+                                        ir = await client.get(img_url, timeout=10)
+                                        if ir.status_code == 200:
+                                            dest.write_bytes(ir.content)
+                                    cover_file = fname
+                                except Exception:
+                                    pass
+                        with get_db() as conn:
+                            cur = conn.execute(
+                                """INSERT OR IGNORE INTO wishlist
+                                   (master_id, artist, title, year, genres, styles,
+                                    lowest_price, num_for_sale, cover_file, notes, fulfilled)
+                                   VALUES (?,?,?,?,?,?,?,?,?,'',0)""",
+                                (item.master_id, ma, mt, my, mg, ms, mlp, mnfs, cover_file),
+                            )
+                            wishlist_id = cur.lastrowid or conn.execute(
+                                "SELECT id FROM wishlist WHERE master_id=?", (item.master_id,)
+                            ).fetchone()["id"]
+                if not wishlist_id:
+                    results["errors"].append(f"Could not resolve wishlist item for {item.discogs_id}")
+                    continue
+                with get_db() as conn:
+                    conn.execute(
+                        """INSERT OR IGNORE INTO wishlist_versions
+                           (wishlist_id, discogs_id, title, label, cat_no, year, format,
+                            country, thumb_file, notes, in_wantlist, in_collection)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)""",
+                        (wishlist_id, item.discogs_id, item.title or "", item.label or "",
+                         item.cat_no or "", item.year, item.format or "", item.country or "",
+                         "", item.notes or ""),
+                    )
+                results["added_to_sn"] += 1
+            except Exception as e:
+                results["errors"].append(f"Error adding {item.discogs_id}: {e}")
+
+        # to_discogs: push SN versions to Discogs wantlist
+        if username and body.to_discogs:
+            with get_db() as conn:
+                ver_rows = conn.execute(
+                    f"SELECT id, discogs_id, notes FROM wishlist_versions WHERE id IN ({','.join('?' * len(body.to_discogs))})",
+                    body.to_discogs,
+                ).fetchall()
+            for ver in ver_rows:
+                try:
+                    url = f"https://api.discogs.com/users/{username}/wants/{ver['discogs_id']}"
+                    await discogs_put(client, url, headers=hdrs)
+                    if ver["notes"]:
+                        await discogs_post(client, url, json={"notes": ver["notes"]}, headers=hdrs)
+                    results["pushed_to_discogs"] += 1
+                except Exception as e:
+                    results["errors"].append(f"Error pushing {ver['discogs_id']}: {e}")
+
+        # remove_from_discogs: delete fulfilled versions from Discogs wantlist
+        if username:
+            for discogs_id in body.remove_from_discogs:
+                try:
+                    await discogs_delete(
+                        client,
+                        f"https://api.discogs.com/users/{username}/wants/{discogs_id}",
+                        headers=hdrs,
+                    )
+                    results["removed_from_discogs"] += 1
+                except Exception as e:
+                    results["errors"].append(f"Error removing {discogs_id}: {e}")
+
+    return results
 
 
 # ── Static ────────────────────────────────────────────────────────────────────

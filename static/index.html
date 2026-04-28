@@ -1374,6 +1374,14 @@
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
           <button id="btn-sync-discogs" class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync with Discogs…</button>
         </div>
+        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Sync Wantlist</div>
+          <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Two-way sync between your SN wishlist versions and your Discogs wantlist. Shows a diff — choose what to add or remove.</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <button id="btn-sync-wantlist" class="btn btn-secondary btn-sm" onclick="openWantlistSync()">Sync Wantlist…</button>
+        </div>
       </div>
 
       <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
@@ -1521,6 +1529,24 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-discogs-sync')">Cancel</button>
       <button class="btn btn-primary" id="sync-apply-btn" onclick="applySync()" disabled>Apply Sync</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Wantlist Sync Modal ── -->
+<div class="modal-backdrop" id="modal-wantlist-sync">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <span class="modal-title">Wantlist Sync Preview</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-wantlist-sync')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="wantlist-sync-loading" style="text-align:center;padding:2rem;color:var(--ink-light);font-size:13px">Fetching your Discogs wantlist…</div>
+      <div id="wantlist-sync-content" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-wantlist-sync')">Cancel</button>
+      <button class="btn btn-primary" id="wantlist-sync-apply-btn" onclick="applyWantlistSync()" disabled>Apply Sync</button>
     </div>
   </div>
 </div>
@@ -3207,6 +3233,168 @@ async function applySync() {
   }
 }
 
+// ── Wantlist sync ──────────────────────────────────────────────────────────
+
+let _wantlistDiff = null;
+
+async function openWantlistSync() {
+  if (!discogsUsername) { toast('Set your Discogs username in Settings first', 'error'); return; }
+  closeModal('modal-settings');
+  document.getElementById('wantlist-sync-loading').style.display = '';
+  document.getElementById('wantlist-sync-content').style.display = 'none';
+  document.getElementById('wantlist-sync-apply-btn').disabled = true;
+  openModal('modal-wantlist-sync');
+  try {
+    const resp = await apiFetch('/api/wantlist/preview');
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.status);
+    _wantlistDiff = await resp.json();
+    renderWantlistSyncPreview(_wantlistDiff);
+  } catch(e) {
+    toast('Preview failed: ' + e.message, 'error');
+    closeModal('modal-wantlist-sync');
+  }
+}
+
+function renderWantlistSyncPreview(diff) {
+  document.getElementById('wantlist-sync-loading').style.display = 'none';
+  const content = document.getElementById('wantlist-sync-content');
+  content.style.display = '';
+  let html = '';
+
+  const total = diff.discogs_only.length + diff.sn_only.length + diff.fulfilled_in_discogs.length;
+  if (!total) {
+    content.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--ink-light);font-size:13px">Your SN wishlist versions and Discogs wantlist are in sync.</div>';
+    document.getElementById('wantlist-sync-apply-btn').disabled = true;
+    return;
+  }
+
+  const versionThumb = (item) => {
+    if (item.thumb_file) return `<img src="/images/${esc(item.thumb_file)}" class="version-thumb" loading="lazy">`;
+    if (item.thumb) return `<img src="${esc(item.thumb)}" class="version-thumb" loading="lazy">`;
+    return `<div class="version-thumb-placeholder">♪</div>`;
+  };
+
+  const masterLabel = (item) => {
+    if (item.new_master) return `<span style="color:var(--green);font-size:11px;font-family:var(--font-mono)">New: ${esc(item.artist)} — ${esc(item.title)}</span>`;
+    if (item.wishlist_artist) return `<span style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${esc(item.wishlist_artist)} — ${esc(item.wishlist_title)}</span>`;
+    return `<span style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">Master unknown</span>`;
+  };
+
+  if (diff.discogs_only.length) {
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+        <input type="checkbox" id="wl-check-discogs-all" onchange="toggleWantlistSection('discogs-only',this.checked)" checked>
+        <span style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--green);font-weight:500">In Discogs wantlist, not in SN (${diff.discogs_only.length})</span>
+      </div>`;
+    diff.discogs_only.forEach((item, i) => {
+      const sec = item.label ? `${esc(item.label)}${item.cat_no ? ' · ' + esc(item.cat_no) : ''}` : '';
+      const meta2 = [item.year, item.country, item.format].filter(Boolean).join(' · ');
+      html += `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" class="wl-check-discogs-only" data-idx="${i}" checked>
+        ${versionThumb(item)}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.title)}</div>
+          ${sec ? `<div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${sec}</div>` : ''}
+          ${meta2 ? `<div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${meta2}</div>` : ''}
+          ${masterLabel(item)}
+        </div>
+        <span style="font-size:11px;color:var(--green);flex-shrink:0">→ SN</span>
+      </label>`;
+    });
+    html += '</div>';
+  }
+
+  if (diff.sn_only.length) {
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+        <input type="checkbox" id="wl-check-sn-all" onchange="toggleWantlistSection('sn-only',this.checked)" checked>
+        <span style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--gold);font-weight:500">In SN, not in Discogs wantlist (${diff.sn_only.length})</span>
+      </div>`;
+    diff.sn_only.forEach((item, i) => {
+      const sec = item.label ? `${esc(item.label)}${item.cat_no ? ' · ' + esc(item.cat_no) : ''}` : '';
+      const meta2 = [item.year, item.country, item.format].filter(Boolean).join(' · ');
+      html += `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" class="wl-check-sn-only" data-idx="${i}" checked>
+        ${versionThumb(item)}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.title)}</div>
+          ${sec ? `<div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${sec}</div>` : ''}
+          ${meta2 ? `<div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${meta2}</div>` : ''}
+          <span style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${esc(item.wishlist_artist)} — ${esc(item.wishlist_title)}</span>
+        </div>
+        <span style="font-size:11px;color:var(--gold);flex-shrink:0">→ Discogs</span>
+      </label>`;
+    });
+    html += '</div>';
+  }
+
+  if (diff.fulfilled_in_discogs.length) {
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+        <input type="checkbox" id="wl-check-fulfilled-all" onchange="toggleWantlistSection('fulfilled',this.checked)" checked>
+        <span style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink-light);font-weight:500">Fulfilled — still in Discogs wantlist (${diff.fulfilled_in_discogs.length})</span>
+      </div>`;
+    diff.fulfilled_in_discogs.forEach((item, i) => {
+      const sec = item.label ? `${esc(item.label)}${item.cat_no ? ' · ' + esc(item.cat_no) : ''}` : '';
+      html += `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" class="wl-check-fulfilled" data-idx="${i}" checked>
+        ${versionThumb(item)}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.title)}</div>
+          ${sec ? `<div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${sec}</div>` : ''}
+        </div>
+        <span style="font-size:11px;color:var(--ink-light);flex-shrink:0">Remove from Discogs</span>
+      </label>`;
+    });
+    html += '</div>';
+  }
+
+  content.innerHTML = html;
+  document.getElementById('wantlist-sync-apply-btn').disabled = false;
+}
+
+function toggleWantlistSection(section, checked) {
+  const cls = section === 'discogs-only' ? 'wl-check-discogs-only'
+            : section === 'sn-only'      ? 'wl-check-sn-only'
+            :                              'wl-check-fulfilled';
+  document.querySelectorAll('.' + cls).forEach(el => { el.checked = checked; });
+}
+
+async function applyWantlistSync() {
+  if (!_wantlistDiff) return;
+  const btn = document.getElementById('wantlist-sync-apply-btn');
+  btn.disabled = true;
+  btn.textContent = 'Applying…';
+
+  const toSn = [...document.querySelectorAll('.wl-check-discogs-only:checked')]
+    .map(el => _wantlistDiff.discogs_only[+el.dataset.idx]);
+  const toDiscogs = [...document.querySelectorAll('.wl-check-sn-only:checked')]
+    .map(el => _wantlistDiff.sn_only[+el.dataset.idx].version_id);
+  const removeFromDiscogs = [...document.querySelectorAll('.wl-check-fulfilled:checked')]
+    .map(el => _wantlistDiff.fulfilled_in_discogs[+el.dataset.idx].discogs_id);
+
+  try {
+    const resp = await apiFetch('/api/wantlist/sync', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ to_sn: toSn, to_discogs: toDiscogs, remove_from_discogs: removeFromDiscogs }),
+    });
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.status);
+    const result = await resp.json();
+    closeModal('modal-wantlist-sync');
+    const parts = [];
+    if (result.added_to_sn)           parts.push(`${result.added_to_sn} added to SN`);
+    if (result.pushed_to_discogs)     parts.push(`${result.pushed_to_discogs} pushed to Discogs`);
+    if (result.removed_from_discogs)  parts.push(`${result.removed_from_discogs} removed from Discogs`);
+    if (result.errors?.length)        parts.push(`${result.errors.length} error(s)`);
+    toast(parts.length ? `Wantlist sync: ${parts.join(', ')}` : 'Wantlist sync complete', result.errors?.length ? 'error' : 'success');
+    if (result.added_to_sn) loadWishlist();
+  } catch(e) {
+    toast('Wantlist sync failed: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Apply Sync';
+  }
+}
+
 // ── Settings ───────────────────────────────────────────────────────────────
 function openSettings() {
   document.getElementById('clean-artists-toggle').checked = cleanArtists;
@@ -4416,6 +4604,8 @@ function updateOnlineState() {
   if (addBtn) addBtn.disabled = offline;
   const syncBtn = document.getElementById('btn-sync-discogs');
   if (syncBtn) syncBtn.disabled = offline;
+  const wantlistSyncBtn = document.getElementById('btn-sync-wantlist');
+  if (wantlistSyncBtn) wantlistSyncBtn.disabled = offline;
   const importLabel = document.getElementById('btn-import-csv');
   if (importLabel) { importLabel.style.opacity = offline ? '0.5' : ''; importLabel.style.pointerEvents = offline ? 'none' : ''; }
   const importInput = document.getElementById('input-import-csv');
