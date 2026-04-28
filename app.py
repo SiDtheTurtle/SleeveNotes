@@ -239,6 +239,10 @@ def init_db():
             in_wantlist   INTEGER,
             in_collection INTEGER,
             fulfilled     INTEGER NOT NULL DEFAULT 0,
+            release_notes TEXT,
+            identifiers   TEXT,
+            rating_average REAL,
+            rating_count  INTEGER,
             added_at      TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE (wishlist_id, discogs_id)
         );
@@ -296,6 +300,10 @@ class WishlistVersionIn(BaseModel):
     in_wantlist: Optional[int] = None
     in_collection: Optional[int] = None
     notes: Optional[str] = ""
+    release_notes: Optional[str] = ""
+    identifiers: Optional[str] = "[]"
+    rating_average: Optional[float] = None
+    rating_count: Optional[int] = 0
 
 class WishlistVersionSaveIn(BaseModel):
     versions: list[WishlistVersionIn]
@@ -303,6 +311,12 @@ class WishlistVersionSaveIn(BaseModel):
 class WishlistVersionUpdateIn(BaseModel):
     notes: Optional[str] = None
     fulfilled: Optional[bool] = None
+
+class WishlistVersionInfoIn(BaseModel):
+    release_notes: Optional[str] = ""
+    identifiers: Optional[str] = "[]"
+    rating_average: Optional[float] = None
+    rating_count: Optional[int] = 0
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1438,15 +1452,19 @@ async def search_masters(q: str):
 
 @app.get("/api/wishlist")
 def list_wishlist(show_fulfilled: bool = False):
+    base = """
+        SELECT w.*, COUNT(wv.id) AS version_count
+        FROM wishlist w
+        LEFT JOIN wishlist_versions wv ON wv.wishlist_id = w.id
+        {where}
+        GROUP BY w.id
+        ORDER BY w.artist, w.title
+    """
     with get_db() as conn:
         if show_fulfilled:
-            rows = conn.execute(
-                "SELECT * FROM wishlist ORDER BY artist, title"
-            ).fetchall()
+            rows = conn.execute(base.format(where="")).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT * FROM wishlist WHERE fulfilled = 0 ORDER BY artist, title"
-            ).fetchall()
+            rows = conn.execute(base.format(where="WHERE w.fulfilled = 0")).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -1506,6 +1524,39 @@ def delete_wishlist(wishlist_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM wishlist WHERE id = ?", (wishlist_id,))
     return {"ok": True}
+
+
+# ── Routes: Release info ─────────────────────────────────────────────────────
+
+@app.get("/api/release/{discogs_id}/info")
+async def release_info(discogs_id: str):
+    rid = discogs_id.lstrip("r")
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT release_notes, identifiers, rating_average, rating_count FROM wishlist_versions WHERE discogs_id = ? LIMIT 1",
+            (rid,),
+        ).fetchone()
+    if row and (row["release_notes"] or row["identifiers"] not in (None, "", "[]")):
+        return {
+            "notes": row["release_notes"] or "",
+            "identifiers": json.loads(row["identifiers"] or "[]"),
+            "rating_average": row["rating_average"],
+            "rating_count": row["rating_count"] or 0,
+        }
+    hdrs = get_discogs_headers()
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await discogs_get(client, f"https://api.discogs.com/releases/{rid}", headers=hdrs)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="Discogs release fetch failed")
+    data = resp.json()
+    community = data.get("community", {})
+    rating = community.get("rating", {})
+    return {
+        "notes": data.get("notes", "") or "",
+        "identifiers": data.get("identifiers", []),
+        "rating_average": rating.get("average"),
+        "rating_count": rating.get("count", 0),
+    }
 
 
 # ── Routes: Wishlist versions ─────────────────────────────────────────────────
@@ -1602,16 +1653,34 @@ async def add_wishlist_versions(wishlist_id: int, body: WishlistVersionSaveIn):
                             thumb_file = filename
                     except Exception:
                         pass
+            release_notes = v.release_notes or ""
+            identifiers = v.identifiers or "[]"
+            rating_average = v.rating_average
+            rating_count = v.rating_count or 0
+            if not release_notes and identifiers in ("[]", ""):
+                try:
+                    ri = await discogs_get(client, f"https://api.discogs.com/releases/{v.discogs_id}", headers=hdrs)
+                    if ri.status_code == 200:
+                        rd = ri.json()
+                        release_notes = rd.get("notes", "") or ""
+                        identifiers = json.dumps(rd.get("identifiers", []))
+                        community_rating = rd.get("community", {}).get("rating", {})
+                        rating_average = community_rating.get("average")
+                        rating_count = community_rating.get("count", 0)
+                except Exception as e:
+                    log.warning("Failed to fetch release info for %s: %s", v.discogs_id, e)
             try:
                 with get_db() as conn:
                     conn.execute(
                         """INSERT INTO wishlist_versions
                            (wishlist_id, discogs_id, title, label, cat_no, year, format,
-                            country, thumb_file, notes, in_wantlist, in_collection)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            country, thumb_file, notes, in_wantlist, in_collection,
+                            release_notes, identifiers, rating_average, rating_count)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (wishlist_id, v.discogs_id, v.title or "", v.label or "",
                          v.cat_no or "", v.year, v.format or "", v.country or "",
-                         thumb_file, v.notes or "", v.in_wantlist, v.in_collection),
+                         thumb_file, v.notes or "", v.in_wantlist, v.in_collection,
+                         release_notes, identifiers, rating_average, rating_count),
                     )
                 added.append(v.discogs_id)
             except sqlite3.IntegrityError:
@@ -1659,6 +1728,21 @@ async def update_wishlist_version(version_id: int, body: WishlistVersionUpdateIn
                 )
         except Exception as e:
             log.warning("Failed to update notes for version %s on Discogs: %s", discogs_id, e)
+    return {"ok": True}
+
+
+@app.patch("/api/wishlist/versions/{version_id}/info")
+def patch_wishlist_version_info(version_id: int, body: WishlistVersionInfoIn):
+    with get_db() as conn:
+        if not conn.execute("SELECT id FROM wishlist_versions WHERE id = ?", (version_id,)).fetchone():
+            raise HTTPException(status_code=404)
+        conn.execute(
+            """UPDATE wishlist_versions
+               SET release_notes = ?, identifiers = ?, rating_average = ?, rating_count = ?
+               WHERE id = ?""",
+            (body.release_notes or "", body.identifiers or "[]",
+             body.rating_average, body.rating_count or 0, version_id),
+        )
     return {"ok": True}
 
 

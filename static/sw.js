@@ -22,10 +22,14 @@ self.addEventListener('fetch', e => {
 
   // Cache read-only data endpoints (network-first, cache fallback)
   const CACHED_DATA = ['/api/records', '/api/wishlist', '/api/settings'];
-  if (e.request.method === 'GET' && CACHED_DATA.some(p => url.pathname.startsWith(p))) {
+  const isVersionsList = e.request.method === 'GET' && /^\/api\/wishlist\/\d+\/versions$/.test(url.pathname);
+  if (e.request.method === 'GET' && (CACHED_DATA.includes(url.pathname) || isVersionsList)) {
     e.respondWith(
       fetch(e.request).then(resp => {
-        if (resp.ok) caches.open(CACHE).then(c => c.put(e.request, resp.clone()));
+        if (resp.ok) {
+          const clone = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
         return resp;
       }).catch(() => caches.match(e.request))
     );
@@ -53,7 +57,10 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(e.request)
       .then(resp => {
-        if (resp.ok) caches.open(CACHE).then(c => c.put(e.request, resp.clone()));
+        if (resp.ok) {
+          const clone = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
         return resp;
       })
       .catch(() => caches.match(e.request))
@@ -67,13 +74,19 @@ self.addEventListener('sync', e => {
 
 function openSwDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('sn_offline', 2);
+    const req = indexedDB.open('sn_offline', 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('wishlist_queue'))
         db.createObjectStore('wishlist_queue', { keyPath: 'idb_key', autoIncrement: true });
       if (!db.objectStoreNames.contains('wishlist_updates'))
         db.createObjectStore('wishlist_updates', { keyPath: 'wishlist_id' });
+      if (!db.objectStoreNames.contains('version_queue'))
+        db.createObjectStore('version_queue', { keyPath: 'idb_key', autoIncrement: true });
+      if (!db.objectStoreNames.contains('version_updates'))
+        db.createObjectStore('version_updates', { keyPath: 'version_id' });
+      if (!db.objectStoreNames.contains('version_deletes'))
+        db.createObjectStore('version_deletes', { keyPath: 'version_id' });
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = reject;
@@ -120,6 +133,35 @@ async function flushOfflineQueue() {
           body: JSON.stringify({ notes: upd.notes, fulfilled: upd.fulfilled }),
         });
         if (r.ok) await swDelete(db, 'wishlist_updates', upd.wishlist_id);
+      } catch { /* retry on next sync */ }
+    }
+
+    for (const item of await swGetAll(db, 'version_queue')) {
+      try {
+        const r = await fetch(`/api/wishlist/${item.wishlist_id}/versions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ versions: [item.version] }),
+        });
+        if (r.ok) await swDelete(db, 'version_queue', item.idb_key);
+      } catch { /* retry on next sync */ }
+    }
+
+    for (const upd of await swGetAll(db, 'version_updates')) {
+      try {
+        const r = await fetch(`/api/wishlist/versions/${upd.version_id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes: upd.notes }),
+        });
+        if (r.ok) await swDelete(db, 'version_updates', upd.version_id);
+      } catch { /* retry on next sync */ }
+    }
+
+    for (const del of await swGetAll(db, 'version_deletes')) {
+      try {
+        const r = await fetch(`/api/wishlist/versions/${del.version_id}`, { method: 'DELETE' });
+        if (r.ok) await swDelete(db, 'version_deletes', del.version_id);
       } catch { /* retry on next sync */ }
     }
   } catch { /* IDB unavailable */ }

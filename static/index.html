@@ -710,6 +710,31 @@
 
   .detail-val { color: var(--ink); }
 
+  /* ── Wishlist detail tabs ── */
+  .detail-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+  .detail-tab { padding: 0.4rem 1rem; font-size: 12px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; border: none; background: none; color: var(--ink-light); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .detail-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+  .detail-tab-panel { display: none; }
+  .detail-tab-panel.active { display: block; }
+
+  /* ── Versions panel ── */
+  .versions-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .version-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+  .version-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 3px; border: 1px solid var(--border); flex-shrink: 0; }
+  .version-thumb-placeholder { width: 40px; height: 40px; background: var(--groove); border-radius: 3px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--ink-light); }
+  .version-meta { flex: 1; min-width: 0; }
+  .version-meta-primary { font-size: 12.5px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .version-meta-secondary { font-size: 11px; color: var(--ink-light); font-family: var(--font-mono); margin-top: 1px; }
+  .version-stats { font-size: 10px; color: var(--ink-light); font-family: var(--font-mono); white-space: nowrap; text-align: right; flex-shrink: 0; }
+  .version-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+  .version-row-saved { opacity: 0.55; }
+  .version-info-panel { padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-top: none; border-radius: 0 0 4px 4px; background: var(--bg); font-size: 12px; margin-top: -1px; }
+  .version-info-panel .info-section { margin-bottom: 0.6rem; }
+  .version-info-panel .info-section:last-child { margin-bottom: 0; }
+  .version-info-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-light); margin-bottom: 0.25rem; }
+  .version-info-identifiers { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .version-info-identifier { font-family: var(--font-mono); font-size: 11px; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; }
+
   /* ── Form ── */
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
   .form-full { grid-column: 1 / -1; }
@@ -875,7 +900,9 @@
   .badge-want { background: #FFF3CD; color: #856404; font-size: 9px; padding: 1px 5px; border: 1px solid #FFE69C; }
   .badge-fulfilled { background: #D4EDDA; color: var(--green); font-size: 9px; padding: 1px 5px; border: 1px solid #B8DFC5; }
   .badge-pending { background: #FFF3CD; color: #856404; font-size: 9px; padding: 1px 5px; border: 1px solid #FFE69C; }
+  .badge-versions { background: #E8EAF6; color: #3949AB; font-size: 9px; padding: 1px 5px; border: 1px solid #C5CAE9; }
   .tile-pending-badge { position: absolute; top: 0.4rem; right: 0.4rem; background: rgba(133,100,4,0.9); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.03em; pointer-events: none; }
+  .tile-versions-badge { position: absolute; bottom: 0.4rem; right: 0.4rem; background: rgba(57,73,171,0.85); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.03em; pointer-events: none; }
 
   /* ── Misc ── */
   .spinner {
@@ -1500,7 +1527,7 @@
 
 <!-- ── Wishlist Detail Modal ── -->
 <div class="modal-backdrop" id="modal-wishlist-detail">
-  <div class="modal" style="max-width:560px">
+  <div class="modal" style="max-width:680px">
     <div class="modal-header">
       <span class="modal-title" id="wishlist-detail-title">Wishlist Item</span>
       <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-wishlist-detail')">✕</button>
@@ -1575,6 +1602,12 @@ let pendingQueue = [];
 let pendingUpdates = [];
 let _serverWishlistItems = [];
 let _lastSearchResults = [];
+let _savedVersions = [];
+let _browseVersions = [];
+let _releaseInfo = {};
+let pendingVersionQueue = [];
+let pendingVersionUpdates = [];
+let pendingVersionDeletes = [];
 
 // ── localStorage helpers ────────────────────────────────────────────────────
 function lsGet(key, fallback) {
@@ -1702,13 +1735,19 @@ async function submitAuthKey() {
 // ── IndexedDB offline queue ─────────────────────────────────────────────────
 function openOfflineDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('sn_offline', 2);
+    const req = indexedDB.open('sn_offline', 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('wishlist_queue'))
         db.createObjectStore('wishlist_queue', { keyPath: 'idb_key', autoIncrement: true });
       if (!db.objectStoreNames.contains('wishlist_updates'))
         db.createObjectStore('wishlist_updates', { keyPath: 'wishlist_id' });
+      if (!db.objectStoreNames.contains('version_queue'))
+        db.createObjectStore('version_queue', { keyPath: 'idb_key', autoIncrement: true });
+      if (!db.objectStoreNames.contains('version_updates'))
+        db.createObjectStore('version_updates', { keyPath: 'version_id' });
+      if (!db.objectStoreNames.contains('version_deletes'))
+        db.createObjectStore('version_deletes', { keyPath: 'version_id' });
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = reject;
@@ -1723,11 +1762,14 @@ async function initPendingQueue() {
       req.onsuccess = e => resolve(e.target.result);
       req.onerror = reject;
     });
-    [pendingQueue, pendingUpdates] = await Promise.all([
+    [pendingQueue, pendingUpdates, pendingVersionQueue, pendingVersionUpdates, pendingVersionDeletes] = await Promise.all([
       load('wishlist_queue'),
       load('wishlist_updates'),
+      load('version_queue'),
+      load('version_updates'),
+      load('version_deletes'),
     ]);
-  } catch { pendingQueue = []; pendingUpdates = []; }
+  } catch { pendingQueue = []; pendingUpdates = []; pendingVersionQueue = []; pendingVersionUpdates = []; pendingVersionDeletes = []; }
 }
 
 async function saveUpdateToQueue(update) {
@@ -1752,6 +1794,97 @@ async function removeUpdateFromQueue(wishlistId) {
     tx.onerror = reject;
   });
   pendingUpdates = pendingUpdates.filter(u => u.wishlist_id !== wishlistId);
+}
+
+async function saveVersionToQueue(wishlistId, version) {
+  const entry = { wishlist_id: wishlistId, version, queued_at: new Date().toISOString() };
+  const db = await openOfflineDB();
+  const key = await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_queue', 'readwrite');
+    const req = tx.objectStore('version_queue').add(entry);
+    req.onsuccess = e => resolve(e.target.result);
+    tx.onerror = reject;
+  });
+  entry.idb_key = key;
+  pendingVersionQueue.push(entry);
+  return key;
+}
+
+async function removeVersionFromQueue(idbKey) {
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_queue', 'readwrite');
+    tx.objectStore('version_queue').delete(idbKey);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+  pendingVersionQueue = pendingVersionQueue.filter(v => v.idb_key !== idbKey);
+}
+
+async function saveVersionUpdateToQueue(versionId, notes) {
+  const entry = { version_id: versionId, notes, queued_at: new Date().toISOString() };
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_updates', 'readwrite');
+    tx.objectStore('version_updates').put(entry);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+  const idx = pendingVersionUpdates.findIndex(u => u.version_id === versionId);
+  if (idx >= 0) pendingVersionUpdates[idx] = entry; else pendingVersionUpdates.push(entry);
+}
+
+async function removeVersionUpdateFromQueue(versionId) {
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_updates', 'readwrite');
+    tx.objectStore('version_updates').delete(versionId);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+  pendingVersionUpdates = pendingVersionUpdates.filter(u => u.version_id !== versionId);
+}
+
+async function saveVersionDeleteToQueue(versionId, wishlistId) {
+  const entry = { version_id: versionId, wishlist_id: wishlistId, queued_at: new Date().toISOString() };
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_deletes', 'readwrite');
+    tx.objectStore('version_deletes').put(entry);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+  if (!pendingVersionDeletes.find(d => d.version_id === versionId))
+    pendingVersionDeletes.push(entry);
+}
+
+async function removeVersionDeleteFromQueue(versionId) {
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_deletes', 'readwrite');
+    tx.objectStore('version_deletes').delete(versionId);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+  pendingVersionDeletes = pendingVersionDeletes.filter(d => d.version_id !== versionId);
+}
+
+async function updateVersionQueueItemNotes(idbKey, notes) {
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_queue', 'readwrite');
+    const store = tx.objectStore('version_queue');
+    const req = store.get(idbKey);
+    req.onsuccess = e => {
+      const item = e.target.result;
+      store.put({ ...item, version: { ...item.version, notes } });
+      tx.oncomplete = resolve;
+      tx.onerror = reject;
+    };
+    req.onerror = reject;
+  });
+  const item = pendingVersionQueue.find(p => p.idb_key === idbKey);
+  if (item) item.version.notes = notes;
 }
 
 async function saveToQueue(item) {
@@ -1795,7 +1928,7 @@ async function updateQueueItemNotes(idbKey, notes) {
 }
 
 async function flushPendingQueue() {
-  if (!pendingQueue.length && !pendingUpdates.length) return;
+  if (!pendingQueue.length && !pendingUpdates.length && !pendingVersionQueue.length && !pendingVersionUpdates.length && !pendingVersionDeletes.length) return;
   let synced = 0, failed = 0;
 
   for (const item of [...pendingQueue]) {
@@ -1818,6 +1951,38 @@ async function flushPendingQueue() {
         body: JSON.stringify({ notes: upd.notes, fulfilled: upd.fulfilled }),
       });
       if (r.ok) { await removeUpdateFromQueue(upd.wishlist_id); synced++; }
+      else failed++;
+    } catch { failed++; }
+  }
+
+  for (const item of [...pendingVersionQueue]) {
+    try {
+      const r = await apiFetch(`/api/wishlist/${item.wishlist_id}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versions: [item.version] }),
+      });
+      if (r.ok) { await removeVersionFromQueue(item.idb_key); synced++; }
+      else failed++;
+    } catch { failed++; }
+  }
+
+  for (const upd of [...pendingVersionUpdates]) {
+    try {
+      const r = await apiFetch(`/api/wishlist/versions/${upd.version_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: upd.notes }),
+      });
+      if (r.ok) { await removeVersionUpdateFromQueue(upd.version_id); synced++; }
+      else failed++;
+    } catch { failed++; }
+  }
+
+  for (const del of [...pendingVersionDeletes]) {
+    try {
+      const r = await apiFetch(`/api/wishlist/versions/${del.version_id}`, { method: 'DELETE' });
+      if (r.ok) { await removeVersionDeleteFromQueue(del.version_id); synced++; }
       else failed++;
     } catch { failed++; }
   }
@@ -3356,6 +3521,7 @@ function renderWishlistTiles() {
         ? (w.thumb ? `<img class="tile-img" src="${esc(w.thumb)}" alt="${esc(w.artist)} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">⏳</div>`)
         : (w.cover_file ? `<img class="tile-img" src="/images/${esc(w.cover_file)}" alt="${esc(w.artist)} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">♡</div>`)}
       ${w.pending ? `<div class="tile-pending-badge">Pending</div>` : ''}
+      ${!w.pending && w.version_count ? `<div class="tile-versions-badge">${w.version_count}v</div>` : ''}
       <div class="tile-overlay">
         <div class="tile-overlay-artist">${esc(w.artist)}</div>
         <div class="tile-overlay-title">${esc(w.title)}</div>
@@ -3577,12 +3743,6 @@ function openWishlistDetail(id) {
       <div class="detail-fields">
         <div class="detail-artist">${esc(w.artist)}</div>
         <div class="detail-title">${esc(w.title)}</div>
-        <div style="margin:0.5rem 0">
-          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:13px">
-            <input type="checkbox" id="wishlist-detail-fulfilled" ${w.fulfilled ? 'checked' : ''}>
-            Fulfilled
-          </label>
-        </div>
         ${w.year ? `<div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${w.year}</span></div>` : ''}
         ${w.genres ? `<div class="detail-row"><span class="detail-key">Genres</span><span class="detail-val">${esc(w.genres)}</span></div>` : ''}
         ${w.styles ? `<div class="detail-row"><span class="detail-key">Styles</span><span class="detail-val">${esc(w.styles)}</span></div>` : ''}
@@ -3591,10 +3751,31 @@ function openWishlistDetail(id) {
         <div class="detail-row"><span class="detail-key">Master</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/master/${esc(w.master_id)}" target="_blank">m${esc(w.master_id)}</a></span></div>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Notes</label>
-      <textarea class="form-control" id="wishlist-detail-notes" rows="3" style="resize:vertical">${esc(w.notes || '')}</textarea>
+    <div class="detail-tabs">
+      <button class="detail-tab active" onclick="switchWishlistTab(this,'tab-details')">Details</button>
+      <button class="detail-tab" onclick="switchWishlistTab(this,'tab-versions')">Versions${w.version_count ? ` (${w.version_count})` : ''}</button>
+    </div>
+    <div class="detail-tab-panel active" id="tab-details">
+      <div style="margin-bottom:1rem">
+        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="wishlist-detail-fulfilled" ${w.fulfilled ? 'checked' : ''}>
+          Fulfilled
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" id="wishlist-detail-notes" rows="3" style="resize:vertical">${esc(w.notes || '')}</textarea>
+      </div>
+    </div>
+    <div class="detail-tab-panel" id="tab-versions">
+      <div id="versions-saved-panel"></div>
+      <div style="margin-top:0.75rem">
+        <button class="btn btn-secondary btn-sm" ${!navigator.onLine ? 'disabled title="Not available offline"' : ''} onclick="openVersionsBrowse(${id})">Find pressings</button>
+      </div>
+      <div id="versions-browse-panel" style="margin-top:0.75rem;display:none"></div>
     </div>`;
+
+  loadSavedVersions(id);
 
   const deleteBtn = document.getElementById('wishlist-detail-delete-btn');
   deleteBtn.disabled = !serverReachable;
@@ -3636,6 +3817,400 @@ function openWishlistDetail(id) {
   };
 
   openModal('modal-wishlist-detail');
+}
+
+function switchWishlistTab(btn, panelId) {
+  btn.closest('.detail-tabs').querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  btn.closest('.modal-body').querySelectorAll('.detail-tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(panelId).classList.add('active');
+}
+
+async function loadSavedVersions(wishlistId) {
+  const panel = document.getElementById('versions-saved-panel');
+  if (!panel) return;
+  panel.innerHTML = `<div style="color:var(--ink-light);font-size:12px">Loading…</div>`;
+  try {
+    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions`);
+    let versions = await r.json();
+
+    // Apply pending notes edits
+    versions = versions.map(v => {
+      const upd = pendingVersionUpdates.find(u => u.version_id === v.id);
+      return upd ? { ...v, notes: upd.notes } : v;
+    });
+    // Hide pending deletes
+    const deletedIds = new Set(pendingVersionDeletes.map(d => d.version_id));
+    versions = versions.filter(v => !deletedIds.has(v.id));
+
+    // Merge pending adds for this wishlist item
+    const pendingForThis = pendingVersionQueue.filter(p => p.wishlist_id === wishlistId);
+    const pendingAsVersions = pendingForThis.map(p => ({ ...p.version, id: -(p.idb_key), thumb_file: null, _idb_key: p.idb_key, _pending: true }));
+
+    _savedVersions = [...pendingAsVersions, ...versions];
+
+    if (!_savedVersions.length) {
+      panel.innerHTML = `<div style="color:var(--ink-light);font-size:12px;padding:0.25rem 0">No versions saved yet.</div>`;
+      return;
+    }
+
+    const pendingRows = pendingForThis.map(p => {
+      const v = p.version;
+      const synthId = -(p.idb_key);
+      return `
+        <div class="version-row" id="vrow-${synthId}">
+          ${v.thumb
+            ? `<img class="version-thumb" src="${esc(v.thumb)}" alt="">`
+            : `<div class="version-thumb-placeholder">♪</div>`}
+          <div class="version-meta">
+            <div class="version-meta-primary">${esc(v.label)} — ${esc(v.cat_no)} — ${esc(v.country)} ${v.year ? `(${v.year})` : ''}</div>
+            <div class="version-meta-secondary">${esc(v.format)}</div>
+            ${v.notes ? `<div style="font-size:11px;color:var(--ink-mid);margin-top:2px;font-style:italic">${esc(v.notes)}</div>` : ''}
+          </div>
+          <div class="version-stats">
+            <div title="In wantlists">♡ ${v.in_wantlist ?? '—'}</div>
+            <div title="In collections">⌂ ${v.in_collection ?? '—'}</div>
+          </div>
+          <div class="version-actions">
+            <span style="font-size:10px;background:#c97300;color:#fff;padding:2px 6px;border-radius:4px;flex-shrink:0">Pending</span>
+            <button class="btn btn-ghost btn-icon" style="font-size:18px" title="More info" onclick="toggleVersionInfo('svinfo-p${p.idb_key}','${esc(v.discogs_id)}',null)">ℹ</button>
+            <button class="btn btn-ghost btn-icon" style="font-size:18px;transform:scaleX(-1)" title="Edit notes" onclick="openVersionEdit(${wishlistId}, ${synthId})">✎</button>
+            <button class="btn btn-danger btn-icon btn-sm" title="Delete" onclick="deleteVersion(${wishlistId}, ${synthId})">✕</button>
+          </div>
+        </div>
+        <div class="version-info-panel" id="svinfo-p${p.idb_key}" style="display:none"></div>`;
+    }).join('');
+
+    const savedRows = versions.map(v => `
+      <div class="version-row" id="vrow-${v.id}">
+        ${v.thumb_file
+          ? `<img class="version-thumb" src="/images/${esc(v.thumb_file)}" alt="">`
+          : `<div class="version-thumb-placeholder">♪</div>`}
+        <div class="version-meta">
+          <div class="version-meta-primary">${esc(v.label)} — ${esc(v.cat_no)} — ${esc(v.country)} ${v.year ? `(${v.year})` : ''}</div>
+          <div class="version-meta-secondary">${esc(v.format)}</div>
+          ${v.notes ? `<div style="font-size:11px;color:var(--ink-mid);margin-top:2px;font-style:italic">${esc(v.notes)}</div>` : ''}
+        </div>
+        <div class="version-stats">
+          <div title="In wantlists">♡ ${v.in_wantlist ?? '—'}</div>
+          <div title="In collections">⌂ ${v.in_collection ?? '—'}</div>
+        </div>
+        <div class="version-actions">
+          <button class="btn btn-ghost btn-icon" style="font-size:18px" title="More info" onclick="toggleVersionInfo('svinfo-${v.id}','${esc(v.discogs_id)}',${v.id})">ℹ</button>
+          <button class="btn btn-ghost btn-icon" style="font-size:18px;transform:scaleX(-1)" title="Edit notes" onclick="openVersionEdit(${wishlistId}, ${v.id})">✎</button>
+          <button class="btn btn-danger btn-icon btn-sm" title="Delete" onclick="deleteVersion(${wishlistId}, ${v.id})">✕</button>
+        </div>
+      </div>
+      <div class="version-info-panel" id="svinfo-${v.id}" style="display:none"></div>`).join('');
+
+    panel.innerHTML = `<div class="versions-list">${pendingRows}${savedRows}</div>`;
+  } catch {
+    panel.innerHTML = `<div style="color:var(--red);font-size:12px">Failed to load versions.</div>`;
+  }
+}
+
+async function deleteVersion(wishlistId, versionId) {
+  if (!confirm('Remove this version?')) return;
+  const browsePanel = document.getElementById('versions-browse-panel');
+  const collapseBrowse = () => { if (browsePanel) { browsePanel.style.display = 'none'; browsePanel.innerHTML = ''; } };
+
+  if (versionId < 0) {
+    await removeVersionFromQueue(-versionId);
+    await loadSavedVersions(wishlistId);
+    collapseBrowse();
+    toast('Version removed', 'success');
+    return;
+  }
+  if (!serverReachable) {
+    await saveVersionDeleteToQueue(versionId, wishlistId);
+    if ('serviceWorker' in navigator && 'SyncManager' in window)
+      navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
+    await loadSavedVersions(wishlistId);
+    collapseBrowse();
+    toast('Delete queued — will sync when back home', 'success');
+    return;
+  }
+  try {
+    await apiFetch(`/api/wishlist/versions/${versionId}`, { method: 'DELETE' });
+    await loadWishlist();
+    await loadSavedVersions(wishlistId);
+    collapseBrowse();
+    toast('Version removed', 'success');
+  } catch {
+    toast('Failed to remove version', 'error');
+  }
+}
+
+function openVersionEdit(wishlistId, versionId) {
+  const v = _savedVersions.find(x => x.id === versionId);
+  if (!v) return;
+  const row = document.getElementById(`vrow-${versionId}`);
+  if (!row) return;
+  // If already editing, close it
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains('version-edit-row')) {
+    existing.remove();
+    return;
+  }
+  const editRow = document.createElement('div');
+  editRow.className = 'version-edit-row';
+  editRow.style.cssText = 'padding:0.5rem;border:1px solid var(--border);border-top:none;border-radius:0 0 4px 4px;background:var(--surface);margin-top:-1px';
+  editRow.innerHTML = `
+    <textarea class="form-control" id="vedit-${versionId}" rows="2" style="resize:vertical;font-size:12px">${esc(v.notes || '')}</textarea>
+    <div style="display:flex;gap:0.5rem;margin-top:0.4rem;justify-content:flex-end">
+      <button class="btn btn-secondary btn-sm" onclick="this.closest('.version-edit-row').remove()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveVersionNotes(${wishlistId}, ${versionId})">Save</button>
+    </div>`;
+  row.after(editRow);
+  editRow.querySelector('textarea').focus();
+}
+
+async function saveVersionNotes(wishlistId, versionId) {
+  const notes = document.getElementById(`vedit-${versionId}`)?.value ?? '';
+  if (versionId < 0) {
+    await updateVersionQueueItemNotes(-versionId, notes);
+    await loadSavedVersions(wishlistId);
+    toast('Saved', 'success');
+    return;
+  }
+  if (!serverReachable) {
+    await saveVersionUpdateToQueue(versionId, notes);
+    if ('serviceWorker' in navigator && 'SyncManager' in window)
+      navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
+    await loadSavedVersions(wishlistId);
+    toast('Saved — will sync when back home', 'success');
+    return;
+  }
+  try {
+    const r = await apiFetch(`/api/wishlist/versions/${versionId}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ notes }),
+    });
+    if (!r.ok) throw new Error();
+    await loadSavedVersions(wishlistId);
+    toast('Saved', 'success');
+  } catch {
+    toast('Failed to save', 'error');
+  }
+}
+
+async function openVersionsBrowse(wishlistId) {
+  const panel = document.getElementById('versions-browse-panel');
+  panel.style.display = 'block';
+  panel.innerHTML = `<div style="color:var(--ink-light);font-size:12px">Fetching from Discogs…</div>`;
+  try {
+    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions/browse`);
+    const data = await r.json();
+    renderVersionsBrowse(wishlistId, data);
+  } catch {
+    panel.innerHTML = `<div style="color:var(--red);font-size:12px">Failed to fetch versions from Discogs.</div>`;
+  }
+}
+
+function renderVersionsBrowse(wishlistId, data, page = 1) {
+  const panel = document.getElementById('versions-browse-panel');
+  const { versions, pagination } = data;
+  _browseVersions = versions;
+  if (!versions.length) {
+    panel.innerHTML = `<div style="color:var(--ink-light);font-size:12px">No vinyl versions found on Discogs.</div>`;
+    return;
+  }
+  panel.innerHTML = `
+    <div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em">
+      Discogs vinyl pressings — ${pagination.items} total
+    </div>
+    <div class="versions-list" id="browse-list">
+      ${versions.map(v => `
+        <div class="version-browse-wrap" data-discogs-id="${esc(v.discogs_id)}">
+          <label class="version-row${v.saved ? ' version-row-saved' : ''}" style="cursor:${v.saved ? 'default' : 'pointer'}">
+            <input type="checkbox" data-discogs-id="${esc(v.discogs_id)}" style="flex-shrink:0" ${v.saved ? 'disabled checked' : ''}>
+            ${v.thumb
+              ? `<img class="version-thumb" src="${esc(v.thumb)}" alt="" loading="lazy">`
+              : `<div class="version-thumb-placeholder">♪</div>`}
+            <div class="version-meta">
+              <div class="version-meta-primary">${esc(v.label)} — ${esc(v.cat_no)} — ${esc(v.country)} ${v.year ? `(${v.year})` : ''}</div>
+              <div class="version-meta-secondary">${esc(v.format)}</div>
+            </div>
+            <div class="version-stats">
+              <div title="In wantlists">♡ ${v.in_wantlist ?? '—'}</div>
+              <div title="In collections">⌂ ${v.in_collection ?? '—'}</div>
+            </div>
+            ${v.saved ? `<span class="badge badge-versions" style="flex-shrink:0">Saved</span>` : ''}
+            <button class="btn btn-ghost btn-icon" style="flex-shrink:0;font-size:18px" title="More info" onclick="event.preventDefault();toggleVersionInfo('vinfo-${esc(v.discogs_id)}','${esc(v.discogs_id)}',null)">ℹ</button>
+          </label>
+          <div class="version-info-panel" id="vinfo-${esc(v.discogs_id)}" style="display:none"></div>
+        </div>`).join('')}
+    </div>
+    ${pagination.pages > 1 ? `
+    <div style="display:flex;justify-content:center;gap:0.5rem;margin-top:0.75rem;font-size:12px;font-family:var(--font-mono)">
+      ${page > 1 ? `<button class="btn btn-ghost btn-sm" onclick="browseVersionsPage(${wishlistId},${page-1})">← Prev</button>` : ''}
+      <span style="align-self:center;color:var(--ink-light)">Page ${pagination.page} of ${pagination.pages}</span>
+      ${page < pagination.pages ? `<button class="btn btn-ghost btn-sm" onclick="browseVersionsPage(${wishlistId},${page+1})">Next →</button>` : ''}
+    </div>` : ''}
+    <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center">
+      <button class="btn btn-primary btn-sm" onclick="addSelectedVersions(${wishlistId})">Add selected</button>
+      <span id="browse-add-status" style="font-size:12px;color:var(--ink-light)"></span>
+    </div>`;
+}
+
+async function toggleVersionInfo(panelId, discogsId, versionId = null) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+
+  // Use cached data if available
+  if (_releaseInfo[discogsId]) { renderVersionInfoPanel(panelId, _releaseInfo[discogsId]); return; }
+
+  // For saved versions, use stored DB data if populated
+  if (versionId !== null) {
+    const v = _savedVersions.find(x => x.id === versionId);
+    const hasStoredInfo = v && (v.release_notes || (v.identifiers && v.identifiers !== '[]' && v.identifiers !== 'null'));
+    if (hasStoredInfo) {
+      const data = {
+        notes: v.release_notes || '',
+        identifiers: (() => { try { return JSON.parse(v.identifiers || '[]'); } catch { return []; } })(),
+        rating_average: v.rating_average,
+        rating_count: v.rating_count || 0,
+      };
+      _releaseInfo[discogsId] = data;
+      renderVersionInfoPanel(panelId, data);
+      return;
+    }
+  }
+
+  // Fetch from Discogs via API — blocked in Read-Only Mode (no internet)
+  if (!navigator.onLine) {
+    panel.innerHTML = `<span style="color:var(--ink-light)">No additional info available.</span>`;
+    return;
+  }
+  panel.innerHTML = `<span style="color:var(--ink-light)">Loading…</span>`;
+  try {
+    const r = await apiFetch(`/api/release/${discogsId}/info`);
+    const data = await r.json();
+    _releaseInfo[discogsId] = data;
+    renderVersionInfoPanel(panelId, data);
+    // Persist to DB if this is a saved version
+    if (versionId !== null) {
+      apiFetch(`/api/wishlist/versions/${versionId}/info`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          release_notes: data.notes,
+          identifiers: JSON.stringify(data.identifiers),
+          rating_average: data.rating_average,
+          rating_count: data.rating_count,
+        }),
+      }).catch(() => {});
+    }
+  } catch {
+    panel.innerHTML = `<span style="color:var(--red)">Failed to load info.</span>`;
+  }
+}
+
+function renderVersionInfoPanel(panelId, data) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  const sections = [];
+  if (data.notes) {
+    sections.push(`
+      <div class="info-section">
+        <div class="version-info-label">Notes</div>
+        <div style="color:var(--ink);line-height:1.5">${esc(data.notes)}</div>
+      </div>`);
+  }
+  if (data.identifiers?.length) {
+    const tags = data.identifiers.map(i =>
+      `<span class="version-info-identifier" title="${esc(i.type)}">${esc(i.type)}: ${esc(i.value)}</span>`
+    ).join('');
+    sections.push(`
+      <div class="info-section">
+        <div class="version-info-label">Identifiers</div>
+        <div class="version-info-identifiers">${tags}</div>
+      </div>`);
+  }
+  if (data.rating_count) {
+    sections.push(`
+      <div class="info-section">
+        <div class="version-info-label">Community rating</div>
+        <div style="color:var(--ink)">${data.rating_average?.toFixed(2)} / 5 <span style="color:var(--ink-light)">(${data.rating_count} rating${data.rating_count !== 1 ? 's' : ''})</span></div>
+      </div>`);
+  }
+  panel.innerHTML = sections.length
+    ? sections.join('')
+    : `<span style="color:var(--ink-light)">No additional info available.</span>`;
+}
+
+async function browseVersionsPage(wishlistId, page) {
+  const panel = document.getElementById('versions-browse-panel');
+  panel.innerHTML = `<div style="color:var(--ink-light);font-size:12px">Loading…</div>`;
+  try {
+    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions/browse?page=${page}`);
+    const data = await r.json();
+    renderVersionsBrowse(wishlistId, data, page);
+  } catch {
+    panel.innerHTML = `<div style="color:var(--red);font-size:12px">Failed to load page.</div>`;
+  }
+}
+
+async function addSelectedVersions(wishlistId) {
+  const checked = [...document.querySelectorAll('#browse-list input[type=checkbox]:checked:not([disabled])')];
+  if (!checked.length) { toast('No versions selected', 'error'); return; }
+  const status = document.getElementById('browse-add-status');
+  status.textContent = 'Saving…';
+
+  const versions = checked.map(cb => {
+    const v = _browseVersions.find(x => x.discogs_id === cb.dataset.discogsId);
+    if (!v) return null;
+    const info = _releaseInfo[v.discogs_id] || {};
+    return {
+      discogs_id: v.discogs_id,
+      title: v.title,
+      label: v.label,
+      cat_no: v.cat_no,
+      year: v.year ? parseInt(v.year) : null,
+      format: v.format,
+      country: v.country,
+      thumb: v.thumb,
+      in_wantlist: v.in_wantlist,
+      in_collection: v.in_collection,
+      release_notes: info.notes || '',
+      identifiers: JSON.stringify(info.identifiers || []),
+      rating_average: info.rating_average ?? null,
+      rating_count: info.rating_count || 0,
+    };
+  }).filter(Boolean);
+
+  const browsePanel = document.getElementById('versions-browse-panel');
+  const collapseBrowse = () => { if (browsePanel) { browsePanel.style.display = 'none'; browsePanel.innerHTML = ''; } };
+
+  if (!serverReachable) {
+    for (const v of versions) await saveVersionToQueue(wishlistId, v);
+    if ('serviceWorker' in navigator && 'SyncManager' in window)
+      navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
+    await loadWishlist();
+    await loadSavedVersions(wishlistId);
+    collapseBrowse();
+    toast(`${versions.length} version${versions.length !== 1 ? 's' : ''} queued — will sync when back home`, 'success');
+    return;
+  }
+
+  try {
+    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ versions }),
+    });
+    const res = await r.json();
+    await loadWishlist();
+    await loadSavedVersions(wishlistId);
+    collapseBrowse();
+    toast(`${res.added} version${res.added !== 1 ? 's' : ''} added`, 'success');
+  } catch {
+    status.textContent = '';
+    toast('Failed to add versions', 'error');
+  }
 }
 
 function openPendingWishlistDetail(id) {
