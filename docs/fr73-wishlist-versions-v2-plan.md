@@ -160,7 +160,7 @@ const thumbSrc = v.cover_file ? `/images/${esc(v.cover_file)}` : (thumbFallback 
 
 ---
 
-## Phase 4 — Service Worker (sw.js) ✅ DONE
+## Phase 4 — Service Worker (sw.js) ⚠️ PARTIAL
 
 `CACHED_DATA` extended:
 
@@ -174,15 +174,13 @@ const CACHED_DATA = ['/api/records', '/api/wishlist', '/api/settings', '/api/mas
 if (resp.ok) { const clone = resp.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
 ```
 
-### IDB v3 (sn_offline)
+### IDB v3 (sn_offline) ⚠️ INCOMPLETE
 
-Three new stores alongside existing `wishlist_queue` and `wishlist_updates`:
+The frontend's `openOfflineDB()` (index.html) was bumped to v3 with three new stores: `version_queue`, `version_removes`, `version_fulfillments`. `flushPendingQueue()` in index.html processes all five stores on reconnect.
 
-- **`version_queue`** (autoIncrement `idb_key`): pending shortlist additions. Shape: `{wishlist_id, discogs_id, title, year, country, format, label, cat_no, thumb, queued_at}`
-- **`version_removes`** (key `record_id`): pending soft-deletes for synced versions.
-- **`version_fulfillments`** (key `record_id`): pending add-to-collection for synced versions. Shape: `{record_id, purchase_details: {...}, queued_at}`
-
-`flushPendingQueue()` processes all five stores in order: wishlist adds → wishlist updates → version adds → version removes → version fulfillments.
+**Not yet done in sw.js:**
+- `openSwDB()` is still at v2 — must be bumped to v3 with the same three new stores, otherwise Android Background Sync will fail silently (tries to open v2, DB is already at v3)
+- `flushOfflineQueue()` in sw.js must be extended to flush `version_queue`, `version_removes`, and `version_fulfillments` (same logic as `flushPendingQueue()` in index.html)
 
 ### `prefetchVersionData()` ✅
 
