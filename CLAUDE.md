@@ -429,7 +429,7 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **Two-state offline detection:** The app distinguishes two offline states, each with its own banner:
   - **Read-Only Mode** (`navigator.onLine === false`) — no internet, amber banner `#7A4800`. Fully read-only.
   - **Offline Mode** (`navigator.onLine === true` but `/api/health` fails) — server unreachable, slate banner `#3D4A5C`. Collection read-only from SW cache; wishlist search, add, and edit all work via IndexedDB queue.
-  - Both states set `body.offline` and disable collection write actions. Read-Only Mode additionally sets `body.readonly`, which disables the wishlist detail Save/Delete buttons and all per-version action buttons.
+  - Both states set `body.offline` and disable collection write actions. Read-Only Mode additionally sets `body.readonly`, which disables the wishlist detail Save/Delete buttons and the per-version ✕ delete and ✎ edit buttons. The ℹ info button remains active — cached release info is readable offline.
   - Detection is event-driven: probe on load, on `window 'online'`, on any `apiFetch` TypeError, and on `visibilitychange` visible. Backoff polling (10s → 30s → 60s) only runs while the app is visible and the server is unreachable — cancelled immediately on `visibilitychange` hidden so backgrounding the app stops all polling.
 - **Offline wishlist + version queue (IndexedDB `sn_offline` v3):**
   - `wishlist_queue` (autoIncrement key `idb_key`): new wishlist items added offline. Each record: `{master_id, notes, queued_at, title, year, thumb}`. Pending items merged into `wishlistItems` with negative IDs (`-(idb_key)`) for display.
