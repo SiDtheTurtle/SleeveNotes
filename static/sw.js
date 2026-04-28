@@ -21,11 +21,11 @@ self.addEventListener('fetch', e => {
   if (url.pathname === '/api/health') return;
 
   // Cache read-only data endpoints (network-first, cache fallback)
-  const CACHED_DATA = ['/api/records', '/api/wishlist', '/api/settings'];
+  const CACHED_DATA = ['/api/records', '/api/wishlist', '/api/settings', '/api/masters/', '/api/release/'];
   if (e.request.method === 'GET' && CACHED_DATA.some(p => url.pathname.startsWith(p))) {
     e.respondWith(
       fetch(e.request).then(resp => {
-        if (resp.ok) caches.open(CACHE).then(c => c.put(e.request, resp.clone()));
+        if (resp.ok) { const clone = resp.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
         return resp;
       }).catch(() => caches.match(e.request))
     );
@@ -53,7 +53,7 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(e.request)
       .then(resp => {
-        if (resp.ok) caches.open(CACHE).then(c => c.put(e.request, resp.clone()));
+        if (resp.ok) { const clone = resp.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
         return resp;
       })
       .catch(() => caches.match(e.request))

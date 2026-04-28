@@ -1346,6 +1346,7 @@
         </div>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
           <button id="btn-sync-discogs" class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync with Discogs…</button>
+          <button id="btn-sync-wantlist" class="btn btn-secondary btn-sm" onclick="openWantlistSyncModal()">Sync Wantlist…</button>
         </div>
       </div>
 
@@ -1500,7 +1501,7 @@
 
 <!-- ── Wishlist Detail Modal ── -->
 <div class="modal-backdrop" id="modal-wishlist-detail">
-  <div class="modal" style="max-width:560px">
+  <div class="modal" style="max-width:640px">
     <div class="modal-header">
       <span class="modal-title" id="wishlist-detail-title">Wishlist Item</span>
       <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-wishlist-detail')">✕</button>
@@ -1539,6 +1540,74 @@
   </div>
 </div>
 
+<!-- ── Version Browser Modal ── -->
+<div class="modal-backdrop" id="modal-version-browser">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <span class="modal-title" id="version-browser-title">Pressings</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-version-browser')">✕</button>
+    </div>
+    <div class="modal-body" id="version-browser-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-version-browser')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Wantlist Sync Modal ── -->
+<div class="modal-backdrop" id="modal-wantlist-sync">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <span class="modal-title">Wantlist Sync</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-wantlist-sync')">✕</button>
+    </div>
+    <div class="modal-body" id="wantlist-sync-body"></div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-secondary" onclick="closeModal('modal-wantlist-sync')">Cancel</button>
+      <button class="btn btn-primary" id="wantlist-sync-btn" onclick="doWantlistSync()">Sync</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Offline Version Fulfill Modal ── -->
+<div class="modal-backdrop" id="modal-fulfill-version">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title" id="fulfill-offline-title">Add to Collection</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-fulfill-version')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="fulfill-offline-record-id">
+      <input type="hidden" id="fulfill-offline-wishlist-id">
+      <div style="font-size:12px;color:var(--ink-light);margin-bottom:1rem">You're offline — fill in what you know and it'll sync when you're back home.</div>
+      <div class="form-group">
+        <label class="form-label">Media Condition</label>
+        <select class="form-control" id="fulfill-offline-curr-cond">
+          <option value="">— Unknown —</option>
+          <option>S</option><option>M</option><option>NM</option><option>VG+</option>
+          <option>VG</option><option>G+</option><option>G</option><option>F</option><option>P</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Purchase Date</label>
+        <input class="form-control" type="date" id="fulfill-offline-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Price</label>
+        <input class="form-control" type="number" step="0.01" min="0" id="fulfill-offline-price" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" id="fulfill-offline-notes" rows="2" style="resize:vertical"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-secondary" onclick="closeModal('modal-fulfill-version')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFulfillOffline()">Save offline</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast container ── -->
 <div class="toast-container" id="toasts"></div>
 
@@ -1573,8 +1642,13 @@ let apiKey = '';
 let _authMode = 'unlock'; // 'setup' | 'unlock'
 let pendingQueue = [];
 let pendingUpdates = [];
+let pendingVersionQueue = [];
+let pendingVersionRemoves = [];
+let pendingVersionFulfillments = [];
 let _serverWishlistItems = [];
 let _lastSearchResults = [];
+let _pendingWishlistFulfill = null;
+const _versionThumbs = {}; // discogs_id → external thumb URL, used until cached image arrives
 
 // ── localStorage helpers ────────────────────────────────────────────────────
 function lsGet(key, fallback) {
@@ -1702,13 +1776,19 @@ async function submitAuthKey() {
 // ── IndexedDB offline queue ─────────────────────────────────────────────────
 function openOfflineDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('sn_offline', 2);
+    const req = indexedDB.open('sn_offline', 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('wishlist_queue'))
         db.createObjectStore('wishlist_queue', { keyPath: 'idb_key', autoIncrement: true });
       if (!db.objectStoreNames.contains('wishlist_updates'))
         db.createObjectStore('wishlist_updates', { keyPath: 'wishlist_id' });
+      if (!db.objectStoreNames.contains('version_queue'))
+        db.createObjectStore('version_queue', { keyPath: 'idb_key', autoIncrement: true });
+      if (!db.objectStoreNames.contains('version_removes'))
+        db.createObjectStore('version_removes', { keyPath: 'record_id' });
+      if (!db.objectStoreNames.contains('version_fulfillments'))
+        db.createObjectStore('version_fulfillments', { keyPath: 'record_id' });
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = reject;
@@ -1723,11 +1803,18 @@ async function initPendingQueue() {
       req.onsuccess = e => resolve(e.target.result);
       req.onerror = reject;
     });
-    [pendingQueue, pendingUpdates] = await Promise.all([
-      load('wishlist_queue'),
-      load('wishlist_updates'),
-    ]);
-  } catch { pendingQueue = []; pendingUpdates = []; }
+    [pendingQueue, pendingUpdates, pendingVersionQueue, pendingVersionRemoves, pendingVersionFulfillments] =
+      await Promise.all([
+        load('wishlist_queue'),
+        load('wishlist_updates'),
+        load('version_queue'),
+        load('version_removes'),
+        load('version_fulfillments'),
+      ]);
+  } catch {
+    pendingQueue = []; pendingUpdates = [];
+    pendingVersionQueue = []; pendingVersionRemoves = []; pendingVersionFulfillments = [];
+  }
 }
 
 async function saveUpdateToQueue(update) {
@@ -1794,8 +1881,76 @@ async function updateQueueItemNotes(idbKey, notes) {
   if (item) item.notes = notes;
 }
 
+async function saveVersionToQueue(item) {
+  const db = await openOfflineDB();
+  const key = await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_queue', 'readwrite');
+    const req = tx.objectStore('version_queue').add({ ...item, queued_at: new Date().toISOString() });
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = reject;
+  });
+  item.idb_key = key;
+  pendingVersionQueue.push(item);
+}
+
+async function removeVersionFromQueue(idbKey) {
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_queue', 'readwrite');
+    tx.objectStore('version_queue').delete(idbKey);
+    tx.oncomplete = resolve; tx.onerror = reject;
+  });
+  pendingVersionQueue = pendingVersionQueue.filter(v => v.idb_key !== idbKey);
+}
+
+async function saveVersionRemove(recordId, wishlistId) {
+  const entry = { record_id: recordId, wishlist_id: wishlistId, queued_at: new Date().toISOString() };
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_removes', 'readwrite');
+    tx.objectStore('version_removes').put(entry);
+    tx.oncomplete = resolve; tx.onerror = reject;
+  });
+  pendingVersionRemoves = pendingVersionRemoves.filter(v => v.record_id !== recordId);
+  pendingVersionRemoves.push(entry);
+}
+
+async function removeVersionRemove(recordId) {
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_removes', 'readwrite');
+    tx.objectStore('version_removes').delete(recordId);
+    tx.oncomplete = resolve; tx.onerror = reject;
+  });
+  pendingVersionRemoves = pendingVersionRemoves.filter(v => v.record_id !== recordId);
+}
+
+async function saveVersionFulfillment(recordId, wishlistId, details) {
+  const entry = { record_id: recordId, wishlist_id: wishlistId, details, queued_at: new Date().toISOString() };
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_fulfillments', 'readwrite');
+    tx.objectStore('version_fulfillments').put(entry);
+    tx.oncomplete = resolve; tx.onerror = reject;
+  });
+  pendingVersionFulfillments = pendingVersionFulfillments.filter(v => v.record_id !== recordId);
+  pendingVersionFulfillments.push(entry);
+}
+
+async function removeVersionFulfillment(recordId) {
+  const db = await openOfflineDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('version_fulfillments', 'readwrite');
+    tx.objectStore('version_fulfillments').delete(recordId);
+    tx.oncomplete = resolve; tx.onerror = reject;
+  });
+  pendingVersionFulfillments = pendingVersionFulfillments.filter(v => v.record_id !== recordId);
+}
+
 async function flushPendingQueue() {
-  if (!pendingQueue.length && !pendingUpdates.length) return;
+  const hasWork = pendingQueue.length || pendingUpdates.length ||
+    pendingVersionQueue.length || pendingVersionRemoves.length || pendingVersionFulfillments.length;
+  if (!hasWork) return;
   let synced = 0, failed = 0;
 
   for (const item of [...pendingQueue]) {
@@ -1822,8 +1977,45 @@ async function flushPendingQueue() {
     } catch { failed++; }
   }
 
+  // Version adds: must run before removes/fulfillments (server record must exist first)
+  for (const item of [...pendingVersionQueue]) {
+    try {
+      const r = await apiFetch(`/api/wishlist/${item.wishlist_id}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discogs_id: item.discogs_id }),
+      });
+      if (r.ok || r.status === 409) { await removeVersionFromQueue(item.idb_key); synced++; }
+      else failed++;
+    } catch { failed++; }
+  }
+
+  for (const item of [...pendingVersionRemoves]) {
+    try {
+      const r = await apiFetch(`/api/wishlist/versions/${item.record_id}`, { method: 'DELETE' });
+      if (r.ok) { await removeVersionRemove(item.record_id); synced++; }
+      else failed++;
+    } catch { failed++; }
+  }
+
+  for (const item of [...pendingVersionFulfillments]) {
+    try {
+      const fr = await apiFetch(`/api/wishlist/versions/${item.record_id}/fulfill`, { method: 'POST' });
+      if (!fr.ok) { failed++; continue; }
+      if (item.details && Object.keys(item.details).length) {
+        await apiFetch(`/api/records/${item.record_id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.details),
+        });
+      }
+      await removeVersionFulfillment(item.record_id);
+      synced++;
+    } catch { failed++; }
+  }
+
   if (synced) {
-    await loadWishlist();
+    await Promise.all([loadRecords(), loadWishlist()]);
     toast(`${synced} queued item${synced > 1 ? 's' : ''} synced`, 'success');
   }
   if (failed) toast(`${failed} item${failed > 1 ? 's' : ''} failed to sync`, 'error');
@@ -2515,7 +2707,8 @@ async function saveRecord() {
     if (!r.ok) throw new Error();
     const wasNew = !editingId;
     const savedId = wasNew ? (await r.json()).id : editingId;
-    const match = wasNew ? fetchedMeta.wishlist_match : null;
+    const match = wasNew ? fetchedMeta.wishlist_match : _pendingWishlistFulfill;
+    _pendingWishlistFulfill = null;
     closeModal('modal-form');
     await loadRecords();
     toast(editingId ? 'Record updated' : 'Record added', 'success');
@@ -3334,6 +3527,7 @@ async function loadWishlist() {
   wishlistItems = [..._serverWishlistItems, ...pending];
   if (currentSection === 'wishlist') renderWishlist();
   updateStats();
+  prefetchVersionData();
 }
 
 function renderWishlistTiles() {
@@ -3561,6 +3755,457 @@ function onShowFulfilledToggle() {
   if (currentSection === 'wishlist') renderWishlist();
 }
 
+// ── Wishlist versions ──────────────────────────────────────────────────────
+
+async function prefetchVersionData() {
+  if (!serverReachable) return;
+  const serverItems = _serverWishlistItems.filter(w => !w.pending);
+  for (const w of serverItems) {
+    try {
+      const r = await apiFetch(`/api/wishlist/${w.id}/versions`);
+      if (!r.ok) continue;
+      const versions = await r.json();
+      for (const v of versions) {
+        const rid = String(v.discogs_id || '').replace(/^r/, '');
+        if (rid) apiFetch(`/api/release/${rid}/info`).catch(() => {});
+      }
+    } catch { /* background sweep — ignore failures */ }
+  }
+}
+
+async function loadVersions(wishlistId) {
+  const panel = document.getElementById(`versions-panel-${wishlistId}`);
+  if (!panel) return;
+  try {
+    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions`);
+    if (!r.ok) throw new Error();
+    const versions = await r.json();
+    const w = wishlistItems.find(x => x.id === wishlistId);
+    renderVersionsPanel(wishlistId, versions, w ? w.master_id : '');
+  } catch {
+    if (panel) panel.innerHTML = '<div style="color:var(--ink-light);font-size:12px">Could not load versions.</div>';
+  }
+}
+
+function renderVersionsPanel(wishlistId, versions, masterId) {
+  const panel = document.getElementById(`versions-panel-${wishlistId}`);
+  if (!panel) return;
+  const pendingIds = new Set(pendingVersionQueue.filter(v => v.wishlist_id === wishlistId).map(v => v.discogs_id));
+  const removeIds = new Set(pendingVersionRemoves.map(v => v.record_id));
+  const fulfillIds = new Set(pendingVersionFulfillments.map(v => v.record_id));
+  const visibleVersions = versions.filter(v => !removeIds.has(v.id));
+  const pendingItems = pendingVersionQueue.filter(v => v.wishlist_id === wishlistId);
+  const count = visibleVersions.length + pendingItems.length;
+
+  const browseBtn = navigator.onLine
+    ? `<button class="btn btn-secondary btn-sm" onclick="openVersionBrowser(${wishlistId},'${esc(masterId)}')">Browse pressings</button>`
+    : `<button class="btn btn-secondary btn-sm" disabled title="Requires internet connection">Browse pressings</button>`;
+
+  let rows = '';
+  for (const v of visibleVersions) {
+    const isFulfillPending = fulfillIds.has(v.id);
+    const rid = String(v.discogs_id || '').replace(/^r/, '');
+    const thumbFallback = _versionThumbs[rid];
+    const thumbSrc = v.cover_file ? `/images/${esc(v.cover_file)}` : (thumbFallback || null);
+    const thumb = thumbSrc
+      ? `<img src="${esc(thumbSrc)}" style="width:36px;height:36px;object-fit:cover;border-radius:3px;flex-shrink:0" loading="lazy">`
+      : `<div style="width:36px;height:36px;background:var(--surface-2);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">♪</div>`;
+    const meta = [v.year, v.country, v.format, v.cat_no].filter(Boolean).join(' · ');
+    const addBtn = isFulfillPending
+      ? `<span class="badge" style="background:var(--amber);color:#fff;font-size:10px">Fulfillment pending</span>`
+      : `<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="fulfillVersion(${v.id},${wishlistId})">Add to collection</button>`;
+    const removeBtn = !navigator.onLine
+      ? `<button class="btn btn-ghost btn-sm" style="font-size:11px" disabled>Remove</button>`
+      : `<button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red)" onclick="removeVersion(${v.id},${wishlistId},false)">Remove</button>`;
+    rows += `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
+      ${thumb}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.title || v.artist || '')}</div>
+        <div style="font-size:11px;color:var(--ink-light)">${esc(meta)}</div>
+        ${v.notes ? `<div style="font-size:11px;color:var(--ink-light);font-style:italic">${esc(v.notes)}</div>` : ''}
+        ${v.discogs_notes ? `<div style="font-size:11px;color:var(--ink-light)">Discogs: ${esc(v.discogs_notes)}</div>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.25rem;flex-shrink:0">
+        ${addBtn}
+        ${removeBtn}
+      </div>
+    </div>`;
+  }
+
+  for (const pv of pendingItems) {
+    const thumb = pv.thumb
+      ? `<img src="${esc(pv.thumb)}" style="width:36px;height:36px;object-fit:cover;border-radius:3px;flex-shrink:0" loading="lazy">`
+      : `<div style="width:36px;height:36px;background:var(--surface-2);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">⏳</div>`;
+    const meta = [pv.year, pv.country, pv.format, pv.cat_no].filter(Boolean).join(' · ');
+    rows += `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
+      ${thumb}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pv.title || '')}</div>
+        <div style="font-size:11px;color:var(--ink-light)">${esc(meta)}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.25rem;flex-shrink:0">
+        <span class="badge badge-pending" style="font-size:10px">Pending</span>
+        <button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red)" onclick="removeVersion(0,${wishlistId},true,${pv.idb_key})">Remove</button>
+      </div>
+    </div>`;
+  }
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+      <span style="font-size:13px;font-weight:500">Versions${count ? ` (${count})` : ''}</span>
+      ${browseBtn}
+    </div>
+    ${rows || '<div style="color:var(--ink-light);font-size:12px;padding:0.5rem 0">No pressings shortlisted yet.</div>'}`;
+}
+
+async function removeVersion(recordId, wishlistId, isPending, idbKey) {
+  if (isPending) {
+    await removeVersionFromQueue(idbKey);
+    await loadVersions(wishlistId);
+    return;
+  }
+  if (!navigator.onLine) { toast('Requires internet connection', 'error'); return; }
+  if (!serverReachable) {
+    await saveVersionRemove(recordId, wishlistId);
+    await loadVersions(wishlistId);
+    toast('Remove queued — will sync when back home', 'success');
+    return;
+  }
+  try {
+    const r = await apiFetch(`/api/wishlist/versions/${recordId}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error();
+    await loadVersions(wishlistId);
+    toast('Version removed', 'success');
+  } catch { toast('Failed to remove version', 'error'); }
+}
+
+async function fulfillVersion(recordId, wishlistId) {
+  const w = wishlistItems.find(x => x.id === wishlistId);
+  if (!serverReachable) {
+    // Offline: show mini purchase form
+    openFulfillOfflineModal(recordId, wishlistId, w);
+    return;
+  }
+  try {
+    const r = await apiFetch(`/api/wishlist/versions/${recordId}/fulfill`, { method: 'POST' });
+    if (!r.ok) throw new Error();
+    closeModal('modal-wishlist-detail');
+    await loadRecords();
+    _pendingWishlistFulfill = w ? { id: wishlistId, artist: w.artist, title: w.title, notes: w.notes || '' } : null;
+    openEdit(recordId);
+  } catch { toast('Failed to add to collection', 'error'); }
+}
+
+function openFulfillOfflineModal(recordId, wishlistId, w) {
+  document.getElementById('fulfill-offline-title').textContent =
+    w ? `${displayArtist(w.artist)} — ${w.title}` : 'Add to Collection';
+  document.getElementById('fulfill-offline-record-id').value = recordId;
+  document.getElementById('fulfill-offline-wishlist-id').value = wishlistId;
+  document.getElementById('fulfill-offline-curr-cond').value = '';
+  document.getElementById('fulfill-offline-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('fulfill-offline-price').value = '';
+  document.getElementById('fulfill-offline-notes').value = '';
+  openModal('modal-fulfill-version');
+}
+
+async function saveFulfillOffline() {
+  const recordId = parseInt(document.getElementById('fulfill-offline-record-id').value);
+  const wishlistId = parseInt(document.getElementById('fulfill-offline-wishlist-id').value);
+  const details = {
+    curr_cond: document.getElementById('fulfill-offline-curr-cond').value || null,
+    purchase_date: document.getElementById('fulfill-offline-date').value || '',
+    price: parseFloat(document.getElementById('fulfill-offline-price').value) || null,
+    notes: document.getElementById('fulfill-offline-notes').value || '',
+  };
+  await saveVersionFulfillment(recordId, wishlistId, details);
+  if ('serviceWorker' in navigator && 'SyncManager' in window)
+    navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
+  closeModal('modal-fulfill-version');
+  const panel = document.getElementById(`versions-panel-${wishlistId}`);
+  if (panel) await loadVersions(wishlistId);
+  toast('Will add to collection when connected', 'success');
+}
+
+async function openVersionBrowser(wishlistId, masterId) {
+  document.getElementById('version-browser-title').textContent = 'Loading pressings…';
+  document.getElementById('version-browser-body').innerHTML =
+    '<div style="text-align:center;padding:2rem;color:var(--ink-light)">Loading…</div>';
+  openModal('modal-version-browser');
+  try {
+    const [versionsResp, releasesResp] = await Promise.all([
+      apiFetch(`/api/wishlist/${wishlistId}/versions`),
+      apiFetch(`/api/masters/${masterId}/releases`),
+    ]);
+    const versions = versionsResp.ok ? await versionsResp.json() : [];
+    const releases = releasesResp.ok ? await releasesResp.json() : [];
+    const w = wishlistItems.find(x => x.id === wishlistId);
+    document.getElementById('version-browser-title').textContent =
+      `Pressings — ${w ? displayArtist(w.artist) + ' — ' + w.title : masterId}`;
+    renderVersionBrowser(wishlistId, masterId, releases, versions);
+  } catch {
+    document.getElementById('version-browser-body').innerHTML =
+      '<div style="color:var(--red);padding:1rem">Failed to load pressings.</div>';
+  }
+}
+
+function renderVersionBrowser(wishlistId, masterId, releases, shortlistedVersions) {
+  const shortlistedIds = new Set(shortlistedVersions.map(v => String(v.discogs_id).replace(/^r/, '')));
+  const pendingIds = new Set(pendingVersionQueue.filter(v => v.wishlist_id === wishlistId).map(v => String(v.discogs_id).replace(/^r/, '')));
+
+  if (!releases.length) {
+    document.getElementById('version-browser-body').innerHTML =
+      '<div style="color:var(--ink-light);padding:1rem">No vinyl pressings found for this master.</div>';
+    return;
+  }
+
+  const rows = releases.map(r => {
+    const rid = String(r.discogs_id).replace(/^r/, '');
+    const isShortlisted = shortlistedIds.has(rid);
+    const isPending = pendingIds.has(rid);
+    const matchedVersion = shortlistedVersions.find(v => String(v.discogs_id).replace(/^r/, '') === rid);
+    const thumb = r.thumb
+      ? `<img src="${esc(r.thumb)}" style="width:36px;height:36px;object-fit:cover;border-radius:3px;display:block" loading="lazy">`
+      : `<div style="width:36px;height:36px;background:var(--surface-2);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">♪</div>`;
+    const shortlistBtn = isPending
+      ? `<button class="btn btn-secondary btn-sm" style="font-size:11px;white-space:nowrap" disabled>Pending</button>`
+      : isShortlisted
+        ? `<button class="btn btn-secondary btn-sm" style="font-size:11px;white-space:nowrap" onclick="toggleVersion(${wishlistId},'${rid}',true,${matchedVersion ? matchedVersion.id : 0},this)">✓ Shortlisted</button>`
+        : `<button class="btn btn-primary btn-sm" style="font-size:11px;white-space:nowrap" onclick="toggleVersion(${wishlistId},'${rid}',false,0,this)">Shortlist</button>`;
+    const cell = (content, extra = '') =>
+      `<td style="padding:0.35rem 0.4rem;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle${extra ? ';' + extra : ''}">${content}</td>`;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:0.35rem 0.4rem;vertical-align:middle">${thumb}</td>
+      ${cell(esc(r.year || ''))}
+      ${cell(esc(r.country || ''))}
+      ${cell(esc(r.label || ''))}
+      ${cell(esc(r.cat_no || ''), 'font-family:var(--font-mono);font-size:11px')}
+      ${cell(esc(r.format || ''), 'font-size:11px')}
+      <td style="padding:0.35rem 0.4rem;vertical-align:middle;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:0.15rem 0.4rem" onclick="toggleReleaseDetails('${rid}',this)">Details</button>
+      </td>
+      <td style="padding:0.35rem 0.4rem;vertical-align:middle;white-space:nowrap">${shortlistBtn}</td>
+    </tr>
+    <tr id="details-row-${rid}" style="display:none">
+      <td colspan="8" style="padding:0.25rem 0.5rem 0.5rem 2rem">
+        <div id="details-content-${rid}" style="font-size:11px;color:var(--ink-light)">Loading…</div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('version-browser-body').innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+        <colgroup>
+          <col style="width:44px">
+          <col style="width:52px">
+          <col style="width:80px">
+          <col>
+          <col style="width:115px">
+          <col style="width:120px">
+          <col style="width:60px">
+          <col style="width:105px">
+        </colgroup>
+        <thead>
+          <tr style="border-bottom:2px solid var(--border)">
+            <th style="padding:0.4rem;text-align:left;font-size:11px;color:var(--ink-light);font-weight:500"></th>
+            <th style="padding:0.4rem;text-align:left;font-size:11px;color:var(--ink-light);font-weight:500">Year</th>
+            <th style="padding:0.4rem;text-align:left;font-size:11px;color:var(--ink-light);font-weight:500">Country</th>
+            <th style="padding:0.4rem;text-align:left;font-size:11px;color:var(--ink-light);font-weight:500">Label</th>
+            <th style="padding:0.4rem;text-align:left;font-size:11px;color:var(--ink-light);font-weight:500">Cat #</th>
+            <th style="padding:0.4rem;text-align:left;font-size:11px;color:var(--ink-light);font-weight:500">Format</th>
+            <th style="padding:0.4rem"></th>
+            <th style="padding:0.4rem"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function toggleReleaseDetails(discogs_id, btn) {
+  const row = document.getElementById(`details-row-${discogs_id}`);
+  const content = document.getElementById(`details-content-${discogs_id}`);
+  if (!row) return;
+  if (row.style.display !== 'none') { row.style.display = 'none'; btn.textContent = 'Details'; return; }
+  row.style.display = '';
+  btn.textContent = 'Hide';
+  if (content.dataset.loaded) return;
+  try {
+    const r = await apiFetch(`/api/release/${discogs_id}/info`);
+    if (!r.ok) throw new Error();
+    const info = await r.json();
+    const ids = (info.identifiers || []).filter(x => x.value);
+    content.dataset.loaded = '1';
+    content.innerHTML = ids.length
+      ? ids.map(x => `<span style="margin-right:0.75rem"><strong>${esc(x.type || 'ID')}:</strong> ${esc(x.value)}</span>`).join('')
+      : 'No barcode/identifier data available.';
+  } catch {
+    content.innerHTML = 'Failed to load details.';
+  }
+}
+
+async function toggleVersion(wishlistId, discogs_id, isShortlisted, versionRecordId, btn) {
+  if (isShortlisted) {
+    if (!navigator.onLine) { toast('Requires internet connection', 'error'); return; }
+    btn.disabled = true;
+    if (!serverReachable) {
+      await saveVersionRemove(versionRecordId, wishlistId);
+      btn.textContent = 'Remove queued';
+      return;
+    }
+    try {
+      const r = await apiFetch(`/api/wishlist/versions/${versionRecordId}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error();
+      btn.textContent = 'Shortlist';
+      btn.onclick = function() { toggleVersion(wishlistId, discogs_id, false, 0, this); };
+      btn.className = 'btn btn-primary btn-sm';
+      btn.style.fontSize = '11px';
+      btn.disabled = false;
+      // Refresh the versions panel in the detail modal if open
+      loadVersions(wishlistId);
+    } catch { toast('Failed to remove', 'error'); btn.disabled = false; }
+  } else {
+    btn.disabled = true;
+    if (!navigator.onLine) { toast('Requires internet connection', 'error'); btn.disabled = false; return; }
+    if (!serverReachable) {
+      const w = wishlistItems.find(x => x.id === wishlistId);
+      // Find the release metadata from the table row for the pending queue entry
+      const row = btn.closest('tr');
+      const cells = row ? row.querySelectorAll('td') : [];
+      await saveVersionToQueue({
+        wishlist_id: wishlistId,
+        discogs_id,
+        year: cells[1] ? cells[1].textContent.trim() : '',
+        country: cells[2] ? cells[2].textContent.trim() : '',
+        label: cells[3] ? cells[3].textContent.trim() : '',
+        cat_no: cells[4] ? cells[4].textContent.trim() : '',
+        format: cells[5] ? cells[5].textContent.trim() : '',
+        title: w ? `${w.artist} - ${w.title}` : '',
+        thumb: '',
+      });
+      btn.textContent = 'Pending';
+      btn.className = 'btn btn-secondary btn-sm';
+      btn.disabled = true;
+      loadVersions(wishlistId);
+      toast('Shortlisted — will sync when back home', 'success');
+      return;
+    }
+    try {
+      // Collect metadata from the table row so the record is populated immediately
+      const row = btn.closest('tr');
+      const cells = row ? [...row.querySelectorAll('td')] : [];
+      const thumbImg = cells[0] ? cells[0].querySelector('img') : null;
+      if (thumbImg) _versionThumbs[discogs_id] = thumbImg.src;
+      const meta = {
+        discogs_id,
+        year:    cells[1] ? cells[1].textContent.trim() : '',
+        country: cells[2] ? cells[2].textContent.trim() : '',
+        label:   cells[3] ? cells[3].textContent.trim() : '',
+        cat_no:  cells[4] ? cells[4].textContent.trim() : '',
+        format:  cells[5] ? cells[5].textContent.trim() : '',
+      };
+      const r = await apiFetch(`/api/wishlist/${wishlistId}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(meta),
+      });
+      if (!r.ok && r.status !== 409) throw new Error();
+      const data = r.ok ? await r.json() : {};
+      const newId = data.id || 0;
+      btn.textContent = '✓ Shortlisted';
+      btn.className = 'btn btn-secondary btn-sm';
+      btn.style.fontSize = '11px';
+      btn.onclick = function() { toggleVersion(wishlistId, discogs_id, true, newId, this); };
+      btn.disabled = false;
+      loadVersions(wishlistId);
+    } catch { toast('Failed to shortlist', 'error'); btn.disabled = false; }
+  }
+}
+
+async function openWantlistSyncModal() {
+  document.getElementById('wantlist-sync-body').innerHTML =
+    '<div style="text-align:center;padding:2rem;color:var(--ink-light)">Loading preview…</div>';
+  openModal('modal-wantlist-sync');
+  try {
+    const r = await apiFetch('/api/wantlist/preview');
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed');
+    }
+    const data = await r.json();
+    renderWantlistSyncPreview(data);
+  } catch (e) {
+    document.getElementById('wantlist-sync-body').innerHTML =
+      `<div style="color:var(--red);padding:1rem">${esc(e.message)}</div>`;
+  }
+}
+
+function renderWantlistSyncPreview(data) {
+  const { sn_only = [], discogs_only = [], in_sync_count = 0 } = data;
+
+  const snSection = sn_only.length ? `
+    <div style="margin-bottom:1rem">
+      <div style="font-size:13px;font-weight:500;margin-bottom:0.5rem">SN → Discogs (${sn_only.length})</div>
+      <div style="font-size:12px;color:var(--ink-light);margin-bottom:0.5rem">These shortlisted versions will be added to your Discogs wantlist.</div>
+      ${sn_only.map(v => `
+        <label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;font-size:12px">
+          <input type="checkbox" name="to_discogs" value="${v.id}" checked>
+          <span>${esc(v.artist || '')} — ${esc(v.title || '')} ${v.year ? `(${v.year})` : ''} ${v.country ? `· ${v.country}` : ''}</span>
+        </label>`).join('')}
+    </div>` : '';
+
+  const discogsSection = discogs_only.length ? `
+    <div style="margin-bottom:1rem">
+      <div style="font-size:13px;font-weight:500;margin-bottom:0.5rem">Discogs → SN (${discogs_only.length})</div>
+      <div style="font-size:12px;color:var(--ink-light);margin-bottom:0.5rem">These Discogs wantlist items will be imported into SN.</div>
+      ${discogs_only.map(v => `
+        <label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;font-size:12px">
+          <input type="checkbox" name="to_sn" value="${esc(v.discogs_id)}" data-master="${esc(v.master_id)}" data-title="${esc(v.title)}" data-artist="${esc(v.artist)}" data-year="${v.year||''}" data-notes="${esc(v.discogs_notes||'')}" checked>
+          <span>${esc(v.artist)} — ${esc(v.title)} ${v.year ? `(${v.year})` : ''}</span>
+        </label>`).join('')}
+    </div>` : '';
+
+  const noneMsg = (!sn_only.length && !discogs_only.length)
+    ? `<div style="color:var(--ink-light);font-size:13px">Everything is in sync${in_sync_count ? ` (${in_sync_count} items)` : ''}.</div>`
+    : (in_sync_count ? `<div style="font-size:12px;color:var(--ink-light);margin-bottom:1rem">${in_sync_count} already in sync.</div>` : '');
+
+  document.getElementById('wantlist-sync-body').innerHTML = noneMsg + snSection + discogsSection;
+  const syncBtn = document.getElementById('wantlist-sync-btn');
+  syncBtn.disabled = !sn_only.length && !discogs_only.length;
+}
+
+async function doWantlistSync() {
+  const body = document.getElementById('wantlist-sync-body');
+  const toDiscogs = [...body.querySelectorAll('input[name="to_discogs"]:checked')].map(el => parseInt(el.value));
+  const toSleevenotes = [...body.querySelectorAll('input[name="to_sn"]:checked')].map(el => ({
+    discogs_id: el.value,
+    master_id: el.dataset.master,
+    title: el.dataset.title,
+    artist: el.dataset.artist,
+    year: el.dataset.year ? parseInt(el.dataset.year) : null,
+    discogs_notes: el.dataset.notes || '',
+  }));
+  if (!toDiscogs.length && !toSleevenotes.length) { closeModal('modal-wantlist-sync'); return; }
+  const btn = document.getElementById('wantlist-sync-btn');
+  btn.textContent = 'Syncing…'; btn.disabled = true;
+  try {
+    const r = await apiFetch('/api/wantlist/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to_discogs: toDiscogs, to_sleevenotes: toSleevenotes }),
+    });
+    if (!r.ok) throw new Error();
+    const result = await r.json();
+    closeModal('modal-wantlist-sync');
+    await loadWishlist();
+    toast(`Synced: ${result.exported} exported, ${result.imported} imported`, 'success');
+  } catch {
+    toast('Sync failed', 'error');
+  } finally {
+    btn.textContent = 'Sync'; btn.disabled = false;
+  }
+}
+
 function openWishlistDetail(id) {
   if (id < 0) { openPendingWishlistDetail(id); return; }
   const w = wishlistItems.find(x => x.id === id);
@@ -3594,7 +4239,12 @@ function openWishlistDetail(id) {
     <div class="form-group">
       <label class="form-label">Notes</label>
       <textarea class="form-control" id="wishlist-detail-notes" rows="3" style="resize:vertical">${esc(w.notes || '')}</textarea>
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem" id="versions-panel-${w.id}">
+      <div style="color:var(--ink-light);font-size:12px">Loading versions…</div>
     </div>`;
+
+  loadVersions(id);
 
   const deleteBtn = document.getElementById('wishlist-detail-delete-btn');
   deleteBtn.disabled = !serverReachable;

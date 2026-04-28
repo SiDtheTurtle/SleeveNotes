@@ -165,7 +165,13 @@ def init_db():
             notes       TEXT,
             valuation   REAL NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-            deleted_at  TEXT
+            deleted_at  TEXT,
+            is_wishlist   INTEGER NOT NULL DEFAULT 0,
+            wishlist_id   INTEGER,
+            in_wantlist   INTEGER NOT NULL DEFAULT 0,
+            identifiers   TEXT,
+            discogs_notes TEXT,
+            country       TEXT
         );
         CREATE TABLE IF NOT EXISTS settings (
             key   TEXT PRIMARY KEY,
@@ -187,6 +193,8 @@ def init_db():
             type       TEXT NOT NULL DEFAULT 'track',
             seq        INTEGER NOT NULL
         );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_wishlist_version
+          ON records (wishlist_id, discogs_id) WHERE is_wishlist = 1 AND deleted_at IS NULL;
         CREATE TABLE IF NOT EXISTS wishlist (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             master_id    TEXT NOT NULL UNIQUE,
@@ -203,6 +211,19 @@ def init_db():
             num_for_sale INTEGER
         );
         """)
+        # Add new columns to existing installs (CREATE TABLE IF NOT EXISTS won't add them)
+        for _col, _def in [
+            ("is_wishlist",   "INTEGER NOT NULL DEFAULT 0"),
+            ("wishlist_id",   "INTEGER"),
+            ("in_wantlist",   "INTEGER NOT NULL DEFAULT 0"),
+            ("identifiers",   "TEXT"),
+            ("discogs_notes", "TEXT"),
+            ("country",       "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE records ADD COLUMN {_col} {_def}")
+            except Exception:
+                pass  # column already exists
         # Seed default settings (INSERT OR IGNORE preserves user changes)
         for key, value in SETTINGS_DEFAULTS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
@@ -243,6 +264,18 @@ class WishlistAddIn(BaseModel):
 class WishlistUpdateIn(BaseModel):
     notes: Optional[str] = None
     fulfilled: Optional[bool] = None
+
+class WishlistVersionIn(BaseModel):
+    discogs_id: str
+    title: Optional[str] = ""
+    label: Optional[str] = ""
+    cat_no: Optional[str] = ""
+    year: Optional[str] = ""
+    format: Optional[str] = ""
+    country: Optional[str] = ""
+
+class WishlistVersionUpdateIn(BaseModel):
+    notes: Optional[str] = None
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -753,6 +786,48 @@ async def _refresh_new_records(records: list[tuple[int, str]], hdrs: dict):
             for rec_id, did in records
         ])
 
+async def _refresh_wishlist_version(record_id: int, discogs_id: str, hdrs: dict):
+    """Fetch full Discogs metadata for a wishlist version record, including country and identifiers."""
+    try:
+        rid = str(discogs_id).lstrip("r")
+        async with httpx.AsyncClient(timeout=30) as client:
+            release_resp, stats_resp = await asyncio.gather(
+                discogs_get(client, f"https://api.discogs.com/releases/{rid}", headers=hdrs),
+                discogs_get(client, f"https://api.discogs.com/marketplace/stats/{rid}", headers=hdrs),
+            )
+        if release_resp.status_code != 200:
+            return
+        data = release_resp.json()
+        downloaded = await download_all_images(data.get("images", []), f"r{rid}", hdrs)
+        cover_file = upsert_images(f"r{rid}", downloaded, preserve_cover=True)
+        upsert_tracklist(f"r{rid}", data.get("tracklist", []))
+        labels = data.get("labels", [])
+        label = labels[0].get("name", "") if labels else ""
+        cat_no = labels[0].get("catno", "") if labels else ""
+        formats = data.get("formats", [])
+        fmt_parts = [formats[0].get("name", "")] if formats else []
+        if formats and formats[0].get("descriptions"):
+            fmt_parts.extend(formats[0]["descriptions"])
+        fmt = ", ".join(sorted(p for p in fmt_parts if p))
+        stats = stats_resp.json() if stats_resp.status_code == 200 else {}
+        lp = stats.get("lowest_price") or {}
+        valuation = float(lp.get("value") or 0)
+        identifiers = json.dumps(data.get("identifiers", []))
+        with get_db() as conn:
+            conn.execute("""
+                UPDATE records SET
+                  artist=?, title=?, label=?, cat_no=?, year=?, format=?,
+                  country=?, cover_file=?, identifiers=?, valuation=?
+                WHERE id=?
+            """, (
+                ", ".join(a["name"] for a in data.get("artists", [])),
+                data.get("title", ""), label, cat_no, data.get("year"),
+                fmt.strip(), data.get("country", ""),
+                cover_file or "", identifiers, valuation, record_id,
+            ))
+    except Exception:
+        pass
+
 @app.post("/api/collection/sync")
 async def collection_sync(payload: SyncPayload, background_tasks: BackgroundTasks):
     with get_db() as conn:
@@ -911,7 +986,7 @@ def list_records():
     try:
         with get_db() as conn:
             rows = conn.execute(
-                "SELECT * FROM records WHERE deleted_at IS NULL ORDER BY id"
+                "SELECT * FROM records WHERE deleted_at IS NULL AND (is_wishlist = 0 OR is_wishlist IS NULL) ORDER BY id"
             ).fetchall()
         return [row_to_dict(r) for r in rows]
     except sqlite3.OperationalError:
@@ -1426,6 +1501,81 @@ async def add_wishlist(body: WishlistAddIn):
             raise HTTPException(status_code=409, detail="Already on wishlist")
 
 
+@app.get("/api/wishlist/{wishlist_id}/versions")
+def list_wishlist_versions(wishlist_id: int):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM records WHERE wishlist_id = ? AND is_wishlist = 1 AND deleted_at IS NULL ORDER BY year, country",
+            (wishlist_id,),
+        ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+@app.post("/api/wishlist/{wishlist_id}/versions", status_code=201)
+async def add_wishlist_version(wishlist_id: int, body: WishlistVersionIn, background_tasks: BackgroundTasks):
+    with get_db() as conn:
+        wl = conn.execute("SELECT id FROM wishlist WHERE id = ?", (wishlist_id,)).fetchone()
+        if not wl:
+            raise HTTPException(status_code=404, detail="Wishlist item not found")
+        rid = str(body.discogs_id).lstrip("r")
+        try:
+            cur = conn.execute(
+                """INSERT INTO records
+                   (discogs_id, is_wishlist, wishlist_id, title, label, cat_no, year, format, country)
+                   VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)""",
+                (f"r{rid}", wishlist_id,
+                 body.title or "", body.label or "", body.cat_no or "",
+                 int(body.year) if body.year and str(body.year).isdigit() else None,
+                 body.format or "", body.country or ""),
+            )
+            record_id = cur.lastrowid
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Version already shortlisted")
+    hdrs = get_discogs_headers()
+    background_tasks.add_task(_refresh_wishlist_version, record_id, f"r{rid}", hdrs)
+    return {"id": record_id}
+
+
+@app.put("/api/wishlist/versions/{record_id}")
+def update_wishlist_version(record_id: int, body: WishlistVersionUpdateIn):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM records WHERE id = ? AND is_wishlist = 1 AND deleted_at IS NULL",
+            (record_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Version not found")
+        if body.notes is not None:
+            conn.execute("UPDATE records SET notes = ? WHERE id = ?", (body.notes, record_id))
+    return {"ok": True}
+
+
+@app.delete("/api/wishlist/versions/{record_id}")
+def delete_wishlist_version(record_id: int):
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE records SET deleted_at = datetime('now') WHERE id = ? AND is_wishlist = 1",
+            (record_id,),
+        )
+    return {"ok": True}
+
+
+@app.post("/api/wishlist/versions/{record_id}/fulfill")
+def fulfill_wishlist_version(record_id: int):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM records WHERE id = ? AND is_wishlist = 1 AND deleted_at IS NULL",
+            (record_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Version not found")
+        conn.execute(
+            "UPDATE records SET is_wishlist = 0, wishlist_id = NULL WHERE id = ?",
+            (record_id,),
+        )
+    return {"ok": True, "record_id": record_id}
+
+
 @app.put("/api/wishlist/{wishlist_id}")
 def update_wishlist(wishlist_id: int, body: WishlistUpdateIn):
     with get_db() as conn:
@@ -1446,6 +1596,219 @@ def delete_wishlist(wishlist_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM wishlist WHERE id = ?", (wishlist_id,))
     return {"ok": True}
+
+
+# ── Routes: Masters / Release info ───────────────────────────────────────────
+
+@app.get("/api/masters/{master_id}/releases")
+async def get_master_releases(master_id: str):
+    mid = str(master_id).lstrip("m")
+    hdrs = get_discogs_headers()
+    results = []
+    url = f"https://api.discogs.com/masters/{mid}/versions"
+    params = {"format": "Vinyl", "per_page": 100, "page": 1}
+    async with httpx.AsyncClient(timeout=30) as client:
+        for _ in range(5):  # up to 5 pages = 500 results
+            resp = await discogs_get(client, url, params=params, headers=hdrs)
+            if resp.status_code != 200:
+                break
+            data = resp.json()
+            for v in data.get("versions", []):
+                fmt = v.get("format", "")
+                results.append({
+                    "discogs_id": str(v.get("id", "")),
+                    "title": v.get("title", ""),
+                    "label": v.get("label", ""),
+                    "cat_no": v.get("catno", ""),
+                    "year": v.get("released", ""),
+                    "format": fmt,
+                    "country": v.get("country", ""),
+                    "thumb": v.get("thumb", ""),
+                    "stats": {
+                        "in_wantlist": (v.get("stats") or {}).get("community", {}).get("in_wantlist", 0),
+                        "in_collection": (v.get("stats") or {}).get("community", {}).get("in_collection", 0),
+                    },
+                })
+            pagination = data.get("pagination", {})
+            if not pagination.get("urls", {}).get("next"):
+                break
+            params["page"] += 1
+    return results
+
+
+@app.get("/api/release/{release_id}/info")
+async def get_release_info(release_id: str):
+    rid = str(release_id).lstrip("r")
+    hdrs = get_discogs_headers()
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await discogs_get(client, f"https://api.discogs.com/releases/{rid}", headers=hdrs)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="Discogs release fetch failed")
+    data = resp.json()
+    labels = data.get("labels", [])
+    return {
+        "discogs_id": f"r{rid}",
+        "title": data.get("title", ""),
+        "artist": ", ".join(a["name"] for a in data.get("artists", [])),
+        "label": labels[0].get("name", "") if labels else "",
+        "cat_no": labels[0].get("catno", "") if labels else "",
+        "year": data.get("year"),
+        "country": data.get("country", ""),
+        "format": data.get("formats", [{}])[0].get("name", "") if data.get("formats") else "",
+        "identifiers": data.get("identifiers", []),
+        "notes": data.get("notes", ""),
+    }
+
+
+# ── Routes: Wantlist sync ─────────────────────────────────────────────────────
+
+class WantlistSyncPayload(BaseModel):
+    to_discogs: list[int] = []
+    to_sleevenotes: list[dict] = []
+
+@app.get("/api/wantlist/preview")
+async def wantlist_preview():
+    with get_db() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key='discogs_username'").fetchone()
+    username = (row["value"] if row else "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Discogs username not configured")
+    hdrs = get_discogs_headers()
+    # Fetch all Discogs wantlist items
+    discogs_wants = []
+    params = {"per_page": 100, "page": 1}
+    async with httpx.AsyncClient(timeout=30) as client:
+        for _ in range(5):
+            resp = await discogs_get(
+                client,
+                f"https://api.discogs.com/users/{username}/wants",
+                params=params,
+                headers=hdrs,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail="Discogs wantlist fetch failed")
+            data = resp.json()
+            for w in data.get("wants", []):
+                bi = w.get("basic_information", {})
+                discogs_wants.append({
+                    "discogs_id": str(bi.get("id", "")),
+                    "master_id": str(bi.get("master_id", "")),
+                    "title": bi.get("title", ""),
+                    "artist": ", ".join(a["name"] for a in bi.get("artists", [])),
+                    "year": bi.get("year"),
+                    "thumb": bi.get("thumb", ""),
+                    "discogs_notes": w.get("notes", ""),
+                })
+            if not data.get("pagination", {}).get("urls", {}).get("next"):
+                break
+            params["page"] += 1
+    # Fetch SN wishlist versions
+    with get_db() as conn:
+        sn_versions = conn.execute(
+            "SELECT id, discogs_id, artist, title, year, country, format, in_wantlist FROM records"
+            " WHERE is_wishlist = 1 AND deleted_at IS NULL"
+        ).fetchall()
+    sn_ids = {str(r["discogs_id"]).lstrip("r") for r in sn_versions}
+    discogs_ids = {w["discogs_id"] for w in discogs_wants}
+    sn_only = [row_to_dict(r) for r in sn_versions if str(r["discogs_id"]).lstrip("r") not in discogs_ids]
+    discogs_only = [w for w in discogs_wants if w["discogs_id"] not in sn_ids]
+    in_sync_count = len(sn_ids & discogs_ids)
+    return {"sn_only": sn_only, "discogs_only": discogs_only, "in_sync_count": in_sync_count}
+
+
+@app.post("/api/wantlist/sync")
+async def wantlist_sync(payload: WantlistSyncPayload, background_tasks: BackgroundTasks):
+    with get_db() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key='discogs_username'").fetchone()
+    username = (row["value"] if row else "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Discogs username not configured")
+    hdrs = get_discogs_headers()
+    exported = 0
+    imported = 0
+    async with httpx.AsyncClient(timeout=30) as client:
+        # SN → Discogs: push shortlisted versions to Discogs wantlist
+        for record_id in payload.to_discogs:
+            with get_db() as conn:
+                row = conn.execute(
+                    "SELECT discogs_id, notes FROM records WHERE id = ? AND is_wishlist = 1",
+                    (record_id,),
+                ).fetchone()
+            if not row:
+                continue
+            rid = str(row["discogs_id"]).lstrip("r")
+            await _discogs_acquire()
+            resp = await client.put(
+                f"https://api.discogs.com/users/{username}/wants/{rid}",
+                headers=hdrs,
+            )
+            if resp.status_code in (200, 201):
+                if row["notes"]:
+                    await _discogs_acquire()
+                    await client.post(
+                        f"https://api.discogs.com/users/{username}/wants/{rid}",
+                        json={"notes": row["notes"]},
+                        headers=hdrs,
+                    )
+                with get_db() as conn:
+                    conn.execute("UPDATE records SET in_wantlist = 1 WHERE id = ?", (record_id,))
+                exported += 1
+        # Discogs → SN: import Discogs wantlist items into SN
+        for want in payload.to_sleevenotes:
+            mid = str(want.get("master_id", "")).lstrip("m")
+            rid = str(want.get("discogs_id", "")).lstrip("r")
+            if not mid or not rid:
+                continue
+            # Find or create wishlist master entry
+            with get_db() as conn:
+                wl_row = conn.execute(
+                    "SELECT id FROM wishlist WHERE master_id = ?", (mid,)
+                ).fetchone()
+            if wl_row:
+                wishlist_id = wl_row["id"]
+            else:
+                # Fetch master data to create wishlist entry
+                resp = await discogs_get(
+                    client, f"https://api.discogs.com/masters/{mid}", headers=hdrs
+                )
+                if resp.status_code != 200:
+                    continue
+                mdata = resp.json()
+                m_artist = ", ".join(a["name"] for a in mdata.get("artists", []))
+                m_title = mdata.get("title", want.get("title", ""))
+                m_year = mdata.get("year", want.get("year"))
+                m_genres = ", ".join(mdata.get("genres", [])) or None
+                m_styles = ", ".join(mdata.get("styles", [])) or None
+                downloaded = await download_all_images(mdata.get("images", [])[:1], f"m{mid}", hdrs)
+                cover_file = downloaded[0]["filename"] if downloaded else ""
+                with get_db() as conn:
+                    try:
+                        cur = conn.execute(
+                            """INSERT INTO wishlist
+                               (master_id, artist, title, cover_file, notes, year, genres, styles)
+                               VALUES (?,?,?,?,?,?,?,?)""",
+                            (mid, m_artist, m_title, cover_file, "", m_year, m_genres, m_styles),
+                        )
+                        wishlist_id = cur.lastrowid
+                    except sqlite3.IntegrityError:
+                        wl_row = conn.execute(
+                            "SELECT id FROM wishlist WHERE master_id = ?", (mid,)
+                        ).fetchone()
+                        wishlist_id = wl_row["id"]
+            # Create version record
+            with get_db() as conn:
+                try:
+                    cur = conn.execute(
+                        "INSERT INTO records (discogs_id, is_wishlist, wishlist_id, in_wantlist, discogs_notes)"
+                        " VALUES (?, 1, ?, 1, ?)",
+                        (f"r{rid}", wishlist_id, want.get("discogs_notes", "") or ""),
+                    )
+                    new_id = cur.lastrowid
+                    background_tasks.add_task(_refresh_wishlist_version, new_id, f"r{rid}", hdrs)
+                    imported += 1
+                except sqlite3.IntegrityError:
+                    pass  # already shortlisted
+    return {"ok": True, "exported": exported, "imported": imported}
 
 
 # ── Static ────────────────────────────────────────────────────────────────────
