@@ -439,3 +439,11 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
   - `version_deletes`: version deletions queued offline.
   - All queues flushed on reconnect via `flushPendingQueue()` and by Background Sync on Android.
   - Discogs token never sent to browser; offline search uses unauthenticated Discogs API (25 req/min, no thumbnails returned — ♪ placeholder shown).
+
+## Outstanding TODOs (feat/wishlist-versions branch)
+
+1. **Find pressings broken in Offline Mode.** `openVersionsBrowse` calls `apiFetch('/api/wishlist/{id}/versions/browse')` which fails when server unreachable. Should hit Discogs API directly in Offline Mode (same pattern as `doWishlistSearch`). Button is already disabled in Read-Only Mode (`!navigator.onLine`), so only Offline Mode (`serverReachable === false`) needs the fallback.
+
+2. **Offline queue not flushing on reconnect.** Changes made in Offline Mode (e.g. unfulfilling a version, adding a wishlist item) are not persisting to the DB on reconnect. Likely regressed this session — investigate the full `flushPendingQueue()` path and the `loadWishlist()` / `_versionsByWishlistId` changes for anything that might short-circuit or swallow queue flush errors.
+
+3. **Full code review: compare wishlist/versions offline strategies against collection.** Audit all offline paths in the wishlist + versions feature against the collection's established patterns (SW caching, queue flush, error handling) to catch any remaining inconsistencies before merging.
