@@ -67,13 +67,19 @@ self.addEventListener('sync', e => {
 
 function openSwDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('sn_offline', 2);
+    const req = indexedDB.open('sn_offline', 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('wishlist_queue'))
         db.createObjectStore('wishlist_queue', { keyPath: 'idb_key', autoIncrement: true });
       if (!db.objectStoreNames.contains('wishlist_updates'))
         db.createObjectStore('wishlist_updates', { keyPath: 'wishlist_id' });
+      if (!db.objectStoreNames.contains('version_queue'))
+        db.createObjectStore('version_queue', { keyPath: 'idb_key', autoIncrement: true });
+      if (!db.objectStoreNames.contains('version_removes'))
+        db.createObjectStore('version_removes', { keyPath: 'record_id' });
+      if (!db.objectStoreNames.contains('version_fulfillments'))
+        db.createObjectStore('version_fulfillments', { keyPath: 'record_id' });
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = reject;
@@ -120,6 +126,40 @@ async function flushOfflineQueue() {
           body: JSON.stringify({ notes: upd.notes, fulfilled: upd.fulfilled }),
         });
         if (r.ok) await swDelete(db, 'wishlist_updates', upd.wishlist_id);
+      } catch { /* retry on next sync */ }
+    }
+
+    // Version adds must run before removes/fulfillments
+    for (const item of await swGetAll(db, 'version_queue')) {
+      try {
+        const r = await fetch(`/api/wishlist/${item.wishlist_id}/versions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ discogs_id: item.discogs_id }),
+        });
+        if (r.ok || r.status === 409) await swDelete(db, 'version_queue', item.idb_key);
+      } catch { /* retry on next sync */ }
+    }
+
+    for (const item of await swGetAll(db, 'version_removes')) {
+      try {
+        const r = await fetch(`/api/wishlist/versions/${item.record_id}`, { method: 'DELETE' });
+        if (r.ok) await swDelete(db, 'version_removes', item.record_id);
+      } catch { /* retry on next sync */ }
+    }
+
+    for (const item of await swGetAll(db, 'version_fulfillments')) {
+      try {
+        const fr = await fetch(`/api/wishlist/versions/${item.record_id}/fulfill`, { method: 'POST' });
+        if (!fr.ok) continue;
+        if (item.details && Object.keys(item.details).length) {
+          await fetch(`/api/records/${item.record_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item.details),
+          });
+        }
+        await swDelete(db, 'version_fulfillments', item.record_id);
       } catch { /* retry on next sync */ }
     }
   } catch { /* IDB unavailable */ }

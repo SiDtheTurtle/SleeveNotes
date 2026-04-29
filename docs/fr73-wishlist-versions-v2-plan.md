@@ -117,20 +117,20 @@ Versions panel appended to modal body. `loadVersions(wishlistId)` → `GET /api/
 
 Opens `modal-version-browser`. Table with `table-layout:fixed` + `<colgroup>` widths to prevent text overlap. Shortlisted versions show "Shortlisted ✓" (cross-referenced against server versions + `pendingVersionQueue`).
 
-### 3.3 — `toggleVersion(wishlistId, discogs_id, isShortlisted, versionRecordId)` ✅
+### 3.3 — `toggleVersionStaged(wishlistId, discogs_id, isShortlisted, versionRecordId)` ✅
 
-Shortlist: POST with preview metadata read from browser table row cells. Remove: DELETE. On shortlist, captures thumb URL from table row `<img>` into `_versionThumbs[discogs_id]` for immediate display.
+Renamed from `toggleVersion`. Changes are staged in `_stagedVersionChanges` and only applied when the main Save button is pressed. Shortlist: stages a POST with preview metadata read from browser table row cells. Remove: stages a DELETE. On shortlist, captures thumb URL from table row `<img>` into `_versionThumbs[discogs_id]` for immediate display.
 
 ### 3.4 — `fulfillVersion(recordId, wishlistId)` ✅
 
-1. POST fulfill endpoint
-2. Set `_pendingWishlistFulfill` global with parent wishlist item
+1. Opens `modal-fulfill-version` via `confirmYesNo()` prompt
+2. On confirm: POST fulfill endpoint, set `_pendingWishlistFulfill` global with parent wishlist item
 3. `openEdit(recordId)` — edit modal opens pre-filled
 4. `saveRecord()` picks up `_pendingWishlistFulfill` (same as `wishlist_match` for new records) → fires fulfilled prompt
 
 ### 3.5 — `openWantlistSyncModal()` ✅
 
-Settings → Discogs → "Sync Wantlist…". Preview modal with three sections. Sync button POSTs selections.
+Settings → Discogs → "Sync Discogs wantlist…". Preview modal redesigned to match collection sync visual patterns: monospace colour-coded section headers (green = new from Discogs, blue = only in SN), border dividers, direction badges, dynamic "Sync (N)" button count. Sync button POSTs selections.
 
 ### 3.6 — New modals ✅
 
@@ -146,6 +146,7 @@ pendingVersionRemoves      // array — in-memory mirror of IDB version_removes
 pendingVersionFulfillments // array — in-memory mirror of IDB version_fulfillments
 _pendingWishlistFulfill    // object|null — parent wishlist item for fulfill prompt
 _versionThumbs             // {discogs_id: thumbUrl} — CDN thumb fallback until cached image arrives
+_stagedVersionChanges      // {wishlistId, toAdd[], toRemove Set, toFulfill Set} — staged until Save
 ```
 
 ### Thumbnail fallback pattern
@@ -160,7 +161,7 @@ const thumbSrc = v.cover_file ? `/images/${esc(v.cover_file)}` : (thumbFallback 
 
 ---
 
-## Phase 4 — Service Worker (sw.js) ⚠️ PARTIAL
+## Phase 4 — Service Worker (sw.js) ✅ DONE
 
 `CACHED_DATA` extended:
 
@@ -174,17 +175,15 @@ const CACHED_DATA = ['/api/records', '/api/wishlist', '/api/settings', '/api/mas
 if (resp.ok) { const clone = resp.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
 ```
 
-### IDB v3 (sn_offline) ⚠️ INCOMPLETE
+### IDB v3 (sn_offline) ✅ COMPLETE
 
-The frontend's `openOfflineDB()` (index.html) was bumped to v3 with three new stores: `version_queue`, `version_removes`, `version_fulfillments`. `flushPendingQueue()` in index.html processes all five stores on reconnect.
+Both `openOfflineDB()` (index.html) and `openSwDB()` (sw.js) are at v3 with all five stores: `wishlist_queue`, `wishlist_updates`, `version_queue`, `version_removes`, `version_fulfillments`. Both `flushPendingQueue()` (index.html) and `flushOfflineQueue()` (sw.js) process all five stores on reconnect, with version adds running before removes/fulfillments.
 
-**Not yet done in sw.js:**
-- `openSwDB()` is still at v2 — must be bumped to v3 with the same three new stores, otherwise Android Background Sync will fail silently (tries to open v2, DB is already at v3)
-- `flushOfflineQueue()` in sw.js must be extended to flush `version_queue`, `version_removes`, and `version_fulfillments` (same logic as `flushPendingQueue()` in index.html)
+### `cacheAllVersions()` ✅
 
-### `prefetchVersionData()` ✅
+Replaced `prefetchVersionData()`. Fires after every `loadWishlist()` — fetches `/api/wishlist/{id}/versions` for all server wishlist items in parallel (pure DB reads, no Discogs calls). Primes SW cache for offline use. After all fetches complete, re-renders the wishlist to show/update "Syncing…" badges.
 
-Fire-and-forget after every `loadWishlist()` when `serverReachable`. Fetches `/api/wishlist/{id}/versions` for each server wishlist item, then `/api/release/{discogs_id}/info` for each version — primes SW cache so data is available offline without the user opening each item.
+**Key difference from original `prefetchVersionData()`:** Does not call `/api/release/{id}/info`. Discogs API calls are only made from the wantlist sync buttons in Settings and the version browser Details button — never on page load.
 
 ---
 
@@ -193,8 +192,8 @@ Fire-and-forget after every `loadWishlist()` when `serverReachable`. Fetches `/a
 | State | Versions list | Browse pressings | Shortlist / Remove | Add to collection |
 |---|---|---|---|---|
 | Online | ✓ live | ✓ | ✓ | ✓ |
-| Offline (server down) | ✓ SW cache (pre-loaded) | ✓ SW cache (if visited) | ✓ via IDB queue | ✓ synced versions only |
-| Read-only (no internet) | ✓ SW cache (pre-loaded) | ✓ SW cache (if visited) | ✗ disabled | ✗ disabled |
+| Offline (server down) | ✓ SW cache (pre-loaded by `cacheAllVersions`) | ✓ SW cache (if visited) | ✓ via IDB queue | ✓ synced versions only |
+| Read-only (no internet) | ✓ SW cache (pre-loaded by `cacheAllVersions`) | ✓ SW cache (if visited) | ✗ disabled | ✗ disabled |
 
 ---
 
@@ -213,7 +212,7 @@ Fire-and-forget after every `loadWishlist()` when `serverReachable`. Fetches `/a
 
 ## Status
 
-**All four phases implemented.** Testing in progress on `feat/wishlist-versions-v2`.
+**All four phases implemented and tested on `feat/wishlist-versions-v2`.** Ready for final review before merge to main.
 
 ### Bugs found and fixed during implementation
 
@@ -222,18 +221,22 @@ Fire-and-forget after every `loadWishlist()` when `serverReachable`. Fetches `/a
 3. **Shortlisted version shows ♪ with no metadata** — Fix: frontend reads cells from browser table row and passes preview metadata in POST body; INSERT stores it immediately.
 4. **SW `TypeError: clone on already-used Response`** — Fix: `resp.clone()` called synchronously before async gap.
 5. **Thumbnail missing after shortlist (hard refresh fixes it)** — Fix: `_versionThumbs` map stores Discogs CDN thumb at shortlist time; used as fallback until cached image available.
+6. **HTTP 500 on wishlist detail Save** — `WishlistUpdateIn` model fixed; staged version changes apply correctly on Save.
+7. **HTTP 500 on wantlist preview when shortlisted versions exist** — partial SELECT in `wantlist_preview` didn't include `is_new`; fixed with `SELECT *`.
+8. **Page freeze (~60s) after bulk wantlist sync** — `prefetchVersionData()` was firing `/api/release/{id}/info` calls immediately after sync, saturating the browser connection pool with rate-limited Discogs requests. Fixed by removing `prefetchVersionData()` entirely and replacing with `cacheAllVersions()` (DB reads only, no Discogs calls on page load).
 
-### Remaining testing checklist
+### Testing checklist
 
-- [ ] Thumbnail fix confirmed working (deployed, not yet confirmed)
-- [ ] Add to collection flow (fulfill → edit modal → wishlist fulfilled prompt)
-- [ ] Remove version
-- [ ] Notes edit on version
-- [ ] Wantlist sync preview (sn_only / discogs_only correct)
-- [ ] Sync to Discogs (in_wantlist=1 in DB, visible in Discogs wantlist)
-- [ ] Sync from Discogs (master + version created in SN)
-- [ ] Offline: versions visible from SW cache when server down
-- [ ] Browse pressings disabled in read-only mode (no internet)
+- [x] Thumbnail fix confirmed working
+- [x] Add to collection flow (fulfill → edit modal → wishlist fulfilled prompt)
+- [x] Remove version (also removes from Discogs wantlist)
+- [x] Notes edit on version
+- [x] Wantlist sync preview (sn_only / discogs_only correct)
+- [x] Sync to Discogs (in_wantlist=1 in DB, visible in Discogs wantlist)
+- [x] Sync from Discogs (master + version created in SN)
+- [x] Offline: versions visible from SW cache when server down
+- [x] Browse pressings disabled in read-only mode (no internet)
+- [x] SW Phase 4: openSwDB() at v3, flushOfflineQueue() covers all five stores
 
 ---
 
