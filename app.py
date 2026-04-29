@@ -1587,7 +1587,6 @@ async def add_wishlist_version(wishlist_id: int, body: WishlistVersionIn, backgr
             raise HTTPException(status_code=409, detail="Version already shortlisted")
     hdrs = get_discogs_headers()
     background_tasks.add_task(_refresh_wishlist_version, record_id, f"r{rid}", hdrs)
-    background_tasks.add_task(_add_to_discogs_wantlist, rid, "", record_id)
     return {"id": record_id}
 
 
@@ -1606,7 +1605,7 @@ def update_wishlist_version(record_id: int, body: WishlistVersionUpdateIn):
 
 
 @app.delete("/api/wishlist/versions/{record_id}")
-async def delete_wishlist_version(record_id: int, background_tasks: BackgroundTasks):
+def delete_wishlist_version(record_id: int):
     with get_db() as conn:
         row = conn.execute(
             "SELECT discogs_id FROM records WHERE id = ? AND is_wishlist = 1 AND deleted_at IS NULL",
@@ -1616,9 +1615,6 @@ async def delete_wishlist_version(record_id: int, background_tasks: BackgroundTa
             conn.execute(
                 "UPDATE records SET deleted_at = datetime('now') WHERE id = ?", (record_id,)
             )
-    if row:
-        rid = str(row["discogs_id"]).lstrip("r")
-        background_tasks.add_task(_remove_from_discogs_wantlist, rid, record_id)
     return {"ok": True}
 
 
