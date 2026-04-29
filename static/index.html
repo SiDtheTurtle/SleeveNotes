@@ -875,7 +875,9 @@
   .badge-want { background: #FFF3CD; color: #856404; font-size: 9px; padding: 1px 5px; border: 1px solid #FFE69C; }
   .badge-fulfilled { background: #D4EDDA; color: var(--green); font-size: 9px; padding: 1px 5px; border: 1px solid #B8DFC5; }
   .badge-pending { background: #FFF3CD; color: #856404; font-size: 9px; padding: 1px 5px; border: 1px solid #FFE69C; }
+  .badge-syncing { background: #E8F0FE; color: #1a56b0; font-size: 9px; padding: 1px 5px; border: 1px solid #C3D5F8; }
   .tile-pending-badge { position: absolute; top: 0.4rem; right: 0.4rem; background: rgba(133,100,4,0.9); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.03em; pointer-events: none; }
+  .tile-syncing-badge { position: absolute; top: 0.4rem; left: 0.4rem; background: rgba(26,86,176,0.85); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.03em; pointer-events: none; }
 
   /* ── Misc ── */
   .spinner {
@@ -1345,8 +1347,8 @@
           <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Two-way sync between SleeveNotes and your Discogs collection. Shows a full diff — choose per record which direction to sync, or skip.</div>
         </div>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-          <button id="btn-sync-discogs" class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync with Discogs…</button>
-          <button id="btn-sync-wantlist" class="btn btn-secondary btn-sm" onclick="openWantlistSyncModal()">Sync Wantlist…</button>
+          <button id="btn-sync-discogs" class="btn btn-secondary btn-sm" onclick="openDiscogsSync()">Sync Discogs collection…</button>
+          <button id="btn-sync-wantlist" class="btn btn-secondary btn-sm" onclick="openWantlistSyncModal()">Sync Discogs wantlist…</button>
         </div>
       </div>
 
@@ -3541,7 +3543,20 @@ async function loadWishlist() {
   wishlistItems = [..._serverWishlistItems, ...pending];
   if (currentSection === 'wishlist') renderWishlist();
   updateStats();
-  prefetchVersionData();
+  cacheAllVersions();
+}
+
+async function cacheAllVersions() {
+  if (!serverReachable) return;
+  const serverItems = _serverWishlistItems.filter(w => !w.pending);
+  await Promise.all(serverItems.map(async w => {
+    try {
+      const r = await apiFetch(`/api/wishlist/${w.id}/versions`);
+      if (!r.ok) return;
+      _loadedVersionsByWishlist[w.id] = await r.json();
+    } catch {}
+  }));
+  if (currentSection === 'wishlist') renderWishlist();
 }
 
 function renderWishlistTiles() {
@@ -3564,6 +3579,7 @@ function renderWishlistTiles() {
         ? (w.thumb ? `<img class="tile-img" src="${esc(w.thumb)}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">⏳</div>`)
         : (w.cover_file ? `<img class="tile-img" src="/images/${esc(w.cover_file)}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">♡</div>`)}
       ${w.pending ? `<div class="tile-pending-badge">Pending</div>` : ''}
+      ${!w.pending && (_loadedVersionsByWishlist[w.id] || []).some(v => v.identifiers === null) ? `<div class="tile-syncing-badge">Syncing…</div>` : ''}
       <div class="tile-overlay">
         <div class="tile-overlay-artist">${esc(displayArtist(w.artist))}</div>
         <div class="tile-overlay-title">${esc(w.title)}</div>
@@ -3600,7 +3616,7 @@ function renderWishlist() {
         ? (w.thumb ? `<img class="cover-thumb" src="${esc(w.thumb)}" alt="" loading="lazy">` : `<div class="cover-placeholder">⏳</div>`)
         : (w.cover_file ? `<img class="cover-thumb" src="/images/${esc(w.cover_file)}" alt="" loading="lazy">` : `<div class="cover-placeholder">♡</div>`)}</td>
       <td class="overflow" title="${esc(displayArtist(w.artist))}">${esc(displayArtist(w.artist))}</td>
-      <td class="overflow" title="${esc(w.title)}">${esc(w.title)}</td>
+      <td class="overflow" title="${esc(w.title)}">${esc(w.title)}${!w.pending && (_loadedVersionsByWishlist[w.id] || []).some(v => v.identifiers === null) ? ' <span class="badge badge-syncing">Syncing…</span>' : ''}</td>
       <td class="text-mono col-sm">${w.year || '—'}</td>
       <td class="text-mono col-sm">${w.pending ? '<span class="badge badge-pending">Pending</span>' : fmtDate(w.added_at ? w.added_at.split(' ')[0] : '')}</td>
       <td class="note-cell col-md" title="${esc(w.notes)}">${esc(w.notes)}</td>
@@ -3771,21 +3787,6 @@ function onShowFulfilledToggle() {
 
 // ── Wishlist versions ──────────────────────────────────────────────────────
 
-async function prefetchVersionData() {
-  if (!serverReachable) return;
-  const serverItems = _serverWishlistItems.filter(w => !w.pending);
-  for (const w of serverItems) {
-    try {
-      const r = await apiFetch(`/api/wishlist/${w.id}/versions`);
-      if (!r.ok) continue;
-      const versions = await r.json();
-      for (const v of versions) {
-        const rid = String(v.discogs_id || '').replace(/^r/, '');
-        if (rid) apiFetch(`/api/release/${rid}/info`).catch(() => {});
-      }
-    } catch { /* background sweep — ignore failures */ }
-  }
-}
 
 async function loadVersions(wishlistId) {
   const panel = document.getElementById(`versions-panel-${wishlistId}`);
@@ -4297,42 +4298,63 @@ async function openWantlistSyncModal() {
 
 function renderWantlistSyncPreview(data) {
   const { sn_only = [], discogs_only = [], in_sync_count = 0 } = data;
+  let html = '';
 
-  const snSection = sn_only.length ? `
-    <div style="margin-bottom:1rem">
-      <div style="font-size:13px;font-weight:500;margin-bottom:0.5rem">SN → Discogs (${sn_only.length})</div>
-      <div style="font-size:12px;color:var(--ink-light);margin-bottom:0.5rem">These shortlisted versions will be added to your Discogs wantlist.</div>
-      ${sn_only.map(v => `
-        <label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;font-size:12px">
-          <input type="checkbox" name="to_discogs" value="${v.id}" checked>
-          <span>${esc(v.artist || '')} — ${esc(v.title || '')} ${v.year ? `(${v.year})` : ''} ${v.country ? `· ${v.country}` : ''}</span>
-        </label>`).join('')}
-    </div>` : '';
+  if (in_sync_count) {
+    html += `<div style="font-size:12px;color:var(--ink-light);margin-bottom:0.75rem">${in_sync_count} item${in_sync_count === 1 ? '' : 's'} already in sync.</div>`;
+  }
 
-  const discogsSection = discogs_only.length ? `
-    <div style="margin-bottom:1rem">
-      <div style="font-size:13px;font-weight:500;margin-bottom:0.5rem">Discogs → SN (${discogs_only.length})</div>
-      <div style="font-size:12px;color:var(--ink-light);margin-bottom:0.5rem">These Discogs wantlist items will be imported into SN.</div>
-      ${discogs_only.map(v => `
-        <label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;font-size:12px">
-          <input type="checkbox" name="to_sn" value="${esc(v.discogs_id)}" data-master="${esc(v.master_id)}" data-title="${esc(v.title)}" data-artist="${esc(v.artist)}" data-year="${v.year||''}" data-notes="${esc(v.discogs_notes||'')}" checked>
-          <span>${esc(v.artist)} — ${esc(v.title)} ${v.year ? `(${v.year})` : ''}</span>
-        </label>`).join('')}
-    </div>` : '';
+  if (discogs_only.length) {
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--green);font-weight:500;margin-bottom:0.5rem">New from Discogs (${discogs_only.length})</div>`;
+    discogs_only.forEach(v => {
+      const meta = [v.year ? `(${v.year})` : ''].filter(Boolean).join(' ');
+      html += `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" class="wl-sync-sn-check" value="${esc(v.discogs_id)}" data-master="${esc(v.master_id)}" data-title="${esc(v.title)}" data-artist="${esc(v.artist)}" data-year="${v.year||''}" data-notes="${esc(v.discogs_notes||'')}" checked>
+        <span style="font-size:13px"><strong>${esc(v.artist)}</strong> — ${esc(v.title)}${meta ? ` ${meta}` : ''}</span>
+        <span style="font-size:11px;color:var(--green);margin-left:auto;flex-shrink:0">→ SleeveNotes</span>
+      </label>`;
+    });
+    html += '</div>';
+  }
 
-  const noneMsg = (!sn_only.length && !discogs_only.length)
-    ? `<div style="color:var(--ink-light);font-size:13px">Everything is in sync${in_sync_count ? ` (${in_sync_count} items)` : ''}.</div>`
-    : (in_sync_count ? `<div style="font-size:12px;color:var(--ink-light);margin-bottom:1rem">${in_sync_count} already in sync.</div>` : '');
+  if (sn_only.length) {
+    html += `<div style="margin-bottom:1.25rem">
+      <div style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--blue);font-weight:500;margin-bottom:0.5rem">Only in SleeveNotes (${sn_only.length})</div>`;
+    sn_only.forEach(v => {
+      const meta = [v.year ? `(${v.year})` : '', v.country ? `· ${v.country}` : ''].filter(Boolean).join(' ');
+      html += `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" class="wl-sync-discogs-check" value="${v.id}" checked>
+        <span style="font-size:13px"><strong>${esc(v.artist || '')}</strong> — ${esc(v.title || '')}${meta ? ` ${meta}` : ''}</span>
+        <span style="font-size:11px;color:var(--blue);margin-left:auto;flex-shrink:0">→ Discogs</span>
+      </label>`;
+    });
+    html += '</div>';
+  }
 
-  document.getElementById('wantlist-sync-body').innerHTML = noneMsg + snSection + discogsSection;
-  const syncBtn = document.getElementById('wantlist-sync-btn');
-  syncBtn.disabled = !sn_only.length && !discogs_only.length;
+  if (!sn_only.length && !discogs_only.length) {
+    html += `<div style="font-size:13px;color:var(--ink-light);text-align:center;padding:1.5rem 0">Everything is in sync.</div>`;
+  }
+
+  const body = document.getElementById('wantlist-sync-body');
+  body.innerHTML = html;
+  body.addEventListener('change', updateWantlistSyncBtn);
+  updateWantlistSyncBtn();
+}
+
+function updateWantlistSyncBtn() {
+  const snChecked = document.querySelectorAll('.wl-sync-sn-check:checked').length;
+  const discogsChecked = document.querySelectorAll('.wl-sync-discogs-check:checked').length;
+  const total = snChecked + discogsChecked;
+  const btn = document.getElementById('wantlist-sync-btn');
+  btn.disabled = total === 0;
+  btn.textContent = total ? `Sync (${total})` : 'Sync';
 }
 
 async function doWantlistSync() {
   const body = document.getElementById('wantlist-sync-body');
-  const toDiscogs = [...body.querySelectorAll('input[name="to_discogs"]:checked')].map(el => parseInt(el.value));
-  const toSleevenotes = [...body.querySelectorAll('input[name="to_sn"]:checked')].map(el => ({
+  const toDiscogs = [...body.querySelectorAll('.wl-sync-discogs-check:checked')].map(el => parseInt(el.value));
+  const toSleevenotes = [...body.querySelectorAll('.wl-sync-sn-check:checked')].map(el => ({
     discogs_id: el.value,
     master_id: el.dataset.master,
     title: el.dataset.title,
@@ -4340,7 +4362,6 @@ async function doWantlistSync() {
     year: el.dataset.year ? parseInt(el.dataset.year) : null,
     discogs_notes: el.dataset.notes || '',
   }));
-  if (!toDiscogs.length && !toSleevenotes.length) { closeModal('modal-wantlist-sync'); return; }
   const btn = document.getElementById('wantlist-sync-btn');
   btn.textContent = 'Syncing…'; btn.disabled = true;
   try {
@@ -4357,7 +4378,7 @@ async function doWantlistSync() {
   } catch {
     toast('Sync failed', 'error');
   } finally {
-    btn.textContent = 'Sync'; btn.disabled = false;
+    updateWantlistSyncBtn();
   }
 }
 
