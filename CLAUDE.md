@@ -455,8 +455,13 @@ All four phases committed to `feat/wishlist-versions-v2` plus subsequent polish:
 6. `sqlite3.OperationalError: no such column: wishlist_id` on startup — `CREATE UNIQUE INDEX` ran inside `executescript()` before ALTER TABLE guards; moved after the guard loop
 7. "Show more details" lag — was calling `/api/release/{id}/info` live; fixed by pre-rendering from `discogs_notes` + `identifiers` already in version data
 
+### Known bug: HTTP 500 on save
+
+Saving the wishlist detail modal (with or without staged version changes) is currently returning HTTP 500. Needs investigation before any further testing.
+
 ### Testing checklist (pick up here)
 
+- [ ] **Fix HTTP 500 on wishlist detail Save first**
 - [ ] Add to collection flow (fulfill → edit modal opens pre-filled → wishlist fulfilled prompt fires)
 - [ ] Remove version (also removes from Discogs wantlist)
 - [ ] Add version (also adds to Discogs wantlist — check `in_wantlist=1` in DB)
