@@ -370,6 +370,14 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
   - Both queues flushed on reconnect via `flushPendingQueue()` and by Background Sync on Android.
   - Discogs token never sent to browser; offline search uses unauthenticated Discogs API (25 req/min, no thumbnails returned — ♪ placeholder shown).
 
+## Deploying to Live Server
+
+Connection details (host, user, key path) are in the global Claude config (`~/.claude/CLAUDE.md`).
+
+```bash
+ssh -i <key> <user>@<host> 'docker compose -f /opt/docker/sleevenotes.yml pull && docker compose -f /opt/docker/sleevenotes.yml up -d'
+```
+
 ## FR #73 — Wishlist Versions + Wantlist Sync: First Attempt
 
 Branch `feat/wishlist-versions` — shelved, do not merge. Preserved for reference.
@@ -406,3 +414,45 @@ Branch `feat/wishlist-versions` — shelved, do not merge. Preserved for referen
 - **Write the spec before code.** Phased build led to incremental decisions; the core UX was never resolved upfront.
 - **Simplify offline scope.** Five-store IDB queue was over-engineered. Read-only SW cache for versions is likely sufficient.
 - **Keep the `wishlist_versions` schema** — it is sound and reusable.
+
+## FR #73 — Wishlist Versions + Wantlist Sync: Second Attempt (WIP)
+
+Branch: `feat/wishlist-versions-v2`. Full plan: `docs/fr73-wishlist-versions-v2-plan.md`.
+
+**Architecture change from first attempt:** Uses `records` table with an `is_wishlist` flag rather than a separate `wishlist_versions` table.
+
+### What's implemented
+
+All four phases committed to `feat/wishlist-versions-v2` (through commit `198f6fc`):
+
+- **Schema:** 6 new columns on `records` with ALTER TABLE guards + partial unique index
+- **Backend:** all endpoints (versions CRUD, fulfill, masters/releases, release/info, wantlist preview + sync)
+- **Frontend:** versions panel in wishlist detail, version browser modal, wantlist sync modal, offline IDB v3 queuing, `_versionThumbs` fallback map, `prefetchVersionData()` eager cache sweep
+- **SW:** `/api/masters/` and `/api/release/` added to `CACHED_DATA`; clone-before-async bug fixed
+
+### Known incomplete: SW Phase 4
+
+`openSwDB()` in `sw.js` is still at v2 — must be bumped to v3. `flushOfflineQueue()` in `sw.js` is not extended for version queues (`version_queue`, `version_removes`, `version_fulfillments`). Android Background Sync will fail silently until this is fixed.
+
+### Bugs fixed during implementation
+
+1. "No vinyl pressings found" — removed bad post-filter on "Vinyl" in format string
+2. Text overlap in version browser — `table-layout:fixed` + `<colgroup>` widths
+3. Shortlisted version shows ♪ — frontend now passes preview metadata in POST body
+4. SW TypeError clone on used Response — clone synchronously before async gap
+5. Thumbnail missing after shortlist (hard refresh fixes it) — `_versionThumbs` map stores CDN thumb at shortlist time as fallback until cached image arrives (**not yet confirmed working**)
+
+### Testing checklist (pick up here)
+
+- [ ] Thumbnail fix confirmed (bug #5 above — last deployed change, unconfirmed)
+- [ ] Add to collection flow (fulfill → edit modal opens pre-filled → wishlist fulfilled prompt fires)
+- [ ] Remove version
+- [ ] Notes edit on version
+- [ ] Wantlist sync preview (sn_only / discogs_only sections correct)
+- [ ] Sync to Discogs (`in_wantlist=1` in DB, item visible in Discogs wantlist)
+- [ ] Sync from Discogs (master + version created in SN)
+- [ ] Offline: versions visible from SW cache when server down
+- [ ] Browse pressings disabled in read-only mode (no internet)
+- [ ] SW Phase 4: bump `openSwDB()` to v3 + extend `flushOfflineQueue()` in `sw.js` for `version_queue`, `version_removes`, `version_fulfillments`
+
+When all tests pass: update this section, update CLAUDE.md schema docs, cut v1.10.0 release.
