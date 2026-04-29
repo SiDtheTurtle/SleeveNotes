@@ -423,12 +423,23 @@ Branch: `feat/wishlist-versions-v2`. Full plan: `docs/fr73-wishlist-versions-v2-
 
 ### What's implemented
 
-All four phases committed to `feat/wishlist-versions-v2` (through commit `198f6fc`):
+All four phases committed to `feat/wishlist-versions-v2` plus subsequent polish:
 
 - **Schema:** 6 new columns on `records` with ALTER TABLE guards + partial unique index
 - **Backend:** all endpoints (versions CRUD, fulfill, masters/releases, release/info, wantlist preview + sync)
 - **Frontend:** versions panel in wishlist detail, version browser modal, wantlist sync modal, offline IDB v3 queuing, `_versionThumbs` fallback map, `prefetchVersionData()` eager cache sweep
 - **SW:** `/api/masters/` and `/api/release/` added to `CACHED_DATA`; clone-before-async bug fixed
+
+### Additional polish implemented
+
+- **Staged changes pattern:** Version add/remove/fulfill changes are staged in memory (`_stagedVersionChanges`) and only applied when the main Save button is pressed. No writes until Save.
+- **Version browser cascading filters:** Year / Country / Label / Format dropdowns filter in tandem — each dropdown's options are derived from releases matching all other active filters. Format respects the Hide Format Tags setting.
+- **`discogs_notes` populated on refresh:** `_refresh_wishlist_version` now stores `data.get("notes")` into the `discogs_notes` column. The "Show more details…" expander in the versions panel pre-renders `discogs_notes` + parsed `identifiers` inline — pure DOM toggle, zero network calls.
+- **Version browser details expander:** Shows Discogs prose notes above identifiers (fetched live from `/api/release/{id}/info`).
+- **Thumbnail lightbox:** Clicking a version thumbnail in the panel opens the existing `openLightbox()` zoom.
+- **Auto-sync to Discogs wantlist:** `POST /api/wishlist/{id}/versions` fires `_add_to_discogs_wantlist` background task (PUT to Discogs wantlist, sets `in_wantlist=1`). `DELETE /api/wishlist/versions/{id}` fires `_remove_from_discogs_wantlist` background task. Both are fire-and-forget; no-op if Discogs username not configured.
+- **Yes/No confirm dialog:** `confirmYesNo(message)` helper + `modal-confirm` — used for the "add to collection / remove from wishlist" fulfilled prompt.
+- **UI polish:** "Shortlisted versions (n)" header; Browse pressings button moved below table; format tags on version meta line respect Hide Format Tags; Remove buttons use `btn-danger`.
 
 ### Known incomplete: SW Phase 4
 
@@ -440,16 +451,17 @@ All four phases committed to `feat/wishlist-versions-v2` (through commit `198f6f
 2. Text overlap in version browser — `table-layout:fixed` + `<colgroup>` widths
 3. Shortlisted version shows ♪ — frontend now passes preview metadata in POST body
 4. SW TypeError clone on used Response — clone synchronously before async gap
-5. Thumbnail missing after shortlist (hard refresh fixes it) — `_versionThumbs` map stores CDN thumb at shortlist time as fallback until cached image arrives (**not yet confirmed working**)
+5. Thumbnail missing after shortlist — `_versionThumbs` map stores CDN thumb at shortlist time as fallback
+6. `sqlite3.OperationalError: no such column: wishlist_id` on startup — `CREATE UNIQUE INDEX` ran inside `executescript()` before ALTER TABLE guards; moved after the guard loop
+7. "Show more details" lag — was calling `/api/release/{id}/info` live; fixed by pre-rendering from `discogs_notes` + `identifiers` already in version data
 
 ### Testing checklist (pick up here)
 
-- [ ] Thumbnail fix confirmed (bug #5 above — last deployed change, unconfirmed)
 - [ ] Add to collection flow (fulfill → edit modal opens pre-filled → wishlist fulfilled prompt fires)
-- [ ] Remove version
+- [ ] Remove version (also removes from Discogs wantlist)
+- [ ] Add version (also adds to Discogs wantlist — check `in_wantlist=1` in DB)
 - [ ] Notes edit on version
 - [ ] Wantlist sync preview (sn_only / discogs_only sections correct)
-- [ ] Sync to Discogs (`in_wantlist=1` in DB, item visible in Discogs wantlist)
 - [ ] Sync from Discogs (master + version created in SN)
 - [ ] Offline: versions visible from SW cache when server down
 - [ ] Browse pressings disabled in read-only mode (no internet)

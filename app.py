@@ -193,8 +193,6 @@ def init_db():
             type       TEXT NOT NULL DEFAULT 'track',
             seq        INTEGER NOT NULL
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_wishlist_version
-          ON records (wishlist_id, discogs_id) WHERE is_wishlist = 1 AND deleted_at IS NULL;
         CREATE TABLE IF NOT EXISTS wishlist (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             master_id    TEXT NOT NULL UNIQUE,
@@ -224,6 +222,13 @@ def init_db():
                 conn.execute(f"ALTER TABLE records ADD COLUMN {_col} {_def}")
             except Exception:
                 pass  # column already exists
+        try:
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_wishlist_version
+                ON records (wishlist_id, discogs_id) WHERE is_wishlist = 1 AND deleted_at IS NULL
+            """)
+        except Exception:
+            pass  # index already exists
         # Seed default settings (INSERT OR IGNORE preserves user changes)
         for key, value in SETTINGS_DEFAULTS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
@@ -813,20 +818,69 @@ async def _refresh_wishlist_version(record_id: int, discogs_id: str, hdrs: dict)
         lp = stats.get("lowest_price") or {}
         valuation = float(lp.get("value") or 0)
         identifiers = json.dumps(data.get("identifiers", []))
+        release_notes = data.get("notes", "") or ""
         with get_db() as conn:
             conn.execute("""
                 UPDATE records SET
                   artist=?, title=?, label=?, cat_no=?, year=?, format=?,
-                  country=?, cover_file=?, identifiers=?, valuation=?
+                  country=?, cover_file=?, identifiers=?, valuation=?, discogs_notes=?
                 WHERE id=?
             """, (
                 ", ".join(a["name"] for a in data.get("artists", [])),
                 data.get("title", ""), label, cat_no, data.get("year"),
                 fmt.strip(), data.get("country", ""),
-                cover_file or "", identifiers, valuation, record_id,
+                cover_file or "", identifiers, valuation, release_notes, record_id,
             ))
     except Exception:
         pass
+
+
+async def _add_to_discogs_wantlist(rid: str, notes: str, record_id: int):
+    """Push a single release to the Discogs wantlist and mark in_wantlist=1."""
+    try:
+        with get_db() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key='discogs_username'").fetchone()
+        username = (row["value"] if row else "").strip()
+        if not username:
+            return
+        hdrs = get_discogs_headers()
+        async with httpx.AsyncClient(timeout=30) as client:
+            await _discogs_acquire()
+            resp = await client.put(
+                f"https://api.discogs.com/users/{username}/wants/{rid}", headers=hdrs
+            )
+            if resp.status_code in (200, 201):
+                if notes:
+                    await _discogs_acquire()
+                    await client.post(
+                        f"https://api.discogs.com/users/{username}/wants/{rid}",
+                        json={"notes": notes}, headers=hdrs,
+                    )
+                with get_db() as conn:
+                    conn.execute("UPDATE records SET in_wantlist = 1 WHERE id = ?", (record_id,))
+    except Exception:
+        pass
+
+
+async def _remove_from_discogs_wantlist(rid: str, record_id: int):
+    """Delete a release from the Discogs wantlist and clear in_wantlist."""
+    try:
+        with get_db() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key='discogs_username'").fetchone()
+        username = (row["value"] if row else "").strip()
+        if not username:
+            return
+        hdrs = get_discogs_headers()
+        async with httpx.AsyncClient(timeout=30) as client:
+            await _discogs_acquire()
+            await client.delete(
+                f"https://api.discogs.com/users/{username}/wants/{rid}", headers=hdrs
+            )
+        with get_db() as conn:
+            conn.execute("UPDATE records SET in_wantlist = 0 WHERE id = ?", (record_id,))
+    except Exception:
+        pass
+
 
 @app.post("/api/collection/sync")
 async def collection_sync(payload: SyncPayload, background_tasks: BackgroundTasks):
@@ -1533,6 +1587,7 @@ async def add_wishlist_version(wishlist_id: int, body: WishlistVersionIn, backgr
             raise HTTPException(status_code=409, detail="Version already shortlisted")
     hdrs = get_discogs_headers()
     background_tasks.add_task(_refresh_wishlist_version, record_id, f"r{rid}", hdrs)
+    background_tasks.add_task(_add_to_discogs_wantlist, rid, body.notes or "", record_id)
     return {"id": record_id}
 
 
@@ -1551,12 +1606,19 @@ def update_wishlist_version(record_id: int, body: WishlistVersionUpdateIn):
 
 
 @app.delete("/api/wishlist/versions/{record_id}")
-def delete_wishlist_version(record_id: int):
+async def delete_wishlist_version(record_id: int, background_tasks: BackgroundTasks):
     with get_db() as conn:
-        conn.execute(
-            "UPDATE records SET deleted_at = datetime('now') WHERE id = ? AND is_wishlist = 1",
+        row = conn.execute(
+            "SELECT discogs_id FROM records WHERE id = ? AND is_wishlist = 1 AND deleted_at IS NULL",
             (record_id,),
-        )
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE records SET deleted_at = datetime('now') WHERE id = ?", (record_id,)
+            )
+    if row:
+        rid = str(row["discogs_id"]).lstrip("r")
+        background_tasks.add_task(_remove_from_discogs_wantlist, rid, record_id)
     return {"ok": True}
 
 
