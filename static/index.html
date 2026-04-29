@@ -3812,8 +3812,8 @@ function renderVersionsPanel(wishlistId, versions, masterId) {
   const idbFulfillIds = new Set(pendingVersionFulfillments.map(v => v.record_id));
   const pendingItems = pendingVersionQueue.filter(v => v.wishlist_id === wishlistId);
 
-  // Server versions: hide staged removes and IDB-queued removes
-  const visibleVersions = versions.filter(v => !staged.toRemove.has(v.id) && !idbRemoveIds.has(v.id));
+  // Server versions: hide IDB-queued removes; staged removes stay visible with pending state
+  const visibleVersions = versions.filter(v => !idbRemoveIds.has(v.id));
   const count = visibleVersions.length + pendingItems.length + staged.toAdd.length;
 
   const browseBtn = navigator.onLine
@@ -3833,15 +3833,16 @@ function renderVersionsPanel(wishlistId, versions, masterId) {
       : `<div style="width:36px;height:36px;background:var(--surface-2);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">♪</div>`;
     const fmtDisplay = formatTags(v.format || '', true).join(', ');
     const meta = [v.year, v.country, fmtDisplay, v.cat_no].filter(Boolean).join(' · ');
+    const isStagedRemove = staged.toRemove.has(v.id);
+    const greenStyle = 'background:#198754;color:#fff;border-color:#198754';
     const addBtn = isFulfillPending
       ? `<span class="badge" style="background:var(--amber);color:#fff;font-size:10px">Fulfillment pending</span>`
       : isStagedFulfill
-        ? `<span class="badge" style="background:var(--amber);color:#fff;font-size:10px">Add to collection</span>
-           <button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--ink-light)" onclick="unstageVersionFulfill(${v.id},${wishlistId})">Undo</button>`
-        : `<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="fulfillVersion(${v.id},${wishlistId})">Add to collection</button>`;
-    const removeBtn = !navigator.onLine
-      ? `<button class="btn btn-danger btn-sm" style="font-size:11px" disabled>Remove from wishlist</button>`
-      : `<button class="btn btn-danger btn-sm" style="font-size:11px" onclick="removeVersion(${v.id},${wishlistId},false)">Remove from wishlist</button>`;
+        ? `<button class="btn btn-sm" style="font-size:11px;${greenStyle}" onclick="unstageVersionFulfill(${v.id},${wishlistId})">Add to collection</button>`
+        : `<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="fulfillVersion(${v.id},${wishlistId})" ${isStagedRemove ? 'disabled' : ''}>Add to collection</button>`;
+    const removeBtn = isStagedRemove
+      ? `<button class="btn btn-sm" style="font-size:11px;${greenStyle}" onclick="unstageVersionRemove(${v.id},${wishlistId})">Remove from wishlist</button>`
+      : `<button class="btn btn-danger btn-sm" style="font-size:11px" onclick="removeVersion(${v.id},${wishlistId},false)" ${isStagedFulfill || !navigator.onLine ? 'disabled' : ''}>Remove from wishlist</button>`;
     rows += `<div style="border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.5rem 0">
         ${thumb}
@@ -3932,6 +3933,13 @@ function unstageVersionAdd(discogs_id, wishlistId) {
 
 function unstageVersionFulfill(recordId, wishlistId) {
   _stagedVersionChanges.toFulfill.delete(recordId);
+  const versions = _loadedVersionsByWishlist[wishlistId] || [];
+  const w = wishlistItems.find(x => x.id === wishlistId);
+  renderVersionsPanel(wishlistId, versions, w ? w.master_id : '');
+}
+
+function unstageVersionRemove(recordId, wishlistId) {
+  _stagedVersionChanges.toRemove.delete(recordId);
   const versions = _loadedVersionsByWishlist[wishlistId] || [];
   const w = wishlistItems.find(x => x.id === wishlistId);
   renderVersionsPanel(wishlistId, versions, w ? w.master_id : '');

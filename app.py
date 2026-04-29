@@ -1587,7 +1587,7 @@ async def add_wishlist_version(wishlist_id: int, body: WishlistVersionIn, backgr
             raise HTTPException(status_code=409, detail="Version already shortlisted")
     hdrs = get_discogs_headers()
     background_tasks.add_task(_refresh_wishlist_version, record_id, f"r{rid}", hdrs)
-    background_tasks.add_task(_add_to_discogs_wantlist, rid, body.notes or "", record_id)
+    background_tasks.add_task(_add_to_discogs_wantlist, rid, "", record_id)
     return {"id": record_id}
 
 
