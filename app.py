@@ -1763,8 +1763,7 @@ async def wantlist_preview():
     # Fetch SN wishlist versions
     with get_db() as conn:
         sn_versions = conn.execute(
-            "SELECT id, discogs_id, artist, title, year, country, format, in_wantlist FROM records"
-            " WHERE is_wishlist = 1 AND deleted_at IS NULL"
+            "SELECT * FROM records WHERE is_wishlist = 1 AND deleted_at IS NULL"
         ).fetchall()
     sn_ids = {str(r["discogs_id"]).lstrip("r") for r in sn_versions}
     discogs_ids = {w["discogs_id"] for w in discogs_wants}
