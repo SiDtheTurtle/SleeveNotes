@@ -24,7 +24,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Any shortlisted versions are present in the DB but do NOT appear in the collection table or tile grid.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 1.2 — Unique constraint prevents duplicate shortlisting
 
@@ -32,7 +32,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Second shortlist attempt returns 409 / is silently ignored. Only one row exists in DB for that `(wishlist_id, discogs_id)` combination.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 1.3 — Soft delete doesn't break unique index
 
@@ -40,7 +40,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Re-shortlisting works — the old row has `deleted_at` set, the new row is a fresh insert with `deleted_at = NULL`. Both exist in the DB; only the new one is active.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 1.4 — Collection records unaffected
 
@@ -48,7 +48,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** `GET /api/records` returns no wishlist versions. Adding a record works as before.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ---
 
@@ -62,7 +62,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Version browser modal opens, shows pressing results from Discogs (year, country, label, cat no, format). No ♪ placeholder for rows with thumbnails.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 2.2 — Cascading filters
 
@@ -70,7 +70,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Each filter narrows results. The options available in each dropdown are derived from releases matching all other active filters (i.e. Country options reflect only the years remaining after Year filter is applied).
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 2.3 — Format tags respect Hide Format Tags setting
 
@@ -78,7 +78,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Hidden format tags are stripped from the Format column in the version browser.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 2.4 — Shortlist a version (staged)
 
@@ -86,7 +86,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Version appears in the wishlist detail panel with a pending indicator (staged, not yet saved). No DB write has occurred yet — verify via DB or by refreshing the page and reopening the item.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 2.5 — Save staged shortlist
 
@@ -97,9 +97,9 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 - Version appears in the versions panel immediately with preview metadata (title, label, cat no, year, format, country)
 - Thumbnail shows (either cached image or CDN fallback from `_versionThumbs`)
 - Background refresh fires — after ~10-30s, full metadata populates (cover image, identifiers, discogs_notes)
-- `in_wantlist=1` is set in DB after background Discogs wantlist task completes
+- `in_wantlist=0` initially; synced to Discogs via wantlist sync, not automatically
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 2.6 — Remove a staged shortlist before saving
 
@@ -107,7 +107,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Version is removed from staged changes. Pressing Save does nothing for that version. DB unchanged.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 2.7 — Remove a saved version
 
@@ -116,9 +116,8 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 **Expected:**
 - Version soft-deleted in DB (`deleted_at` set)
 - Version removed from versions panel
-- Background task fires to remove from Discogs wantlist (`in_wantlist=0` in DB after task completes)
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 2.8 — Thumbnail fallback
 
@@ -126,7 +125,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Thumbnail shows the Discogs CDN image from the browser table row (not a ♪ placeholder), even before the background image download completes.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 2.9 — "Shortlisted versions (n)" header
 
@@ -134,7 +133,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Header in versions panel reads "Shortlisted versions (n)" with correct count.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ---
 
@@ -148,15 +147,15 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Expander shows `discogs_notes` (Discogs prose notes if any) and identifiers (barcodes, matrix numbers). No Discogs API call is made — verify via docker logs showing no new Discogs requests.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 3.2 — Show more details expander (version browser)
 
 **Steps:** In the version browser, click "Details" on a pressing.
 
-**Expected:** Fetches `/api/release/{id}/info` (Discogs API call — this is correct and expected). Shows identifiers and notes. Verify docker logs show a Discogs request.
+**Expected:** Fetches release info (via server when online, directly from Discogs when server down). Shows identifiers and notes.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 3.3 — Thumbnail lightbox
 
@@ -164,23 +163,15 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Lightbox opens showing the full-size cover image.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 3.4 — Edit version notes
 
-**Steps:** Open a wishlist item with a shortlisted version. Edit the notes field on a version. Press Save.
-
-**Expected:** Notes saved to DB. Reopening the modal shows updated notes. Version notes are separate from wishlist item notes.
-
-- [ ] Pass / Fail
+**N/A** — Version notes UI dropped as vestigial. Fulfilled versions become collection records and use collection record notes.
 
 ### 3.5 — Notes not pushed to Discogs
 
-**Steps:** Edit a version's notes, save. Check Discogs wantlist for that item.
-
-**Expected:** Discogs wantlist notes are unchanged — SN version notes stay local.
-
-- [ ] Pass / Fail
+**N/A** — See 3.4.
 
 ---
 
@@ -188,22 +179,23 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 ### 4.1 — Fulfill flow opens edit modal
 
-**Steps:** Open a wishlist item with a shortlisted version. Click "Fulfill" (or the fulfill button on a version). Confirm in the dialog.
+**Steps:** Open a wishlist item with a shortlisted version. Click "Add to collection" on a version. Confirm in the dialog.
 
 **Expected:**
 - Wishlist detail modal closes
 - Edit record modal opens pre-filled with the version's Discogs metadata (artist, title, label, cat no, year, format)
 - Discogs ID is populated
+- Fetch preview strip shows without pressing Fetch
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 4.2 — Wishlist fulfilled prompt fires
 
 **Steps:** Complete the fulfill flow (4.1) and save the record.
 
-**Expected:** Prompt asks whether to mark the parent wishlist item as fulfilled. Accepting marks the wishlist item `fulfilled=1`. Any wishlist notes are appended to the record notes.
+**Expected:** Prompt asks whether to mark the parent wishlist item as fulfilled. Accepting marks the wishlist item `fulfilled=1`. Wishlist notes appended to record notes silently (no separate prompt).
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 4.3 — Fulfilled version moves to collection
 
@@ -214,7 +206,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 - Record does NOT appear under that wishlist item's versions
 - Wishlist item shows as fulfilled (hidden unless "Show fulfilled" is on)
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 4.4 — Multiple versions: fulfill one, others remain
 
@@ -222,7 +214,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** The fulfilled version moves to collection. The other version remains shortlisted under the wishlist item.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ---
 
@@ -234,7 +226,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Newly imported items show a blue "Syncing…" badge while background refresh is in flight. Badge is on tile top-left; inline in title column in table view.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 5.2 — Badge disappears after refresh
 
@@ -242,7 +234,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** "Syncing…" badges are gone. Version details are fully populated.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 5.3 — No Discogs calls on page load
 
@@ -250,7 +242,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** No calls to `api.discogs.com` in the logs during or after page load. Only `/api/wishlist`, `/api/records`, `/api/settings`, and `/api/wishlist/{id}/versions` calls appear.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 5.4 — `cacheAllVersions` fires on load
 
@@ -258,7 +250,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Logs show `GET /api/wishlist/{id}/versions` for each wishlist item (DB reads, fast). All return 200.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ---
 
@@ -274,7 +266,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 - "N items already in sync" count if applicable
 - "Sync (N)" button with correct total count
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 6.2 — Checkbox selection updates button count
 
@@ -282,7 +274,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** "Sync (N)" button count updates live as checkboxes are toggled.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 6.3 — Sync SN → Discogs
 
@@ -295,7 +287,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 - `in_wantlist=1` in DB for that record
 - Toast: "Synced: 1 exported, 0 imported"
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 6.4 — Sync Discogs → SN
 
@@ -310,7 +302,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 - Toast: "Synced: 0 exported, N imported"
 - Page doesn't freeze — no Discogs API calls from the frontend after sync completes
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 6.5 — Already in sync items not duplicated
 
@@ -318,7 +310,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Second preview shows 0 new items in both directions. "N already in sync" count is correct. Sync button is disabled.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 6.6 — Discogs wantlist item with master_id=0
 
@@ -328,27 +320,13 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Item is either skipped gracefully or handled without a 500 error. No crash.
 
-- [ ] Pass / Fail
+- [-] Skipped — edge case, no test data available.
 
 ---
 
 ## 7. Auto-sync to Discogs Wantlist
 
-### 7.1 — Shortlisting a version auto-adds to Discogs wantlist
-
-**Steps:** Shortlist a new version. Wait ~10s for background task. Check `in_wantlist` in DB and verify on Discogs.com.
-
-**Expected:** `in_wantlist=1` in DB. Item visible in Discogs wantlist.
-
-- [ ] Pass / Fail
-
-### 7.2 — Removing a version auto-removes from Discogs wantlist
-
-**Steps:** Remove a shortlisted version that has `in_wantlist=1`. Wait ~10s.
-
-**Expected:** `in_wantlist=0` in DB. Item removed from Discogs wantlist.
-
-- [ ] Pass / Fail
+**Dropped** — auto-sync on shortlist/remove was intentionally removed. Wantlist sync is manual only (Settings → Discogs → "Sync Discogs wantlist…"). See section 6.
 
 ---
 
@@ -362,15 +340,15 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Versions panel populates from SW cache. Data matches what was last fetched.
 
-- [ ] Pass / Fail
+- [x] Pass
 
-### 8.2 — Browse pressings disabled
+### 8.2 — Browse pressings works (hits Discogs directly)
 
-**Steps:** With server down, try to click "Browse pressings".
+**Steps:** With server down, click "Browse pressings".
 
-**Expected:** Button is disabled or shows an appropriate message. No attempt to contact server.
+**Expected:** Version browser opens and loads results via direct Discogs API call (unauthenticated, page 1 only). Results may be fewer than online (no pagination). Details button also works via direct Discogs call.
 
-- [ ] Pass / Fail
+- [ ] Pass / Fail — **IN PROGRESS**: fix applied (direct Discogs call when `!serverReachable`), not yet verified.
 
 ### 8.3 — Shortlist queued to IDB
 
@@ -378,7 +356,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Version queued in IDB `version_queue`. Pending item visible in versions panel with appropriate indicator.
 
-- [ ] Pass / Fail
+- [ ] Pass / Fail — blocked on 8.2
 
 ### 8.4 — Remove queued to IDB
 
@@ -386,7 +364,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Remove queued in IDB `version_removes`.
 
-- [ ] Pass / Fail
+- [ ] Pass / Fail — blocked on 8.2
 
 ### 8.5 — Flush on reconnect
 
@@ -394,7 +372,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Toast confirms queued items flushed. DB reflects the queued operations. `version_queue` and `version_removes` stores are empty.
 
-- [ ] Pass / Fail
+- [ ] Pass / Fail — blocked on 8.2
 
 ---
 
@@ -495,6 +473,42 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 **Steps:** Run "Sync Discogs collection…" with a fresh DB (or known diff).
 
 **Expected:** Collection sync preview and apply work as before. No regressions from FR #73 changes.
+
+- [ ] Pass / Fail
+
+---
+
+## 12. Import / Export
+
+### 12.1 — Export CSV excludes wishlist versions
+
+**Steps:** Settings → Data → Export CSV. Open the file.
+
+**Expected:** No rows with `is_wishlist=1` data. Only collection records present.
+
+- [ ] Pass / Fail
+
+### 12.2 — Export DB (zip) includes wishlist versions
+
+**Steps:** Settings → Data → Export Database. Unzip and inspect the SQL dump.
+
+**Expected:** `records` table dump includes `is_wishlist=1` rows. Full backup — nothing excluded.
+
+- [ ] Pass / Fail
+
+### 12.3 — Import DB (zip) preserves wishlist versions
+
+**Steps:** Take a DB export (12.2), then restore it via Settings → Danger Zone → Import Database.
+
+**Expected:** After restore, wishlist versions are present in DB. Collection view shows no wishlist versions. Wishlist detail panels show correct shortlisted versions.
+
+- [ ] Pass / Fail
+
+### 12.4 — Collection sync clean after import
+
+**Steps:** After a DB restore (12.3), run "Sync Discogs collection…".
+
+**Expected:** Wishlist versions do not appear in the sync diff. No false "only in Discogs" entries.
 
 - [ ] Pass / Fail
 

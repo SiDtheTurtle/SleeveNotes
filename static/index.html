@@ -1786,7 +1786,8 @@ async function submitAuthKey() {
   btn.disabled = false;
   await loadSettings();
   loadRecords();
-  loadWishlist();
+  await loadWishlist();
+  cacheAllVersions();
 }
 
 // ── IndexedDB offline queue ─────────────────────────────────────────────────
@@ -2085,7 +2086,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!authed) return; // auth screen handles the rest
   await loadSettings();
   loadRecords();
-  loadWishlist();
+  await loadWishlist();
+  cacheAllVersions();
 });
 
 // ── Data ───────────────────────────────────────────────────────────────────
@@ -2642,6 +2644,21 @@ function resetForm() {
   document.getElementById('discogs-preview').classList.add('hidden');
 }
 
+function showDiscogsPreview(d) {
+  const prev = document.getElementById('discogs-preview');
+  prev.classList.remove('hidden');
+  prev.innerHTML = `<div class="discogs-preview">
+    ${d.cover_file ? `<img src="/images/${d.cover_file}" alt="cover">` : '<div style="width:60px;height:60px;background:var(--surface);border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--groove)">♪</div>'}
+    <div class="discogs-preview-info">
+      <div class="discogs-preview-artist">${esc(d.artist)}</div>
+      <div class="discogs-preview-title">${esc(d.title)}</div>
+      <div class="discogs-preview-meta">${esc(d.label || '')} · ${d.year||''} · ${esc(d.format || '')}</div>
+    </div>
+  </div>${d.wishlist_match
+    ? `<div style="margin-top:0.5rem;padding:0.5rem 0.75rem;background:#FFF3CD;border:1px solid #FFE69C;border-radius:var(--radius);font-size:12px;color:#856404">♡ <strong>${esc(d.wishlist_match.artist)} — ${esc(d.wishlist_match.title)}</strong> is on your wishlist — you'll be prompted to mark it fulfilled on save</div>`
+    : ''}`;
+}
+
 async function fetchDiscogs() {
   const rid = document.getElementById('f-discogs-id').value.trim().replace(/^\[|\]$/g, '');
   if (!rid) { toast('Enter a Discogs release ID', 'error'); return; }
@@ -2663,18 +2680,7 @@ async function fetchDiscogs() {
     setField('f-discogs-id', d.discogs_id);
     setField('f-valuation', (d.valuation||0).toFixed(2));
 
-    const prev = document.getElementById('discogs-preview');
-    prev.classList.remove('hidden');
-    prev.innerHTML = `<div class="discogs-preview">
-      ${d.cover_file ? `<img src="/images/${d.cover_file}" alt="cover">` : '<div style="width:60px;height:60px;background:var(--surface);border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--groove)">♪</div>'}
-      <div class="discogs-preview-info">
-        <div class="discogs-preview-artist">${esc(d.artist)}</div>
-        <div class="discogs-preview-title">${esc(d.title)}</div>
-        <div class="discogs-preview-meta">${esc(d.label)} · ${d.year||''} · ${esc(d.format)}</div>
-      </div>
-    </div>${d.wishlist_match
-      ? `<div style="margin-top:0.5rem;padding:0.5rem 0.75rem;background:#FFF3CD;border:1px solid #FFE69C;border-radius:var(--radius);font-size:12px;color:#856404">♡ <strong>${esc(d.wishlist_match.artist)} — ${esc(d.wishlist_match.title)}</strong> is on your wishlist — you'll be prompted to mark it fulfilled on save</div>`
-      : ''}`;
+    showDiscogsPreview(d);
     toast('Metadata fetched', 'success');
   } catch(e) {
     toast('Discogs fetch failed — check the ID and your token', 'error');
@@ -3543,7 +3549,6 @@ async function loadWishlist() {
   wishlistItems = [..._serverWishlistItems, ...pending];
   if (currentSection === 'wishlist') renderWishlist();
   updateStats();
-  cacheAllVersions();
 }
 
 async function cacheAllVersions() {
@@ -3792,10 +3797,13 @@ async function loadVersions(wishlistId) {
   const panel = document.getElementById(`versions-panel-${wishlistId}`);
   if (!panel) return;
   try {
-    const r = await apiFetch(`/api/wishlist/${wishlistId}/versions`);
-    if (!r.ok) throw new Error();
-    const versions = await r.json();
-    _loadedVersionsByWishlist[wishlistId] = versions;
+    let versions = _loadedVersionsByWishlist[wishlistId];
+    if (versions === undefined) {
+      const r = await apiFetch(`/api/wishlist/${wishlistId}/versions`);
+      if (!r.ok) throw new Error();
+      versions = await r.json();
+      _loadedVersionsByWishlist[wishlistId] = versions;
+    }
     const w = wishlistItems.find(x => x.id === wishlistId);
     renderVersionsPanel(wishlistId, versions, w ? w.master_id : '');
   } catch {
@@ -4019,17 +4027,34 @@ async function openVersionBrowser(wishlistId, masterId) {
     '<div style="text-align:center;padding:2rem;color:var(--ink-light)">Loading…</div>';
   openModal('modal-version-browser');
   try {
-    const [versionsResp, releasesResp] = await Promise.all([
-      apiFetch(`/api/wishlist/${wishlistId}/versions`),
-      apiFetch(`/api/masters/${masterId}/releases`),
+    const cachedVersions = _loadedVersionsByWishlist[wishlistId];
+    const [versions, releases] = await Promise.all([
+      cachedVersions !== undefined
+        ? Promise.resolve(cachedVersions)
+        : apiFetch(`/api/wishlist/${wishlistId}/versions`).then(r => r.ok ? r.json() : []).then(v => { _loadedVersionsByWishlist[wishlistId] = v; return v; }),
+      serverReachable
+        ? apiFetch(`/api/masters/${masterId}/releases`).then(r => r.ok ? r.json() : [])
+        : fetch(`https://api.discogs.com/masters/${encodeURIComponent(masterId)}/versions?format=Vinyl&per_page=100&page=1`, { headers: { 'User-Agent': 'SleeveNotes/1.0' } })
+            .then(r => r.ok ? r.json() : { versions: [] })
+            .then(data => (data.versions || []).map(v => ({
+              discogs_id: String(v.id || ''),
+              title: v.title || '',
+              label: v.label || '',
+              cat_no: v.catno || '',
+              year: v.released || '',
+              format: v.format || '',
+              country: v.country || '',
+              thumb: v.thumb || '',
+              stats: {
+                in_wantlist: (v.stats?.community?.in_wantlist) || 0,
+                in_collection: (v.stats?.community?.in_collection) || 0,
+              },
+            }))),
     ]);
-    const versions = versionsResp.ok ? await versionsResp.json() : [];
-    _loadedVersionsByWishlist[wishlistId] = versions;
-    const releases = releasesResp.ok ? await releasesResp.json() : [];
     const w = wishlistItems.find(x => x.id === wishlistId);
     document.getElementById('version-browser-title').textContent =
       `Pressings — ${w ? displayArtist(w.artist) + ' — ' + w.title : masterId}`;
-    renderVersionBrowser(wishlistId, masterId, releases, versions);
+    renderVersionBrowser(wishlistId, masterId, releases, Array.isArray(versions) ? versions : []);
   } catch {
     document.getElementById('version-browser-body').innerHTML =
       '<div style="color:var(--red);padding:1rem">Failed to load pressings.</div>';
@@ -4217,22 +4242,6 @@ function toggleVersionStaged(wishlistId, discogs_id, btn) {
   } else {
     // Not shortlisted → stage as add
     if (!navigator.onLine) { toast('Requires internet connection', 'error'); return; }
-    if (!serverReachable) {
-      // Offline path: queue to IDB immediately
-      const release = releases.find(r => String(r.discogs_id || r.id || '').replace(/^r/, '') === rid);
-      if (!release) return;
-      const w = wishlistItems.find(x => x.id === wishlistId);
-      const thumbImg = btn.closest('tr') ? btn.closest('tr').querySelector('td img') : null;
-      saveVersionToQueue({
-        wishlist_id: wishlistId, discogs_id: rid,
-        year: release.year || '', country: release.country || '',
-        label: release.label || '', cat_no: release.cat_no || '',
-        format: release.format || '', title: w ? `${w.artist} - ${w.title}` : '', thumb: '',
-      });
-      toast('Shortlisted — will sync when back home', 'success');
-      redrawVersionBrowserRows();
-      return;
-    }
     const release = releases.find(r => String(r.discogs_id || r.id || '').replace(/^r/, '') === rid);
     if (!release) return;
     const thumbImg = btn.closest('tr') ? btn.closest('tr').querySelector('td img') : null;
@@ -4260,9 +4269,22 @@ async function toggleReleaseDetails(discogs_id, btn) {
   btn.textContent = 'Hide';
   if (content.dataset.loaded) return;
   try {
-    const r = await apiFetch(`/api/release/${discogs_id}/info`);
-    if (!r.ok) throw new Error();
-    const info = await r.json();
+    let info;
+    if (serverReachable) {
+      const r = await apiFetch(`/api/release/${discogs_id}/info`);
+      if (!r.ok) throw new Error();
+      info = await r.json();
+    } else {
+      const rid = String(discogs_id).replace(/^r/, '');
+      const r = await fetch(`https://api.discogs.com/releases/${rid}`, { headers: { 'User-Agent': 'SleeveNotes/1.0' } });
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      const labels = data.labels || [];
+      info = {
+        notes: data.notes || '',
+        identifiers: data.identifiers || [],
+      };
+    }
     const ids = (info.identifiers || []).filter(x => x.value);
     content.dataset.loaded = '1';
     let html = '';
@@ -4446,10 +4468,19 @@ function openWishlistDetail(id) {
     const hasStagedChanges = staged && (staged.toAdd.length || staged.toRemove.size || staged.toFulfill.size);
 
     if (!serverReachable) {
-      if (hasStagedChanges) toast('Version changes require a connection — only notes saved', 'info');
       await saveUpdateToQueue({ wishlist_id: id, notes, fulfilled });
+      if (staged) {
+        for (const item of staged.toAdd) {
+          await saveVersionToQueue({ wishlist_id: id, ...item });
+        }
+        for (const recordId of staged.toRemove) {
+          await saveVersionRemove(recordId, id);
+        }
+      }
+      _stagedVersionChanges = { wishlistId: null, toAdd: [], toRemove: new Set(), toFulfill: new Set() };
       if ('serviceWorker' in navigator && 'SyncManager' in window)
         navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
+      if (hasStagedChanges) delete _loadedVersionsByWishlist[id];
       await loadWishlist();
       toast('Saved — will sync when back home', 'success');
       return;
@@ -4480,6 +4511,7 @@ function openWishlistDetail(id) {
       }
       _stagedVersionChanges = { wishlistId: null, toAdd: [], toRemove: new Set(), toFulfill: new Set() };
 
+      if (hasStagedChanges) delete _loadedVersionsByWishlist[id];
       await loadWishlist();
       closeModal('modal-wishlist-detail');
 
@@ -4487,6 +4519,8 @@ function openWishlistDetail(id) {
         await loadRecords();
         _pendingWishlistFulfill = w ? { id: id, artist: w.artist, title: w.title, notes: w.notes || '' } : null;
         openEdit(fulfillIds[0]);
+        const vr = records.find(x => x.id === fulfillIds[0]);
+        if (vr) { fetchedMeta = { cover_file: vr.cover_file }; showDiscogsPreview(vr); }
         if (fulfillIds.length > 1) toast(`${fulfillIds.length - 1} other version(s) moved to collection`, 'success');
       } else {
         toast('Saved', 'success');

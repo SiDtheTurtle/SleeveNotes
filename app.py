@@ -482,7 +482,7 @@ def compute_diff(parsed_items: list[dict]) -> dict:
     """Compare a list of pre-parsed flat record dicts against the SN database."""
     with get_db() as conn:
         fm_row = conn.execute("SELECT value FROM settings WHERE key='discogs_field_mappings'").fetchone()
-        db_rows = conn.execute("SELECT * FROM records WHERE deleted_at IS NULL").fetchall()
+        db_rows = conn.execute("SELECT * FROM records WHERE deleted_at IS NULL AND (is_wishlist = 0 OR is_wishlist IS NULL)").fetchall()
     try:
         field_mappings = json.loads(fm_row["value"] if fm_row else "{}")
     except json.JSONDecodeError:
@@ -1323,7 +1323,7 @@ _EXPORT_SN_EXTRAS = ("id", "instance_id", "is_new", "cover_file")
 async def export_csv():
     with get_db() as conn:
         db_rows = conn.execute(
-            "SELECT * FROM records WHERE deleted_at IS NULL ORDER BY id"
+            "SELECT * FROM records WHERE deleted_at IS NULL AND (is_wishlist = 0 OR is_wishlist IS NULL) ORDER BY id"
         ).fetchall()
         settings_rows = conn.execute("SELECT key, value FROM settings").fetchall()
     settings = {r["key"]: r["value"] for r in settings_rows}
@@ -1652,6 +1652,10 @@ def update_wishlist(wishlist_id: int, body: WishlistUpdateIn):
 @app.delete("/api/wishlist/{wishlist_id}")
 def delete_wishlist(wishlist_id: int):
     with get_db() as conn:
+        conn.execute(
+            "UPDATE records SET deleted_at = datetime('now') WHERE wishlist_id = ? AND is_wishlist = 1 AND deleted_at IS NULL",
+            (wishlist_id,),
+        )
         conn.execute("DELETE FROM wishlist WHERE id = ?", (wishlist_id,))
     return {"ok": True}
 

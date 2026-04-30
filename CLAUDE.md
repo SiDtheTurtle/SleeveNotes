@@ -455,21 +455,8 @@ All four phases committed to `feat/wishlist-versions-v2` plus subsequent polish:
 6. `sqlite3.OperationalError: no such column: wishlist_id` on startup — `CREATE UNIQUE INDEX` ran inside `executescript()` before ALTER TABLE guards; moved after the guard loop
 7. "Show more details" lag — was calling `/api/release/{id}/info` live; fixed by pre-rendering from `discogs_notes` + `identifiers` already in version data
 
-### Known bug: HTTP 500 on save
+### Testing status
 
-Saving the wishlist detail modal (with or without staged version changes) is currently returning HTTP 500. Needs investigation before any further testing.
+HTTP 500 on save is resolved. Test plan in progress at `docs/fr73-test-plan.md`. The checklist below is **out of date** — do not use it. Refer to the test plan for current status and next steps.
 
-### Testing checklist (pick up here)
-
-- [ ] **Fix HTTP 500 on wishlist detail Save first**
-- [ ] Add to collection flow (fulfill → edit modal opens pre-filled → wishlist fulfilled prompt fires)
-- [ ] Remove version (also removes from Discogs wantlist)
-- [ ] Add version (also adds to Discogs wantlist — check `in_wantlist=1` in DB)
-- [ ] Notes edit on version
-- [ ] Wantlist sync preview (sn_only / discogs_only sections correct)
-- [ ] Sync from Discogs (master + version created in SN)
-- [ ] Offline: versions visible from SW cache when server down
-- [ ] Browse pressings disabled in read-only mode (no internet)
-- [ ] SW Phase 4: bump `openSwDB()` to v3 + extend `flushOfflineQueue()` in `sw.js` for `version_queue`, `version_removes`, `version_fulfillments`
-
-When all tests pass: update this section, update CLAUDE.md schema docs, cut v1.10.0 release.
+When all test plan items pass: update CLAUDE.md schema docs, merge to main, cut v1.10.0.

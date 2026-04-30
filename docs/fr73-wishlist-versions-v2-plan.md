@@ -227,16 +227,16 @@ Replaced `prefetchVersionData()`. Fires after every `loadWishlist()` — fetches
 
 ### Testing checklist
 
-- [x] Thumbnail fix confirmed working
-- [x] Add to collection flow (fulfill → edit modal → wishlist fulfilled prompt)
-- [x] Remove version (also removes from Discogs wantlist)
-- [x] Notes edit on version
-- [x] Wantlist sync preview (sn_only / discogs_only correct)
-- [x] Sync to Discogs (in_wantlist=1 in DB, visible in Discogs wantlist)
-- [x] Sync from Discogs (master + version created in SN)
-- [x] Offline: versions visible from SW cache when server down
-- [x] Browse pressings disabled in read-only mode (no internet)
-- [x] SW Phase 4: openSwDB() at v3, flushOfflineQueue() covers all five stores
+**This checklist is out of date.** Full test plan in progress at `docs/fr73-test-plan.md`.
+
+**Next steps:**
+1. Verify fix for 8.2 (Browse pressings offline — fix applied, needs testing)
+2. Complete sections 8.3–8.5 (offline shortlist/remove IDB queuing)
+3. Section 9 (read-only / no internet)
+4. Section 10 (general wishlist regression)
+5. Section 11 (settings buttons)
+6. Section 12 (import/export)
+7. When all pass: update CLAUDE.md schema docs, merge to main, cut v1.10.0
 
 ---
 
