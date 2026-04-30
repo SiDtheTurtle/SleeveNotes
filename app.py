@@ -1002,6 +1002,15 @@ async def fetch_discogs(release_id: str):
     stats = stats_resp.json() if stats_resp.status_code == 200 else {}
     lp = stats.get("lowest_price") or {}
     valuation = float(lp.get("value") or 0)
+    country = data.get("country", "")
+    identifiers_json = json.dumps(data.get("identifiers", []))
+    release_notes = data.get("notes", "")
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE records SET country=?, identifiers=?, discogs_notes=?
+            WHERE discogs_id=? AND (is_wishlist=0 OR is_wishlist IS NULL) AND deleted_at IS NULL
+        """, (country, identifiers_json, release_notes, f"r{rid}"))
+
     master_id = str(data.get("master_id") or "")
     wishlist_match = None
     if master_id:
@@ -1024,6 +1033,9 @@ async def fetch_discogs(release_id: str):
         "valuation": valuation,
         "master_id": master_id,
         "wishlist_match": wishlist_match,
+        "country": country,
+        "discogs_notes": release_notes,
+        "identifiers": data.get("identifiers", []),
     }
 
 # ── Routes: Health ────────────────────────────────────────────────────────────
@@ -1126,15 +1138,20 @@ async def refresh_record(record_id: int):
     lp = stats.get("lowest_price") or {}
     valuation = float(lp.get("value") or 0)
 
+    identifiers = json.dumps(data.get("identifiers", []))
+    release_notes = data.get("notes", "")
+
     with get_db() as conn:
         conn.execute("""
             UPDATE records
-               SET artist=?, title=?, label=?, cat_no=?, year=?, format=?, cover_file=?, valuation=?
+               SET artist=?, title=?, label=?, cat_no=?, year=?, format=?,
+                   country=?, cover_file=?, identifiers=?, valuation=?, discogs_notes=?
              WHERE id=?
         """, (
             ", ".join(a["name"] for a in data.get("artists", [])),
             data.get("title", ""), label, cat_no, data.get("year"),
-            fmt.strip(), cover_file, valuation, record_id,
+            fmt.strip(), data.get("country", ""),
+            cover_file, identifiers, valuation, release_notes, record_id,
         ))
     return {"ok": True}
 

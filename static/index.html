@@ -1146,8 +1146,20 @@
           <input class="form-control" id="f-year" readonly>
         </div>
         <div class="form-group">
+          <label class="form-label">Country</label>
+          <input class="form-control" id="f-country" readonly>
+        </div>
+        <div class="form-group">
           <label class="form-label">Format</label>
           <input class="form-control" id="f-format" readonly>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Identifiers</label>
+          <input class="form-control" id="f-identifiers" readonly>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Discogs Notes</label>
+          <textarea class="form-control" id="f-discogs-notes" readonly rows="3" style="resize:none"></textarea>
         </div>
         <div class="form-group">
           <label class="form-label">Valuation — lowest listing</label>
@@ -2441,6 +2453,7 @@ async function openDetail(id) {
           <div class="detail-row"><span class="detail-key">Label</span><span class="detail-val">${esc(r.label)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Cat No.</span><span class="detail-val">${esc(r.cat_no)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${r.year||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Country</span><span class="detail-val">${esc(r.country)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Format</span><span class="detail-val">${fmtTagsHtml(r.format)||'—'}</span></div>
           <div class="detail-row"><span class="detail-key">Condition</span><span class="detail-val">${r.is_new || '—'}</span></div>
           <div class="detail-row"><span class="detail-key">Media</span><span class="detail-val">${esc(condLabel(r.curr_cond))}</span></div>
@@ -2453,6 +2466,17 @@ async function openDetail(id) {
           <div class="detail-row"><span class="detail-key">Valuation</span><span class="detail-val">${r.valuation ? `${currencySymbol}${r.valuation.toFixed(2)} <span style="font-size:10px;color:var(--ink-light)">(lowest listing)</span>` : '—'}</span></div>
           <div class="detail-row"><span class="detail-key">Discogs</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/release/${discogsNum(r.discogs_id)}" target="_blank">${esc(r.discogs_id)}</a></span></div>
           <div class="detail-row"><span class="detail-key">Notes</span><span class="detail-val" style="white-space:pre-wrap">${esc(r.notes)||'—'}</span></div>
+          ${(() => {
+            const ids = (() => { try { return JSON.parse(r.identifiers||'[]'); } catch { return []; } })().filter(x => x.value);
+            const hasContent = r.discogs_notes || ids.length;
+            return `<div class="detail-row" style="align-items:flex-start">
+              <span class="detail-key">Details</span>
+              <span class="detail-val" style="font-size:12px">${hasContent ? `
+                ${r.discogs_notes ? `<div style="margin-bottom:0.4rem;white-space:pre-wrap;line-height:1.4">${esc(r.discogs_notes)}</div>` : ''}
+                ${ids.length ? ids.map(x => `<span style="margin-right:0.75rem"><strong>${esc(x.type||'ID')}:</strong> ${esc(x.value)}</span>`).join('') : ''}` : '—'}
+              </span>
+            </div>`;
+          })()}
         </div>
       </div>
     </div>
@@ -2615,7 +2639,11 @@ function openEdit(id) {
   setField('f-label', r.label);
   setField('f-cat-no', r.cat_no);
   setField('f-year', r.year);
+  setField('f-country', r.country||'');
   setField('f-format', r.format);
+  const ids = (() => { try { return JSON.parse(r.identifiers||'[]'); } catch { return []; } })();
+  setField('f-identifiers', ids.filter(x=>x.value).map(x=>`${x.type||'ID'}: ${x.value}`).join(', '));
+  setField('f-discogs-notes', r.discogs_notes||'');
   setField('f-valuation', (r.valuation||0).toFixed(2));
   setField('f-retailer', r.retailer);
   setField('f-order-ref', r.order_ref);
@@ -2631,8 +2659,8 @@ function openEdit(id) {
 }
 
 function resetForm() {
-  ['f-discogs-id','f-instance-id','f-artist','f-title','f-label','f-cat-no','f-format',
-   'f-retailer','f-order-ref','f-notes'].forEach(id => setField(id, ''));
+  ['f-discogs-id','f-instance-id','f-artist','f-title','f-label','f-cat-no','f-country','f-format',
+   'f-identifiers','f-discogs-notes','f-retailer','f-order-ref','f-notes'].forEach(id => setField(id, ''));
   setField('f-valuation', '0.00');
   setField('f-year', '');
   setField('f-price', '0.00');
@@ -2676,7 +2704,10 @@ async function fetchDiscogs() {
     setField('f-label', d.label);
     setField('f-cat-no', d.cat_no);
     setField('f-year', d.year||'');
+    setField('f-country', d.country||'');
     setField('f-format', d.format);
+    setField('f-identifiers', (d.identifiers||[]).filter(x=>x.value).map(x=>`${x.type||'ID'}: ${x.value}`).join(', '));
+    setField('f-discogs-notes', d.discogs_notes||'');
     setField('f-discogs-id', d.discogs_id);
     setField('f-valuation', (d.valuation||0).toFixed(2));
 
@@ -3931,6 +3962,7 @@ function toggleVersionDetails(recordId) {
   el.style.display = open ? '' : 'none';
   if (btn) btn.textContent = open ? 'Hide details' : 'Show more details…';
 }
+
 
 function unstageVersionAdd(discogs_id, wishlistId) {
   _stagedVersionChanges.toAdd = _stagedVersionChanges.toAdd.filter(x => String(x.discogs_id).replace(/^r/, '') !== String(discogs_id).replace(/^r/, ''));

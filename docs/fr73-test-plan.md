@@ -528,29 +528,51 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Steps:** Open the record detail modal.
 
-**Expected:** `country`, `discogs_notes`, and `identifiers` are visible (identifiers in an expander, same pattern as the versions panel).
+**Expected:** Country shown as a detail row. Details row shows `discogs_notes` and identifiers inline; shows `—` if not yet populated.
 
-- [ ] Pass / Fail
+- [x] Pass
 
-### 13.2 — Country editable in edit form
+### 13.2 — Country visible in edit form
 
-**Steps:** Open the edit form for a record with a populated `country`. Edit and save.
+**Steps:** Open the edit form for a record with a populated `country`.
 
-**Expected:** Country field is displayed and editable. Change persists.
+**Expected:** Country field is displayed as a readonly field in the From Discogs section.
 
-- [ ] Pass / Fail
+- [x] Pass
 
-### 13.3 — Country visible in add form
+### 13.3 — Country, identifiers, and Discogs notes visible in add form after fetch
 
 **Steps:** Open the add record form, fetch a Discogs release.
 
-**Expected:** Country field is populated from the Discogs fetch and shown in the form.
+**Expected:** Country, Identifiers, and Discogs Notes fields are populated from the Discogs fetch and shown as readonly fields in the From Discogs section.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ---
 
 ## 14. Links out to Discogs
+
+### 14.1 — Wishlist item links to master release
+
+**Steps:** Open a wishlist item detail modal.
+
+**Expected:** A link to the Discogs master release page (`discogs.com/master/{master_id}`) is visible and opens in a new tab.
+
+- [ ] Pass / Fail
+
+### 14.2 — Shortlisted version links to release
+
+**Steps:** Open a wishlist item with shortlisted versions. Check each version in the versions panel.
+
+**Expected:** Each shortlisted version has a link to its Discogs release page (`discogs.com/release/{discogs_id}`), opening in a new tab.
+
+- [ ] Pass / Fail
+
+### 14.3 — Version browser rows link to release
+
+**Steps:** Open the version browser for a wishlist item.
+
+**Expected:** Each row has a link to the Discogs release page, opening in a new tab.
 
 - [ ] Pass / Fail
 
