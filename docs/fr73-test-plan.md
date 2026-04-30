@@ -16,18 +16,6 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 ---
 
-## Known Bugs (must fix before merge)
-
-### BUG-1 — Version and wishlist cover thumbnails not cached for offline use
-
-**Symptom:** Version thumbnails and wishlist cover images show as broken when offline if the image was not loaded while online in the same SW cache session.
-
-**Root cause:** SW caches `/images/*` cache-first, but only on first load. `loading="lazy"` means off-screen images are never requested and never enter the SW cache. Version thumbnails are especially affected — the versions panel is only opened on demand, so images are never pre-cached. The `_versionThumbs` CDN fallback is in-memory only and lost on page reload.
-
-**Fix needed:** `prefetchVersionData()` (or a dedicated image prefetch pass) should eagerly fetch and cache version cover images after background refresh completes. Wishlist item covers should also be prefetched on load rather than relying on lazy loading to warm the cache.
-
----
-
 ## 1. Data Integrity
 
 ### 1.1 — Wishlist versions don't appear in collection
@@ -369,8 +357,6 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 **Expected:** Version queued in IDB `version_queue`. Pending item visible in versions panel with appropriate indicator.
 
 - [x] Pass
-
-**Known bug:** Thumbnails for DB-saved versions are broken when offline if the image wasn't loaded while online (SW cache-first path only caches `/images/*` after first load). `_versionThumbs` CDN fallback is in-memory only and lost on page reload.
 
 ### 8.4 — Remove queued to IDB
 
