@@ -25,7 +25,26 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/manifest.json)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/sw.js)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-192.png)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-512.png)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-512.png)",
+      "Bash(gh issue *)",
+      "Bash(gh release *)",
+      "Bash(gh run *)",
+      "Bash(ssh kieran@noveria *)",
+      "Bash(ssh *)",
+      "Bash(git -C \"O:/SleeveNotes\" status)",
+      "Bash(git -C \"O:/SleeveNotes\" branch)",
+      "Bash(git *)",
+      "Bash(grep -n \"^<\\\\/div>$\" /mnt/coding/SleeveNotes/static/index.html)",
+      "Bash(awk -F: '$2>1573 && $2<1640 {print}')",
+      "Bash(curl *)",
+      "Bash(docker restart sleevenotes *)",
+      "Bash(python3 -c \"import sys,json; items=json.load\\(sys.stdin\\); print\\([\\(i['id'],i['artist'],i['title']\\) for i in items[:3]]\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(type\\(d\\)\\); print\\(str\\(d\\)[:300]\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); items=d['items'] if 'items' in d else d; print\\([\\(i['id'],i['title']\\) for i in items[:3]]\\)\")",
+      "Bash(python3 -c \"import json,sys; r=json.load\\(sys.stdin\\); wl=[x for x in r if x.get\\('is_wishlist'\\)]; print\\(f'Total records: {len\\(r\\)}, Wishlist in response: {len\\(wl\\)}'\\)\")",
+      "Bash(docker stop sleevenotes *)",
+      "Bash(docker start sleevenotes *)",
+      "Bash(gh label *)"
     ]
   }
 }

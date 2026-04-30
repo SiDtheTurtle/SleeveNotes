@@ -414,7 +414,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Appears in wishlist list and tile views with cover. Notes field empty.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 10.2 — Edit wishlist item notes and fulfilled
 
@@ -422,7 +422,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Changes persisted. Fulfilled item hidden unless "Show fulfilled" is on.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 10.3 — Delete wishlist item
 
@@ -430,7 +430,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Item removed from wishlist and any associated shortlisted versions also cleaned up (verify in DB).
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 10.4 — Wishlist tile and table views
 
@@ -438,7 +438,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Both views render correctly. Pending and Syncing badges appear in both.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 10.5 — Show fulfilled toggle
 
@@ -446,7 +446,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Fulfilled wishlist items appear/disappear correctly. State persists across page refresh.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 10.6 — Collection unaffected
 
@@ -454,7 +454,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** No regressions. Collection sync, Discogs lookup, and all collection features work as before.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ---
 
@@ -466,7 +466,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Buttons read "Sync Discogs collection…" and "Sync Discogs wantlist…".
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 11.2 — Sync Discogs collection still works
 
@@ -474,7 +474,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** Collection sync preview and apply work as before. No regressions from FR #73 changes.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ---
 
@@ -486,7 +486,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** No rows with `is_wishlist=1` data. Only collection records present.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 12.2 — Export DB (zip) includes wishlist versions
 
@@ -494,7 +494,7 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** `records` table dump includes `is_wishlist=1` rows. Full backup — nothing excluded.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 12.3 — Import DB (zip) preserves wishlist versions
 
@@ -502,13 +502,55 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 **Expected:** After restore, wishlist versions are present in DB. Collection view shows no wishlist versions. Wishlist detail panels show correct shortlisted versions.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 12.4 — Collection sync clean after import
 
 **Steps:** After a DB restore (12.3), run "Sync Discogs collection…".
 
 **Expected:** Wishlist versions do not appear in the sync diff. No false "only in Discogs" entries.
+
+- [x] Pass
+
+---
+
+## 13. Collection Record — Version-Specific Fields
+
+> **Next session:** Implement before testing. Required changes:
+> - Backend: expose `country`, `discogs_notes`, `identifiers` in `GET /api/records` and `GET /api/discogs/{id}` responses; accept `country` on `POST`/`PUT /api/records`
+> - Frontend add form: show Country field, populate from Discogs fetch
+> - Frontend edit form: show Country field, editable and saved
+> - Frontend detail modal: show Country, Discogs Notes, and Identifiers (expander, same pattern as versions panel)
+
+### 13.1 — Country, identifiers, and Discogs notes displayed in detail modal
+
+**Setup:** A collection record that was fulfilled from a shortlisted version (so `country`, `identifiers`, `discogs_notes` are populated in DB).
+
+**Steps:** Open the record detail modal.
+
+**Expected:** `country`, `discogs_notes`, and `identifiers` are visible (identifiers in an expander, same pattern as the versions panel).
+
+- [ ] Pass / Fail
+
+### 13.2 — Country editable in edit form
+
+**Steps:** Open the edit form for a record with a populated `country`. Edit and save.
+
+**Expected:** Country field is displayed and editable. Change persists.
+
+- [ ] Pass / Fail
+
+### 13.3 — Country visible in add form
+
+**Steps:** Open the add record form, fetch a Discogs release.
+
+**Expected:** Country field is populated from the Discogs fetch and shown in the form.
+
+- [ ] Pass / Fail
+
+---
+
+## 14. Links out to Discogs
 
 - [ ] Pass / Fail
 
