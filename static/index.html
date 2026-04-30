@@ -3821,8 +3821,8 @@ function renderVersionsPanel(wishlistId, versions, masterId) {
   const idbFulfillIds = new Set(pendingVersionFulfillments.map(v => v.record_id));
   const pendingItems = pendingVersionQueue.filter(v => v.wishlist_id === wishlistId);
 
-  // Server versions: hide IDB-queued removes; staged removes stay visible with pending state
-  const visibleVersions = versions.filter(v => !idbRemoveIds.has(v.id));
+  // Server versions: only real DB records (v.id set); pending adds (no id) render via pendingItems
+  const visibleVersions = versions.filter(v => v.id && !idbRemoveIds.has(v.id));
   const count = visibleVersions.length + pendingItems.length + staged.toAdd.length;
 
   const browseBtn = navigator.onLine
@@ -3851,7 +3851,7 @@ function renderVersionsPanel(wishlistId, versions, masterId) {
         : `<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="fulfillVersion(${v.id},${wishlistId})" ${isStagedRemove ? 'disabled' : ''}>Add to collection</button>`;
     const removeBtn = isStagedRemove
       ? `<button class="btn btn-sm" style="font-size:11px;${greenStyle}" onclick="unstageVersionRemove(${v.id},${wishlistId})">Remove from wishlist</button>`
-      : `<button class="btn btn-danger btn-sm" style="font-size:11px" onclick="removeVersion(${v.id},${wishlistId},false)" ${isStagedFulfill || !navigator.onLine ? 'disabled' : ''}>Remove from wishlist</button>`;
+      : `<button class="btn btn-danger btn-sm" style="font-size:11px" onclick="removeVersion(${v.id},${wishlistId},false)" ${isStagedFulfill ? 'disabled' : ''}>Remove from wishlist</button>`;
     rows += `<div style="border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.5rem 0">
         ${thumb}
@@ -3910,7 +3910,7 @@ function renderVersionsPanel(wishlistId, versions, masterId) {
       </div>
       <div style="display:flex;flex-direction:column;gap:0.25rem;flex-shrink:0">
         <span class="badge badge-pending" style="font-size:10px">Pending</span>
-        <button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red)" onclick="removeVersion(0,${wishlistId},true,${pv.idb_key})">Remove</button>
+        <button class="btn btn-danger btn-sm" style="font-size:11px" onclick="removeVersion(0,${wishlistId},true,${pv.idb_key})">Remove from wishlist</button>
       </div>
     </div>`;
   }
@@ -3962,8 +3962,7 @@ async function removeVersion(recordId, wishlistId, isPending, idbKey) {
     renderVersionsPanel(wishlistId, versions, w ? w.master_id : '');
     return;
   }
-  if (!navigator.onLine) { toast('Requires internet connection', 'error'); return; }
-  if (!serverReachable) {
+  if (!navigator.onLine || !serverReachable) {
     await saveVersionRemove(recordId, wishlistId);
     renderVersionsPanel(wishlistId, versions, w ? w.master_id : '');
     toast('Remove queued — will sync when back home', 'success');
@@ -4467,11 +4466,13 @@ function openWishlistDetail(id) {
     const staged = _stagedVersionChanges.wishlistId === id ? _stagedVersionChanges : null;
     const hasStagedChanges = staged && (staged.toAdd.length || staged.toRemove.size || staged.toFulfill.size);
 
-    if (!serverReachable) {
+    if (!serverReachable || !navigator.onLine) {
       await saveUpdateToQueue({ wishlist_id: id, notes, fulfilled });
       if (staged) {
         for (const item of staged.toAdd) {
           await saveVersionToQueue({ wishlist_id: id, ...item });
+          if (!_loadedVersionsByWishlist[id]) _loadedVersionsByWishlist[id] = [];
+          _loadedVersionsByWishlist[id] = [..._loadedVersionsByWishlist[id], { ...item }];
         }
         for (const recordId of staged.toRemove) {
           await saveVersionRemove(recordId, id);
@@ -4480,8 +4481,8 @@ function openWishlistDetail(id) {
       _stagedVersionChanges = { wishlistId: null, toAdd: [], toRemove: new Set(), toFulfill: new Set() };
       if ('serviceWorker' in navigator && 'SyncManager' in window)
         navigator.serviceWorker.ready.then(sw => sw.sync.register('wishlist-sync').catch(() => {}));
-      if (hasStagedChanges) delete _loadedVersionsByWishlist[id];
       await loadWishlist();
+      if (hasStagedChanges) loadVersions(id);
       toast('Saved — will sync when back home', 'success');
       return;
     }
@@ -4807,9 +4808,7 @@ async function apiFetch(url, opts = {}) {
 window.addEventListener('online', () => { updateOnlineState(); probeHealth(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 window.addEventListener('offline', () => {
-  clearTimeout(_reachabilityPollTimer);
-  _reachabilityPollTimer = null;
-  updateOnlineState();
+  setServerReachable(false);
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
