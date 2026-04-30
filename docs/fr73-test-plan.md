@@ -516,12 +516,6 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 ## 13. Collection Record — Version-Specific Fields
 
-> **Next session:** Implement before testing. Required changes:
-> - Backend: expose `country`, `discogs_notes`, `identifiers` in `GET /api/records` and `GET /api/discogs/{id}` responses; accept `country` on `POST`/`PUT /api/records`
-> - Frontend add form: show Country field, populate from Discogs fetch
-> - Frontend edit form: show Country field, editable and saved
-> - Frontend detail modal: show Country, Discogs Notes, and Identifiers (expander, same pattern as versions panel)
-
 ### 13.1 — Country, identifiers, and Discogs notes displayed in detail modal
 
 **Setup:** A collection record that was fulfilled from a shortlisted version (so `country`, `identifiers`, `discogs_notes` are populated in DB).
@@ -552,29 +546,33 @@ Run on a clean DB restore before starting. Have Discogs credentials configured i
 
 ## 14. Links out to Discogs
 
+> **Implementation note:** Discogs logo button uses locally-served `static/discogs-32.png` (no external dependency).
+
 ### 14.1 — Wishlist item links to master release
 
 **Steps:** Open a wishlist item detail modal.
 
 **Expected:** A link to the Discogs master release page (`discogs.com/master/{master_id}`) is visible and opens in a new tab.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 14.2 — Shortlisted version links to release
 
 **Steps:** Open a wishlist item with shortlisted versions. Check each version in the versions panel.
 
-**Expected:** Each shortlisted version has a link to its Discogs release page (`discogs.com/release/{discogs_id}`), opening in a new tab.
+**Expected:** Each shortlisted version title is a link to its Discogs release page (`discogs.com/release/{discogs_id}`), opening in a new tab.
 
-- [ ] Pass / Fail
+- [x] Pass
 
 ### 14.3 — Version browser rows link to release
 
 **Steps:** Open the version browser for a wishlist item.
 
-**Expected:** Each row has a link to the Discogs release page, opening in a new tab.
+**Expected:** Each row has a Discogs logo button (after the Shortlist button) linking to the release page, opening in a new tab.
 
-- [ ] Pass / Fail
+> **Known bug:** Discogs logo button is missing from rows where the pressing is already shortlisted. To be fixed next session.
+
+- [ ] Blocked — bug outstanding
 
 ---
 

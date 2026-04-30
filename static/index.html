@@ -3887,7 +3887,7 @@ function renderVersionsPanel(wishlistId, versions, masterId) {
       <div style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.5rem 0">
         ${thumb}
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.title || v.artist || '')}</div>
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${rid ? `<a class="discogs-link" href="https://www.discogs.com/release/${esc(rid)}" target="_blank">${esc(v.title || v.artist || '')}</a>` : esc(v.title || v.artist || '')}</div>
           <div style="font-size:11px;color:var(--ink-light)">${esc(meta)}</div>
           ${v.notes ? `<div style="font-size:11px;color:var(--ink-light);font-style:italic">${esc(v.notes)}</div>` : ''}
           <button id="vdetails-btn-${v.id}" style="margin-top:0.2rem;background:none;border:none;padding:0;font-size:11px;color:var(--ink-light);cursor:pointer" onclick="toggleVersionDetails(${v.id})">Show more details…</button>
@@ -4236,7 +4236,10 @@ function redrawVersionBrowserRows() {
       <td style="padding:0.35rem 0.4rem;vertical-align:middle;white-space:nowrap">
         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:0.15rem 0.4rem" onclick="toggleReleaseDetails('${rid}',this)">Details</button>
       </td>
-      <td style="padding:0.35rem 0.4rem;vertical-align:middle;white-space:nowrap">${shortlistBtn}</td>
+      <td style="padding:0.35rem 0.4rem;vertical-align:middle;white-space:nowrap">
+        ${shortlistBtn}
+        <a href="https://www.discogs.com/release/${esc(rid)}" target="_blank" class="btn btn-ghost btn-sm" style="padding:0.15rem 0.3rem;display:inline-flex;align-items:center;margin-left:0.25rem" title="View on Discogs"><img src="/discogs-32.png" style="width:14px;height:14px;display:block"></a>
+      </td>
     </tr>
     <tr id="details-row-${rid}" style="display:none">
       <td colspan="8" style="padding:0.25rem 0.5rem 0.5rem 2rem">
