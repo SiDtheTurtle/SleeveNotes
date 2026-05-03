@@ -93,3 +93,72 @@ async def test_currency_mismatch_flagged_in_diff(client):
         changes = diff["changed"][0]["changes"]
         assert "price" in changes
         assert changes["price"].get("currency_mismatch") is True
+
+
+# ── Collection fields ────────────────────────────────────────────────────────
+
+async def test_collection_fields_no_username_returns_400(client):
+    r = await client.get("/api/collection/fields")
+    assert r.status_code == 400
+
+
+async def test_collection_fields_returns_json(client, mock_discogs):
+    await client.put("/api/settings/discogs_username", json={"value": "testuser"})
+    mock_get, _ = mock_discogs
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "fields": [
+            {"id": 1, "name": "Media Condition"},
+            {"id": 2, "name": "Sleeve Condition"},
+        ]
+    }
+
+    r = await client.get("/api/collection/fields")
+    assert r.status_code == 200
+    data = r.json()
+    assert "fields" in data
+    assert len(data["fields"]) == 2
+
+
+# ── Collection preview ───────────────────────────────────────────────────────
+
+SAMPLE_COLLECTION_PAGE = {
+    "pagination": {"pages": 1},
+    "releases": [
+        {
+            "instance_id": 1001,
+            "folder_id": 1,
+            "basic_information": {
+                "id": 99999999,
+                "title": "Test Album",
+                "year": 2000,
+                "artists": [{"name": "Test Artist"}],
+                "labels": [{"name": "Test Label", "catno": "TEST-001"}],
+                "formats": [{"name": "Vinyl", "descriptions": ["LP"]}],
+            },
+            "notes": [],
+        }
+    ],
+}
+
+
+async def test_collection_preview_no_username_returns_400(client):
+    r = await client.get("/api/collection/preview")
+    assert r.status_code == 400
+
+
+async def test_collection_preview_returns_diff(client, mock_discogs):
+    await client.put("/api/settings/discogs_username", json={"value": "testuser"})
+    mock_get, _ = mock_discogs
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = SAMPLE_COLLECTION_PAGE
+
+    r = await client.get("/api/collection/preview")
+    assert r.status_code == 200
+    diff = r.json()
+    assert "new" in diff
+    assert "changed" in diff
+    assert "unchanged" in diff
+    assert "db_only" in diff
+    assert len(diff["new"]) == 1
+    assert diff["new"][0]["artist"] == "Test Artist"

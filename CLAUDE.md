@@ -155,7 +155,7 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 | POST | `/api/admin/factory-reset` | Delete all records + restore all settings to defaults |
 | POST | `/api/admin/clear-images` | Delete all cached cover images from disk |
 | GET | `/api/wishlist/search` | Search Discogs master releases (`?q=`) |
-| GET | `/api/wishlist` | List wishlist items (`?include_fulfilled=true` to include fulfilled) |
+| GET | `/api/wishlist` | List wishlist items (`?show_fulfilled=true` to include fulfilled) |
 | POST | `/api/wishlist` | Add a master release to the wishlist (fetches `/masters/{id}`, downloads cover) |
 | PUT | `/api/wishlist/{id}` | Update notes and/or fulfilled status |
 | DELETE | `/api/wishlist/{id}` | Delete a wishlist item |

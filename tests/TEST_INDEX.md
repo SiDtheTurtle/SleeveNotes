@@ -7,7 +7,7 @@ Run with: `pytest tests/layer1/ -v` (Layer 1) or `pytest tests/layer2/ -m smoke 
 
 ## Layer 1 — API Tests
 
-Fast, isolated tests that run against the FastAPI app directly with a fresh in-memory SQLite database per test. No Docker, no Discogs account needed. Discogs API calls are mocked.
+Fast, isolated tests that run against the FastAPI app directly with a fresh SQLite database per test. No Docker, no Discogs account needed. Discogs API calls are mocked.
 
 ---
 
@@ -38,6 +38,11 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh in-m
 | `test_create_multiple_records` | Multiple records can coexist | Three records created; GET returns all three |
 | `test_get_tracklist_empty` | Tracklist endpoint works on a record with no cached tracks | Returns 200 with `[]` |
 | `test_get_images_empty` | Images endpoint works on a record with no cached images | Returns 200 with `[]` |
+| `test_refresh_record_updates_discogs_fields` | Refresh re-fetches and updates Discogs-sourced fields | Artist, title, label, valuation updated to values from mocked Discogs response |
+| `test_refresh_record_preserves_user_fields` | Refresh does not touch user-entered fields | Notes, retailer, and price unchanged after refresh |
+| `test_refresh_record_not_found` | Refresh on a non-existent record returns 404 | `POST /api/records/9999/refresh` returns 404 |
+| `test_set_cover_updates_cover_file` | Setting a cover image updates `cover_file` and the `is_cover` flag | Record's `cover_file` updated; correct image row has `is_cover = 1` |
+| `test_set_cover_not_found` | Set-cover on a non-existent record returns 404 | `POST /api/records/9999/set-cover` returns 404 |
 
 ---
 
@@ -49,6 +54,20 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh in-m
 | `test_get_settings_excludes_api_key` | The API key is never exposed through the settings endpoint | `api_key` absent from the GET response |
 | `test_update_setting` | A setting can be changed and immediately retrieved | Currency updated to `$`; confirmed by subsequent GET |
 | `test_update_setting_persists_across_requests` | Settings changes persist across separate requests | `clean_artists` set to `false`; confirmed by subsequent GET |
+
+---
+
+### Discogs — `layer1/test_discogs.py`
+
+*Both concurrent Discogs calls (`/releases/{id}` and `/marketplace/stats/{id}`) are mocked.*
+
+| Test | Purpose | Expected outcome |
+|------|---------|-----------------|
+| `test_fetch_discogs_returns_metadata` | Full metadata is parsed and returned | Response includes correct artist, title, label, cat_no, year, and valuation |
+| `test_fetch_discogs_accepts_id_without_r_prefix` | Bare numeric IDs are accepted as well as `r`-prefixed ones | `GET /api/discogs/99999999` returns same result as `r99999999` |
+| `test_fetch_discogs_wishlist_match` | A matching unfulfilled wishlist item is included in the response | `wishlist_match` is non-null with correct notes when master_id matches |
+| `test_fetch_discogs_no_wishlist_match` | No wishlist match returns null | `wishlist_match` is null when no matching item exists |
+| `test_fetch_discogs_propagates_error_status` | A Discogs error status is forwarded to the caller | Mocked 404 from Discogs → endpoint returns 404 |
 
 ---
 
@@ -66,6 +85,7 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh in-m
 | `test_mark_wishlist_fulfilled` | Marking an item fulfilled hides it from the default list | Fulfilled item absent from `GET /api/wishlist` |
 | `test_list_wishlist_include_fulfilled` | Fulfilled items are included when explicitly requested | `GET /api/wishlist?show_fulfilled=true` returns the fulfilled item |
 | `test_delete_wishlist_item` | A wishlist item can be permanently deleted | DELETE returns 200; item absent from subsequent GET |
+| `test_wishlist_search` | Discogs master search returns shaped results | Mocked Discogs search → response array with `master_id`, `title`, `year` |
 
 ---
 
@@ -79,6 +99,10 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh in-m
 | `test_compute_diff_db_only` | Records in the DB not present in the Discogs list are surfaced | Record lands in `db_only` bucket |
 | `test_collection_sync_creates_records` | Syncing a new item from Discogs creates a record in the DB | `POST /api/collection/sync` returns 200; record appears in collection |
 | `test_currency_mismatch_flagged_in_diff` | A price field with the wrong currency symbol is flagged | Diff entry for `price` has `currency_mismatch: true` |
+| `test_collection_fields_no_username_returns_400` | Fields endpoint requires a Discogs username to be configured | Returns 400 when `discogs_username` setting is empty |
+| `test_collection_fields_returns_json` | Fields endpoint returns the Discogs custom field list | Mocked Discogs response passed through; `fields` array present |
+| `test_collection_preview_no_username_returns_400` | Preview endpoint requires a Discogs username to be configured | Returns 400 when `discogs_username` setting is empty |
+| `test_collection_preview_returns_diff` | Preview endpoint fetches the Discogs collection and returns a diff | Mocked single-page collection → diff with `new`/`changed`/`unchanged`/`db_only` keys |
 
 ---
 
@@ -90,8 +114,13 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh in-m
 | `test_export_csv_with_record` | A seeded record appears as a data row in the CSV | Exported CSV has exactly 2 lines: header + one record |
 | `test_export_csv_excludes_deleted_records` | Soft-deleted records do not appear in the CSV export | Exported CSV has only the header row |
 | `test_export_db_returns_zip` | Database export returns a zip archive containing a SQL dump | 200, `application/zip`, zip contains a `.sql` file |
+| `test_export_images_returns_zip` | Image export returns a valid zip (even with no images on disk) | 200, `application/zip`, valid zip file |
+| `test_export_all_returns_zip_with_sql` | Combined backup export returns a zip containing a SQL dump | 200, `application/zip`, zip contains a `.sql` file |
 | `test_import_csv_returns_diff` | Uploading a Discogs-format CSV produces a diff preview | Response includes a `new` bucket with the record from the CSV |
 | `test_import_csv_existing_record_shows_unchanged` | A CSV record matching an existing DB record is not flagged as new | `new` bucket is empty; record appears in `unchanged` or `changed` |
+| `test_import_db_round_trips` | A DB export zip can be re-imported to restore records | Records present after import match records before export |
+| `test_import_images_returns_count` | Image import zip is unpacked and files written to the images directory | Returns `{"imported": 1}`; file exists on disk |
+| `test_import_all_round_trips` | A combined backup zip can be re-imported to restore records | Records present after import match records before export |
 
 ---
 
