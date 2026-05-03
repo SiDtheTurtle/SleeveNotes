@@ -193,7 +193,7 @@ addopts = -m "not smoke"
 - `POST /api/wishlist` same master_id → 409
 - `PUT /api/wishlist/{id}` → updates notes and fulfilled
 - `GET /api/wishlist` → fulfilled item excluded by default
-- `GET /api/wishlist?include_fulfilled=true` → fulfilled item included
+- `GET /api/wishlist?show_fulfilled=true` → fulfilled item included
 - `DELETE /api/wishlist/{id}` → item absent from list
 
 ### `test_collection_sync.py`

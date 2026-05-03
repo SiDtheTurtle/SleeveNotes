@@ -1,0 +1,12 @@
+services:
+  sleevenotes-test:
+    build: .
+    ports:
+      - "2027:2026"
+    volumes:
+      - sleevenotes-test-data:/data
+    environment:
+      - DEV=true
+
+volumes:
+  sleevenotes-test-data:
