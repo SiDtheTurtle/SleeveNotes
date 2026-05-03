@@ -1,7 +1,10 @@
+import os
 import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from httpx import AsyncClient, ASGITransport
+
+os.environ.setdefault("SN_DATA_DIR", "/tmp/sleevenotes-tests")
 
 import app as app_module
 
