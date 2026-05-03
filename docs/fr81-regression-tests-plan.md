@@ -23,7 +23,12 @@ tests/
   conftest.py              # shared Layer 1 fixtures
   pytest.ini               # asyncio_mode=auto, smoke marker, default exclusion
   requirements-test.txt    # test dependencies
-  .env.test                # local secrets — gitignored (see below)
+  .env.test                # local secrets — gitignored
+  fixtures/
+    golden.db              # golden DB — gitignored (personal, backed up on NAS)
+    blank.db              # empty initialised DB — committed (no personal data)
+    edge/
+      large_wishlist.db    # edge case DBs — gitignored, created as needed
   layer1/
     __init__.py
     test_health_auth.py
@@ -35,7 +40,7 @@ tests/
     test_admin.py
   layer2/
     __init__.py
-    conftest.py            # loads .env.test, seeds test container
+    conftest.py            # loads .env.test, loads golden DB into test container
     test_smoke.py
 compose.test.yml           # test Docker stack (port 2027, separate data volume)
 ```
@@ -51,19 +56,53 @@ FR73 additions (on `feat/wishlist-versions-v2` only, added in a later session):
 
 ---
 
-## Secrets File — `tests/.env.test`
+## Gitignored Local Files
 
-**Gitignored.** Contains all credentials needed by Layer 2.
+All of the following are added to `.gitignore`. None are secret, but they contain personal data or are environment-specific. The NAS backup covers them.
 
+**`tests/.env.test`** — credentials for Layer 2:
 ```
 DISCOGS_TEST_USERNAME=<test account username>
 DISCOGS_TEST_TOKEN=<test account API token>
 SN_TEST_API_KEY=<SleeveNotes access key on test container>
 ```
+A `tests/.env.test.example` with blank values is committed as a template.
 
-Add `tests/.env.test` to `.gitignore`. A `tests/.env.test.example` (with blank values) is committed as a template.
+**`tests/fixtures/golden.db`** — the primary Layer 2 start state (see below).
 
-Layer 2 `conftest.py` loads this file with `python-dotenv`.
+**`tests/fixtures/edge/*.db`** — edge case DBs created as needed.
+
+---
+
+## DB States
+
+Layer 2 tests start from a known DB state rather than building from scratch each run. This catches bugs that a blank DB never would — migration guards on existing columns, KPI calculations with accumulated data, sort behaviour with realistic record counts, etc.
+
+### Golden DB (`tests/fixtures/golden.db`)
+
+The default start state for almost all Layer 2 tests. A realistic "lived-in" DB curated manually using the test Discogs account: a spread of records with varied conditions, formats, prices, and dates; a few wishlist items; at least one fulfilled item. Created and maintained by the developer.
+
+**Loading into the test container:** The Layer 2 session fixture POSTs `golden.db` to `POST /api/import/db` on `:2027` at the start of each run. This replaces whatever is in the test container's volume.
+
+**Updating the golden DB:** Run the test container normally (`:2027`), make changes via the UI, then `GET /api/export/db` and unzip the `.sql` into `tests/fixtures/golden.db`. Commit the update to git is intentionally not possible — it lives on the NAS only.
+
+### Blank DB (`tests/fixtures/blank.db`)
+
+An empty but fully initialised DB (schema created, all settings at defaults, no records). Committed to the repo — contains no personal data. Used explicitly by tests that require a fresh-install state:
+- First-run auth screen
+- Empty collection placeholder
+- Factory reset result
+- `POST /api/admin/factory-reset` expected outcome
+
+Generated once by calling `init_db()` against a blank file and committed.
+
+### Edge Case DBs (`tests/fixtures/edge/`)
+
+Created on demand for specific scenarios. Gitignored. Examples:
+- `large_wishlist.db` — hundreds of wishlist items (pagination testing)
+- `missing_covers.db` — records with no cached cover images
+
+Each edge case DB is documented inline in the test that uses it, with notes on how to recreate it.
 
 ---
 
@@ -183,7 +222,9 @@ All marked `@pytest.mark.smoke`. Target `http://localhost:2027` (test container)
 
 ### `tests/layer2/conftest.py`
 - Load `tests/.env.test` via `python-dotenv`
-- Session fixture: POST factory-reset, PUT `discogs_username`, PUT `discogs_token`, PUT `api_key` to `:2027`
+- Session fixture: POST `golden.db` to `/api/import/db` on `:2027`; PUT `discogs_username`, `discogs_token`, `api_key` from `.env.test`
+- Per-test autouse fixture: restores golden DB via `/api/import/db` before each test (ensures clean slate even if previous test left dirty state)
+- Tests that require blank DB call a helper that POSTs `blank.db` instead, then restore golden after
 - `page` fixture injects `X-API-Key` header for all requests
 
 ### `tests/layer2/test_smoke.py` — one test per functional area
@@ -218,6 +259,26 @@ All marked `@pytest.mark.smoke`. Target `http://localhost:2027` (test container)
 | 26 | Import CSV | Upload a minimal valid Discogs CSV; sync diff modal opens |
 | 27 | Collection sync | Settings → Sync Collection; preview modal loads with diff sections |
 | 28 | Auth screen | Set an API key; reload page; auth screen appears; enter key; app loads |
+
+---
+
+## Critical Files
+
+| File | Purpose |
+|------|---------|
+| `app.py` | Source under test — no changes needed |
+| `tests/conftest.py` | Layer 1 fixture: patches `app.DB_PATH`, calls `init_db()`, yields `AsyncClient` |
+| `tests/pytest.ini` | asyncio_mode, smoke marker, default `-m "not smoke"` |
+| `tests/requirements-test.txt` | All test dependencies |
+| `tests/.env.test` | Credentials — gitignored |
+| `tests/.env.test.example` | Committed template with blank values |
+| `tests/fixtures/golden.db` | Golden DB — gitignored, on NAS backup |
+| `tests/fixtures/blank.db` | Empty initialised DB — committed (no personal data) |
+| `tests/fixtures/edge/` | Edge case DBs — gitignored, created as needed |
+| `compose.test.yml` | Test Docker stack on port 2027 |
+| `tests/layer1/*.py` | API regression tests |
+| `tests/layer2/conftest.py` | Loads secrets, loads golden DB into test container |
+| `tests/layer2/test_smoke.py` | 28 Playwright UI tests |
 
 ---
 
