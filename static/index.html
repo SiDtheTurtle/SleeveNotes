@@ -3887,7 +3887,10 @@ function renderVersionsPanel(wishlistId, versions, masterId) {
       <div style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.5rem 0">
         ${thumb}
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${rid ? `<a class="discogs-link" href="https://www.discogs.com/release/${esc(rid)}" target="_blank">${esc(v.title || v.artist || '')}</a>` : esc(v.title || v.artist || '')}</div>
+          <div style="display:flex;align-items:center;gap:0.3rem;min-width:0">
+            <span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">${esc(v.title || v.artist || '')}</span>
+            ${rid ? `<a href="https://www.discogs.com/release/${esc(rid)}" target="_blank" style="display:inline-flex;align-items:center;flex-shrink:0" title="View on Discogs"><img src="/discogs-32.png" style="width:13px;height:13px;display:block"></a>` : ''}
+          </div>
           <div style="font-size:11px;color:var(--ink-light)">${esc(meta)}</div>
           ${v.notes ? `<div style="font-size:11px;color:var(--ink-light);font-style:italic">${esc(v.notes)}</div>` : ''}
           <button id="vdetails-btn-${v.id}" style="margin-top:0.2rem;background:none;border:none;padding:0;font-size:11px;color:var(--ink-light);cursor:pointer" onclick="toggleVersionDetails(${v.id})">Show more details…</button>
@@ -4117,7 +4120,7 @@ function renderVersionBrowser(wishlistId, masterId, releases, shortlistedVersion
           <col style="width:115px">
           <col style="width:120px">
           <col style="width:60px">
-          <col style="width:105px">
+          <col style="width:130px">
         </colgroup>
         <thead>
           <tr style="border-bottom:2px solid var(--border)">
@@ -4238,7 +4241,7 @@ function redrawVersionBrowserRows() {
       </td>
       <td style="padding:0.35rem 0.4rem;vertical-align:middle;white-space:nowrap">
         ${shortlistBtn}
-        <a href="https://www.discogs.com/release/${esc(rid)}" target="_blank" class="btn btn-ghost btn-sm" style="padding:0.15rem 0.3rem;display:inline-flex;align-items:center;margin-left:0.25rem" title="View on Discogs"><img src="/discogs-32.png" style="width:14px;height:14px;display:block"></a>
+        <a href="https://www.discogs.com/release/${esc(rid)}" target="_blank" class="btn btn-ghost btn-sm" style="padding:0.15rem 0.3rem;display:inline-flex;align-items:center;vertical-align:middle;margin-left:0.25rem" title="View on Discogs"><img src="/discogs-32.png" style="width:14px;height:14px;display:block"></a>
       </td>
     </tr>
     <tr id="details-row-${rid}" style="display:none">
@@ -4465,7 +4468,7 @@ function openWishlistDetail(id) {
         ${w.styles ? `<div class="detail-row"><span class="detail-key">Styles</span><span class="detail-val">${esc(w.styles)}</span></div>` : ''}
         ${w.lowest_price != null ? `<div class="detail-row"><span class="detail-key">Lowest price</span><span class="detail-val">${currencySymbol}${w.lowest_price.toFixed(2)}${w.num_for_sale ? ` (${w.num_for_sale} for sale)` : ''}</span></div>` : ''}
         <div class="detail-row"><span class="detail-key">Added</span><span class="detail-val">${fmtDate(w.added_at ? w.added_at.split(' ')[0] : '') || '—'}</span></div>
-        <div class="detail-row"><span class="detail-key">Master</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/master/${esc(w.master_id)}" target="_blank">m${esc(w.master_id)}</a></span></div>
+        <div class="detail-row"><span class="detail-key">Master</span><span class="detail-val" style="display:inline-flex;align-items:center;gap:0.3rem">m${esc(w.master_id)}<a href="https://www.discogs.com/master/${esc(w.master_id)}" target="_blank" style="display:inline-flex;align-items:center;flex-shrink:0" title="View on Discogs"><img src="/discogs-32.png" style="width:13px;height:13px;display:block"></a></span></div>
       </div>
     </div>
     <div class="form-group">
@@ -4586,7 +4589,7 @@ function openPendingWishlistDetail(id) {
         <div class="detail-title">${esc(w.title)}</div>
         <div style="margin:0.5rem 0"><span class="badge badge-pending">Pending sync</span></div>
         ${w.year ? `<div class="detail-row"><span class="detail-key">Year</span><span class="detail-val">${w.year}</span></div>` : ''}
-        <div class="detail-row"><span class="detail-key">Master</span><span class="detail-val"><a class="discogs-link" href="https://www.discogs.com/master/${esc(w.master_id)}" target="_blank">m${esc(w.master_id)}</a></span></div>
+        <div class="detail-row"><span class="detail-key">Master</span><span class="detail-val" style="display:inline-flex;align-items:center;gap:0.3rem">m${esc(w.master_id)}<a href="https://www.discogs.com/master/${esc(w.master_id)}" target="_blank" style="display:inline-flex;align-items:center;flex-shrink:0" title="View on Discogs"><img src="/discogs-32.png" style="width:13px;height:13px;display:block"></a></span></div>
       </div>
     </div>
     <div class="form-group">
