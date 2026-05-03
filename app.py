@@ -19,7 +19,7 @@ from typing import Optional
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("sleevenotes")
 
-DATA_DIR = Path("/data")
+DATA_DIR = Path(os.environ.get("SN_DATA_DIR", "/data"))
 DB_PATH = DATA_DIR / "sleevenotes.db"
 IMAGES_DIR = DATA_DIR / "images"
 
