@@ -2,6 +2,14 @@
 __pycache__/
 *.pyc
 *.pyo
+.venv/
+
+# Test secrets and fixtures (personal data — backed up on NAS)
+tests/.env.test
+tests/fixtures/golden.db
+tests/fixtures/edge/
+# blank.db has no personal data and is committed
+!tests/fixtures/blank.db
 
 # Database & runtime data
 *.db
