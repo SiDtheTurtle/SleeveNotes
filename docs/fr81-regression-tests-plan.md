@@ -162,57 +162,43 @@ addopts = -m "not smoke"
 
 ## Layer 1 — API Tests
 
+**65 tests across 7 files — all passing on Windows and Linux.** ✅
+
+All 32 API endpoints are covered. See `tests/TEST_INDEX.md` for the full per-test reference.
+
 ### `tests/conftest.py` — shared fixtures
 
-- **`client`** fixture: monkeypatches `app.DB_PATH` to `tmp_path / "test.db"`, resets `app._cached_api_key = None`, calls `app.init_db()`, yields `AsyncClient(transport=ASGITransport(app=app.app), base_url="http://test")`
-- **`mock_discogs_get`** / **`mock_discogs_post`** fixtures: `mocker.patch("app.discogs_get")` / `mocker.patch("app.discogs_post")` returning configurable fixture dicts
+- **`client`** fixture: monkeypatches `app.DB_PATH` to `tmp_path / "test.db"` and `app.IMAGES_DIR` to `tmp_path / "images"`, resets `app._cached_api_key = None`, calls `app.init_db()`, yields `AsyncClient(transport=ASGITransport(app=app.app), base_url="http://test")`
+- **`mock_discogs`** fixture: patches `app.discogs_get` and `app.discogs_post` as `AsyncMock`s; returns `(mock_get, mock_post)` tuple for tests to configure
+- **`mock_download_images`** fixture: patches `app.download_all_images` as a no-op `AsyncMock`
 
-### `test_health_auth.py`
-- `GET /api/health` → 200, `{"status": "ok"}`
-- `GET /api/auth/status` → `{"configured": false}` with no key set
-- Protected endpoint → 401 when key set and `X-API-Key` header missing
-- Protected endpoint → 200 with correct key
+### `test_health_auth.py` — 7 tests
+- Health, auth status (unconfigured + configured), auth bypass, protected endpoint blocked/allowed
 
-### `test_records.py`
-- `GET /api/records` → `[]` on empty DB
-- `POST /api/records` → 201, record in response body
-- `GET /api/records` → returns the created record
-- `PUT /api/records/{id}` → updates field, confirmed in subsequent GET
-- `DELETE /api/records/{id}` → 200; record absent from `GET /api/records`
-- Soft-deleted record has `deleted_at` set
+### `test_records.py` — 14 tests
+- CRUD, soft-delete, tracklist/images endpoints, refresh (updates Discogs fields, preserves user fields, 404), set-cover (updates cover_file + is_cover flag, 404)
+- Refresh and set-cover tests use an async `side_effect` function to dispatch different mock responses for `/releases/` vs `/marketplace/stats/` URLs in the same `asyncio.gather` call
 
-### `test_settings.py`
-- `GET /api/settings` → all SETTINGS_DEFAULTS keys present on fresh DB
-- `GET /api/settings` → `api_key` absent from response
-- `PUT /api/settings/currency` → updates value; confirmed in subsequent GET
+### `test_settings.py` — 4 tests
+- Defaults present, api_key excluded, update persists
 
-### `test_wishlist.py`
-- `GET /api/wishlist` → `[]` on empty DB
-- `POST /api/wishlist` (mocked Discogs `/masters/{id}` response) → 201, item in response
-- `GET /api/wishlist` → returns created item
-- `POST /api/wishlist` same master_id → 409
-- `PUT /api/wishlist/{id}` → updates notes and fulfilled
-- `GET /api/wishlist` → fulfilled item excluded by default
-- `GET /api/wishlist?show_fulfilled=true` → fulfilled item included
-- `DELETE /api/wishlist/{id}` → item absent from list
+### `test_discogs.py` — 5 tests
+- Returns full metadata, accepts bare numeric ID, wishlist_match present/absent, propagates Discogs error status
+- Uses async `side_effect` dispatching on URL to mock two concurrent Discogs calls
 
-### `test_collection_sync.py`
-- `compute_diff` (called directly) with empty DB → all items in `new`
-- `compute_diff` with matching `instance_id`, no field changes → item in `unchanged`
-- `compute_diff` with changed `artist` → item in `changed` with correct `from`/`to`
-- `POST /api/collection/sync` → records created, confirmed via `GET /api/records`
-- Currency mismatch → diff entry has `currency_mismatch: true`
+### `test_wishlist.py` — 9 tests
+- CRUD, duplicate 409, fulfilled hide/show, search (mocked Discogs results → shaped response)
 
-### `test_import_export.py`
-- `GET /api/export` → 200, `text/csv`, correct headers present
-- `GET /api/export` with seeded records → rows present
-- `GET /api/export/db` → 200, `application/zip`, zip contains `.sql`
-- `POST /api/import/csv` with minimal Discogs-format CSV → diff payload returned with `new` items
+### `test_collection_sync.py` — 10 tests
+- `compute_diff` called directly (empty DB, matching instance_id, changed field, db_only), sync creates records, currency mismatch, collection fields (no username 400, returns JSON), collection preview (no username 400, returns diff)
 
-### `test_admin.py`
-- `POST /api/admin/format` → `GET /api/records` returns `[]`; settings unchanged
-- `POST /api/admin/factory-reset` → records deleted; settings reset to SETTINGS_DEFAULTS
-- `POST /api/admin/clear-images` → 200
+### `test_import_export.py` — 11 tests
+- Export CSV (headers, with record, excludes deleted), export DB zip, export images zip, export all zip
+- Import CSV (returns diff, existing record unchanged), import DB round-trip, import images, import all round-trip
+- **Cross-platform note:** `import_db` calls `DB_PATH.unlink()` — a Linux-only pattern (Windows holds WAL file locks). Both round-trip tests use `monkeypatch.setattr(app_module, "DB_PATH", app_module.DB_PATH.parent / "restored.db")` to redirect to a non-existent path before calling the endpoint. `unlink(missing_ok=True)` on a non-existent file is a no-op on both platforms; `executescript` then creates a fresh DB at the new path.
+
+### `test_admin.py` — 5 tests
+- Format (deletes records, preserves settings), factory reset (deletes records, restores defaults), clear images
 
 ---
 
@@ -308,7 +294,7 @@ pytest tests/layer2/test_smoke_versions.py -m smoke -v
 
 1. Checkout `main`
 2. `pip install -r tests/requirements-test.txt && playwright install chromium`
-3. `pytest tests/layer1/ -v` → all green (baseline) ✅ **Done**
+3. `pytest tests/layer1/ -v` → all green, 65 tests (baseline) ✅ **Done**
 4. `docker compose -f compose.test.yml up --build -d`
 5. Populate `tests/.env.test` with test Discogs credentials
 6. `pytest tests/layer2/ -m smoke -v` → all green
@@ -320,7 +306,7 @@ pytest tests/layer2/test_smoke_versions.py -m smoke -v
 
 ## Next Steps
 
-1. **Review `tests/TEST_INDEX.md` for completeness** — confirm all meaningful behaviours are covered; add any missing test cases to the relevant Layer 1 file or note them as future Layer 2 additions
+1. ~~**Review `tests/TEST_INDEX.md` for completeness**~~ ✅ **Done** — all 32 API endpoints covered across 65 Layer 1 tests; `TEST_INDEX.md` updated to match
 2. **Set up test Discogs account** — create a throwaway Discogs account; populate `tests/.env.test` with its username and token
 3. **Start test container and curate golden DB** — `docker compose -f compose.test.yml up --build -d`; use the UI at `:2027` to add a realistic spread of records and wishlist items using the test account; export via `/api/export/db` and save to `tests/fixtures/golden.db`
 4. **Run Layer 2 smoke tests** — `pytest tests/layer2/ -m smoke -v`; fix any selector mismatches against the live UI

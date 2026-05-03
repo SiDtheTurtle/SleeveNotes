@@ -88,3 +88,30 @@ async def test_delete_wishlist_item(client, mock_discogs, mock_download_images):
     assert r.status_code == 200
 
     assert (await client.get("/api/wishlist")).json() == []
+
+
+# ── Search ───────────────────────────────────────────────────────────────────
+
+async def test_wishlist_search(client, mock_discogs):
+    mock_get, _ = mock_discogs
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "results": [
+            {
+                "master_id": 99999,
+                "id": 99999,
+                "title": "Test Artist - Test Album",
+                "year": 2000,
+                "thumb": "",
+                "cover_image": "",
+            }
+        ]
+    }
+
+    r = await client.get("/api/wishlist/search?q=test")
+    assert r.status_code == 200
+    results = r.json()
+    assert len(results) == 1
+    assert results[0]["master_id"] == "99999"
+    assert results[0]["title"] == "Test Artist - Test Album"
+    assert results[0]["year"] == 2000
