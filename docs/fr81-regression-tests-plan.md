@@ -308,10 +308,22 @@ pytest tests/layer2/test_smoke_versions.py -m smoke -v
 
 1. Checkout `main`
 2. `pip install -r tests/requirements-test.txt && playwright install chromium`
-3. `pytest tests/layer1/ -v` → all green (baseline)
+3. `pytest tests/layer1/ -v` → all green (baseline) ✅ **Done**
 4. `docker compose -f compose.test.yml up --build -d`
 5. Populate `tests/.env.test` with test Discogs credentials
 6. `pytest tests/layer2/ -m smoke -v` → all green
 7. Checkout `feat/wishlist-versions-v2`
 8. `pytest tests/layer1/ -v` → still all green (regression confirmed)
-9. *(Next session)* Add FR73 test files; run to validate feature branch
+9. Add FR73 test files; run to validate feature branch
+
+---
+
+## Next Steps
+
+1. **Review `tests/TEST_INDEX.md` for completeness** — confirm all meaningful behaviours are covered; add any missing test cases to the relevant Layer 1 file or note them as future Layer 2 additions
+2. **Set up test Discogs account** — create a throwaway Discogs account; populate `tests/.env.test` with its username and token
+3. **Start test container and curate golden DB** — `docker compose -f compose.test.yml up --build -d`; use the UI at `:2027` to add a realistic spread of records and wishlist items using the test account; export via `/api/export/db` and save to `tests/fixtures/golden.db`
+4. **Run Layer 2 smoke tests** — `pytest tests/layer2/ -m smoke -v`; fix any selector mismatches against the live UI
+5. **Run Layer 1 baseline against `feat/wishlist-versions-v2`** — checkout the FR73 branch; `pytest tests/layer1/ -v` should still be all green (regression check)
+6. **Add FR73-specific tests** — `tests/layer1/test_wishlist_versions.py`, `tests/layer1/test_wantlist.py`, `tests/layer2/test_smoke_versions.py`
+7. **Merge and release** — once all tests pass on both branches, merge `feat/regression-tests` to `main`; the workflow then repeats from step 5 for FR73
