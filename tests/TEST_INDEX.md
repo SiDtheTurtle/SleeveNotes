@@ -138,58 +138,76 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh SQLi
 
 ## Layer 2 — Playwright Smoke Tests
 
-Browser-level tests that run against a live Docker container on port 2027. Require `docker compose -f compose.test.yml up --build -d` and `tests/.env.test` with a test Discogs account. A golden database is loaded before each test.
+Browser-level tests that run against the local dev container on port 2026. Require `tests/.env.test` with test Discogs credentials. A golden database (`tests/fixtures/golden.sql`) is loaded before each test.
 
-Run with: `pytest tests/layer2/ -m smoke -v`
+Run with: `pytest tests/layer2/ -m smoke -v`  
+First-run suite: `./tests/run-first-run.sh` (rebuilds container from current branch)
 
 ---
 
-### Smoke Tests — `layer2/test_smoke.py`
+### First-run Tests — `layer2/test_smoke.py` (tests 1–4)
+
+Require `--full-reset`. Run via `./tests/run-first-run.sh` only. Test the initial setup flow on a blank container with no API key or credentials configured.
 
 | # | Test | Purpose | Expected outcome |
 |---|------|---------|-----------------|
-| 1 | `test_app_loads` | App shell renders correctly on load | KPI bar, toolbar, and main content area all visible |
-| 2 | `test_add_record` | Full add-record flow via Discogs lookup | Enter a Discogs ID → Fetch populates fields → Save → modal closes |
-| 3 | `test_collection_table_shows_records` | Collection table renders real data from the golden DB | At least one row visible in the table |
-| 4 | `test_collection_tile_view` | Switching to tile view renders cover tiles | Tiles visible, each with an artist label |
-| 5 | `test_column_sort` | Clicking a column header sorts the table | Artist header cycles asc → desc → cleared |
-| 6 | `test_group_by_artist` | Group by artist toggle changes the table layout | Artist heading rows appear between record rows |
-| 7 | `test_format_filter_bar` | Clicking a format tag filters the table | Only records matching the tag remain visible |
-| 8 | `test_search_bar_filters` | Typing in the search bar filters records live | Non-matching search returns zero rows; clearing restores full list |
-| 9 | `test_record_detail_modal` | Tapping a tile twice opens the detail modal | Modal visible with a non-empty title |
-| 10 | `test_tracklist_tab` | Tracklist tab in the detail modal is reachable | Tracklist content area becomes visible |
-| 11 | `test_edit_record` | Editing a record's notes persists the change | Updated notes visible in the table after save |
-| 12 | `test_delete_record` | Deleting a record removes it from the table | Row count decrements by one |
-| 13 | `test_kpi_total_count` | Total Records KPI shows a count greater than zero | KPI displays a positive integer |
-| 14 | `test_kpi_collection_cost` | Collection Cost KPI displays a value | KPI text contains at least one digit |
-| 15 | `test_wishlist_section_loads` | Switching to the Wishlist section works | Wishlist content visible; format bar hidden; Show Fulfilled toggle present |
-| 16 | `test_wishlist_search_modal` | Search bar opens the master release search modal | Modal appears; results load after typing a query |
-| 17 | `test_add_to_wishlist` | Adding a search result to the wishlist works | Item appears in the wishlist table |
-| 18 | `test_wishlist_tile_view` | Wishlist tile view renders covers | Tiles visible in wishlist |
-| 19 | `test_wishlist_detail_modal` | Clicking a wishlist item opens its detail modal | Modal visible with editable notes field |
-| 20 | `test_mark_wishlist_fulfilled` | Marking an item fulfilled hides it from the list | Row count decrements; item gone from default view |
-| 21 | `test_delete_wishlist_item` | Deleting a wishlist item removes it permanently | Row count decrements after delete |
-| 22 | `test_settings_modal_open_close` | Settings modal opens and closes cleanly | Modal appears on gear click; disappears on Close |
-| 23 | `test_settings_currency_change` | Changing the currency symbol takes effect immediately | KPI cost displays the new symbol after save |
-| 24 | `test_export_csv_download` | Export CSV button triggers a file download | A `.csv` file download begins |
-| 25 | `test_export_db_download` | Export Database button triggers a file download | A `.zip` file download begins |
-| 26 | `test_import_csv_opens_diff_modal` | Uploading a CSV file opens the sync diff modal | Diff modal becomes visible |
-| 27 | `test_collection_sync_preview` | Sync Collection in settings loads the preview modal | Diff modal and preview content visible |
-| 28 | `test_auth_screen` | Setting an API key forces the auth screen on reload | Auth screen visible; entering the correct key loads the app |
-| 29 | `test_kpi_collection_value` | Collection Value KPI is visible and populated | KPI text contains at least one digit (golden DB must have records with valuations) |
-| 30 | `test_record_detail_carousel` | Records with multiple images show carousel arrows in the detail modal | Prev/next arrows visible; skips if golden DB record has only one image |
-| 31 | `test_record_set_cover` | Navigating the carousel and clicking Use as Cover updates the cover | "Cover updated" toast appears; skips if record has only one image |
-| 32 | `test_wishlist_show_fulfilled_toggle` | Show Fulfilled toggle reveals items hidden after marking fulfilled | After toggling on, row count returns to the value before fulfilment |
-| 33 | `test_wishlist_save_notes` | Notes saved in the wishlist detail modal persist after close and reopen | Reopened modal shows the previously entered text |
-| 34 | `test_export_images_download` | Export Images button triggers a file download | A `.zip` file download begins |
-| 35 | `test_export_all_download` | Export All button triggers a file download | A `.zip` file download begins |
-| 36 | `test_import_csv_apply_sync` | Uploading a CSV and clicking Apply Sync applies changes to SN | Sync modal closes after apply |
-| 37 | `test_settings_include_pp` | Include P&P toggle changes the Collection Cost KPI | Cost KPI value differs after toggling on (skips if no records with p&p) |
-| 38 | `test_settings_show_valuations` | Show Valuations toggle hides and restores the Collection Value KPI | KPI stat hidden after toggle off; restored after toggle on |
-| 39 | `test_settings_hide_format_tags` | Hide format tags toggle saves without error | No error toast after toggling off and on with Save |
-| 40 | `test_danger_zone_delete_all` | Delete All Records wipes the collection | Empty collection state shown after confirm |
-| 41 | `test_empty_collection_restore_button` | Blank DB shows the empty state with a restore-from-backup button | "Your collection is empty" text and restore button visible |
-| 42 | `test_danger_zone_factory_reset` | Factory Reset wipes records and restores default settings | Empty state shown; cost KPI shows default £ symbol |
-| 43 | `test_danger_zone_clear_images` | Clear Image Cache deletes cached covers | Toast confirms deletion count |
-| 44 | `test_danger_zone_change_access_key` | Changing the access key via Danger Zone takes effect | Toast confirms update; app loads with new key injected |
-| 45 | `test_danger_zone_import_db` | Import DB via Danger Zone replaces the database | Page reloads to empty collection state after importing blank DB |
+| 1 | `test_first_run_auth_prompt` | Blank container shows the initial setup screen | Auth screen visible with "Choose an access key" heading |
+| 2 | `test_first_run_set_api_key` | Setting an API key via the setup screen loads the app | App shell loads with empty collection after key is submitted |
+| 3 | `test_first_run_discogs_credentials` | Entering Discogs credentials and saving triggers a live API call | Field mapping section becomes visible; no error shown |
+| 4 | `test_first_run_field_mappings` | Setting all 9 custom field mappings persists after close and reopen | Each dropdown retains its saved value on reopen |
+
+**Status: all 4 passing ✅**
+
+---
+
+### Smoke Tests — `layer2/test_smoke.py` (tests 101–145)
+
+Golden DB loaded before each test. Run with `pytest tests/layer2/ -m smoke -v`.
+
+| # | Test | Purpose | Expected outcome |
+|---|------|---------|-----------------|
+| 101 | `test_app_loads` | App shell renders correctly on load | KPI bar, toolbar, and main content area all visible |
+| 102 | `test_add_record` | Full add-record flow via Discogs lookup | Enter a Discogs ID → Fetch populates fields → Save → modal closes |
+| 103 | `test_collection_table_shows_records` | Collection table renders real data from the golden DB | At least one row visible in the table |
+| 104 | `test_collection_tile_view` | Switching to tile view renders cover tiles | Tiles visible, each with an artist label |
+| 105 | `test_column_sort` | Clicking a column header sorts the table | Artist header cycles asc → desc → cleared |
+| 106 | `test_group_by_artist` | Group by artist toggle changes the table layout | Artist heading rows appear between record rows |
+| 107 | `test_format_filter_bar` | Clicking a format tag filters the table | Only records matching the tag remain visible |
+| 108 | `test_search_bar_filters` | Typing in the search bar filters records live | Non-matching search returns zero rows; clearing restores full list |
+| 109 | `test_record_detail_modal` | Tapping a tile twice opens the detail modal | Modal visible with a non-empty title |
+| 110 | `test_tracklist_tab` | Tracklist tab in the detail modal is reachable | Tracklist content area becomes visible |
+| 111 | `test_edit_record` | Editing a record's notes persists the change | Notes field retains updated value on reopen |
+| 112 | `test_delete_record` | Deleting a record removes it from the table | Row count decrements by one |
+| 113 | `test_kpi_total_count` | Total Records KPI shows a count greater than zero | KPI displays a positive integer |
+| 114 | `test_kpi_collection_cost` | Collection Cost KPI displays a value | KPI shows currency symbol and value > 0 |
+| 115 | `test_wishlist_section_loads` | Switching to the Wishlist section works | Wishlist content visible; format bar hidden; Show Fulfilled toggle present |
+| 116 | `test_wishlist_search_modal` | Search bar opens the master release search modal | Modal appears; results load after typing a query |
+| 117 | `test_add_to_wishlist` | Adding a search result to the wishlist works | Item appears in the wishlist table |
+| 118 | `test_wishlist_tile_view` | Wishlist tile view renders covers | Tiles visible in wishlist |
+| 119 | `test_wishlist_detail_modal` | Clicking a wishlist item opens its detail modal | Modal visible with editable notes field |
+| 120 | `test_mark_wishlist_fulfilled` | Marking an item fulfilled hides it from the list | Row count decrements; item gone from default view |
+| 121 | `test_delete_wishlist_item` | Deleting a wishlist item removes it permanently | Row count decrements after delete |
+| 122 | `test_settings_modal_open_close` | Settings modal opens and closes cleanly | Modal appears on gear click; disappears on Close |
+| 123 | `test_settings_currency_change` | Changing the currency symbol takes effect immediately | KPI cost displays the new symbol after save |
+| 124 | `test_export_csv_download` | Export CSV button triggers a file download | A `.csv` file download begins |
+| 125 | `test_export_db_download` | Export Database button triggers a file download | A `.zip` file download begins |
+| 126 | `test_import_csv_opens_diff_modal` | Uploading a CSV file opens the sync diff modal | Diff modal becomes visible |
+| 127 | `test_collection_sync_preview` | Sync Collection in settings loads the preview modal | Diff modal and preview content visible |
+| 128 | `test_auth_screen` | Setting an API key forces the auth screen on reload | Auth screen visible; entering the correct key loads the app |
+| 129 | `test_kpi_collection_value` | Collection Value KPI is visible and populated | KPI text contains at least one digit (golden DB must have records with valuations) |
+| 130 | `test_record_detail_carousel` | Records with multiple images show carousel arrows in the detail modal | Prev/next arrows visible; skips if golden DB record has only one image |
+| 131 | `test_record_set_cover` | Navigating the carousel and clicking Use as Cover updates the cover | "Cover updated" toast appears; skips if record has only one image |
+| 132 | `test_wishlist_show_fulfilled_toggle` | Show Fulfilled toggle reveals items hidden after marking fulfilled | After toggling on, row count returns to the value before fulfilment |
+| 133 | `test_wishlist_save_notes` | Notes saved in the wishlist detail modal persist after close and reopen | Reopened modal shows the previously entered text |
+| 134 | `test_export_images_download` | Export Images button triggers a file download | A `.zip` file download begins |
+| 135 | `test_export_all_download` | Export All button triggers a file download | A `.zip` file download begins |
+| 136 | `test_import_csv_apply_sync` | Uploading a CSV and clicking Apply Sync applies changes to SN | Sync modal closes after apply |
+| 137 | `test_settings_include_pp` | Include P&P toggle changes the Collection Cost KPI | Cost KPI value differs after toggling on (skips if no records with p&p) |
+| 138 | `test_settings_show_valuations` | Show Valuations toggle hides and restores the Collection Value KPI | KPI stat hidden after toggle off; restored after toggle on |
+| 139 | `test_settings_hide_format_tags` | Hide format tags toggle saves without error | Album tag visible after toggle off; hidden after toggle on |
+| 140 | `test_danger_zone_delete_all` | Delete All Records wipes the collection | Empty collection state shown after confirm |
+| 141 | `test_empty_collection_restore_button` | Blank DB shows the empty state with a restore-from-backup button | "Your collection is empty" text and restore button visible |
+| 142 | `test_danger_zone_factory_reset` | Factory Reset wipes records and restores default settings | Empty state shown; cost KPI shows default £ symbol |
+| 143 | `test_danger_zone_clear_images` | Clear Image Cache deletes cached covers | Toast confirms deletion count |
+| 144 | `test_danger_zone_change_access_key` | Changing the access key via Danger Zone takes effect | Toast confirms update; app loads with new key injected |
+| 145 | `test_danger_zone_import_db` | Import DB via Danger Zone replaces the database | Page reloads to empty collection state after importing blank DB |
