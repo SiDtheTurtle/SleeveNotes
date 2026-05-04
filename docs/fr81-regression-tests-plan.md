@@ -213,7 +213,7 @@ All marked `@pytest.mark.smoke`. Target `http://localhost:2027` (test container)
 - Tests that require blank DB call a helper that POSTs `blank.db` instead, then restore golden after
 - `page` fixture injects `X-API-Key` header for all requests
 
-### `tests/layer2/test_smoke.py` — one test per functional area
+### `tests/layer2/test_smoke.py` — 45 tests across all functional areas
 
 | # | Area | Test description |
 |---|------|-----------------|
@@ -236,15 +236,37 @@ All marked `@pytest.mark.smoke`. Target `http://localhost:2027` (test container)
 | 17 | Add to wishlist | Add result; item appears in wishlist table with artist, title, year |
 | 18 | Wishlist tiles | Switch to Tile view in wishlist; cover tile renders |
 | 19 | Wishlist detail | Click wishlist item; detail modal opens; notes field editable |
-| 20 | Mark fulfilled | Check fulfilled; Save; item hidden; Show Fulfilled toggle reveals it |
+| 20 | Mark fulfilled | Check fulfilled; Save; item hidden |
 | 21 | Delete wishlist item | Open detail; Delete; item removed from list |
 | 22 | Settings — open/close | Gear icon opens modal; Close dismisses without change |
 | 23 | Settings — currency | Change currency to `$`; Save; KPI cost shows `$` symbol |
-| 24 | Export CSV | Click Export CSV; download triggers (check `download` event fires) |
+| 24 | Export CSV | Click Export CSV; download triggers |
 | 25 | Export DB | Click Export Database; zip download triggers |
 | 26 | Import CSV | Upload a minimal valid Discogs CSV; sync diff modal opens |
 | 27 | Collection sync | Settings → Sync Collection; preview modal loads with diff sections |
 | 28 | Auth screen | Set an API key; reload page; auth screen appears; enter key; app loads |
+| 29 | KPI — value | Collection Value KPI visible and shows a digit (requires golden DB with valuations) |
+| 30 | Image carousel | Record with >1 image shows carousel arrows in detail modal (skips if single image) |
+| 31 | Use as Cover | Navigate carousel to next image; click Use as Cover; toast confirms |
+| 32 | Show Fulfilled toggle | Mark item fulfilled, then toggle Show Fulfilled — item reappears |
+| 33 | Wishlist notes persist | Edit notes in detail modal; Save; reopen; notes retained |
+| 34 | Export Images | Click Export Images; zip download triggers |
+| 35 | Export All | Click Export All; zip download triggers |
+| 36 | Import CSV — apply | Upload CSV; wait for diff; click Apply Sync; modal closes |
+| 37 | Settings — Include P&P | Toggle on; Save; cost KPI changes (skips if no p&p in golden DB) |
+| 38 | Settings — Show Valuations | Toggle off; Save; KPI hidden. Toggle on; Save; KPI visible again |
+| 39 | Settings — Hide format tags | Toggle off/on; Save each time; no error toast |
+| 40 | Danger Zone — Delete All | Unlock safety toggle; confirm; empty collection state shown |
+| 41 | Empty collection state | Blank DB loaded; "Your collection is empty" and restore button visible |
+| 42 | Danger Zone — Factory Reset | Unlock; confirm; empty state; cost KPI shows default £ |
+| 43 | Danger Zone — Clear Images | Unlock; confirm; toast confirms deletion count |
+| 44 | Danger Zone — Change Key | Unlock; enter new key; save; update headers; app still loads |
+| 45 | Danger Zone — Import DB | Unlock; upload blank.db zip; confirm; page reloads to empty collection |
+
+**Golden DB curation notes:**
+- Tests 14, 29, 37: require records with `price > 0`, `valuation > 0`, and `pp > 0` respectively
+- Tests 30, 31: require at least one record with >1 cached image (add a Discogs release with multiple images)
+- Test 32: requires at least one unfulfilled wishlist item
 
 ---
 
@@ -307,7 +329,8 @@ pytest tests/layer2/test_smoke_versions.py -m smoke -v
 ## Next Steps
 
 1. ~~**Review `tests/TEST_INDEX.md` for completeness**~~ ✅ **Done** — all 32 API endpoints covered across 65 Layer 1 tests; `TEST_INDEX.md` updated to match
-2. **Set up test Discogs account** — create a throwaway Discogs account; populate `tests/.env.test` with its username and token
+2. ~~**Expand Layer 2 coverage**~~ ✅ **Done** — 45 smoke tests (up from 28); gap analysis identified missing areas; `blank.db` fixed to SQL text format; `TEST_INDEX.md` updated to match
+3. **Set up test Discogs account** — create a throwaway Discogs account; populate `tests/.env.test` with its username and token
 3. **Start test container and curate golden DB** — `docker compose -f compose.test.yml up --build -d`; use the UI at `:2027` to add a realistic spread of records and wishlist items using the test account; export via `/api/export/db` and save to `tests/fixtures/golden.db`
 4. **Run Layer 2 smoke tests** — `pytest tests/layer2/ -m smoke -v`; fix any selector mismatches against the live UI
 5. **Run Layer 1 baseline against `feat/wishlist-versions-v2`** — checkout the FR73 branch; `pytest tests/layer1/ -v` should still be all green (regression check)
