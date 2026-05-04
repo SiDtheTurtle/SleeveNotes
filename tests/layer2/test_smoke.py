@@ -2,13 +2,21 @@
 Layer 2 smoke tests — one test per functional area.
 
 Requires: docker compose -f compose.test.yml up --build -d
-Golden DB must exist at tests/fixtures/golden.db (curated using the test Discogs account).
+Golden DB must exist at tests/fixtures/golden.sql (curated using the test Discogs account).
+
+Test numbering:
+  1–99   First-run and setup flow (blank DB, no credentials pre-loaded)
+  101–145  Golden DB smoke suite (full collection, credentials configured)
 """
 import re
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.layer2.conftest import BASE_URL, SN_TEST_API_KEY, load_blank_db
+from tests.layer2.conftest import (
+    BASE_URL, SN_TEST_API_KEY, SN_TEST_ADD_RELEASE_ID,
+    DISCOGS_TEST_USERNAME, DISCOGS_TEST_TOKEN,
+    load_blank_db,
+)
 
 pytestmark = pytest.mark.smoke
 
@@ -20,7 +28,84 @@ def goto(page: Page, path: str = "/"):
     page.goto(f"{BASE_URL}{path}")
 
 
-# ── 1. App load ───────────────────────────────────────────────────────────────
+# ── 1. First-run — auth setup prompt ─────────────────────────────────────────
+# Requires --full-reset (blank container, no API key configured).
+
+@pytest.mark.first_run
+def test_first_run_auth_prompt(page: Page):
+    page.goto(BASE_URL)
+    expect(page.locator("#auth-screen")).to_be_visible()
+    # Setup mode: prompts the user to choose a key (not enter an existing one)
+    expect(page.locator("#auth-title")).to_have_text("Choose an access key")
+
+
+# ── 2. First-run — set API key and reach the app ──────────────────────────────
+# Requires --full-reset. Sets the API key via the UI and verifies the app loads.
+
+@pytest.mark.first_run
+def test_first_run_set_api_key(page: Page):
+    page.goto(BASE_URL)
+    expect(page.locator("#auth-screen")).to_be_visible()
+    page.fill("#auth-key-input", SN_TEST_API_KEY)
+    page.click("#auth-submit-btn")
+    # After setup, app loads with an empty collection
+    expect(page.locator("#stats-bar")).to_be_visible(timeout=10_000)
+    expect(page.locator("#main-content")).to_contain_text("Your collection is empty")
+
+
+# ── 3. First-run — configure Discogs credentials ─────────────────────────────
+# Requires --full-reset (follows test 2; API key already set).
+# Proves the Discogs connection is working by verifying field mappings load.
+
+@pytest.mark.first_run
+def test_first_run_discogs_credentials(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    expect(page.locator("#modal-settings")).to_be_visible()
+    page.fill("#settings-discogs-username", DISCOGS_TEST_USERNAME)
+    page.fill("#settings-discogs-token", DISCOGS_TEST_TOKEN)
+    page.click("#btn-save-settings")
+    # Field mapping section appears once /api/collection/fields returns successfully
+    expect(page.locator("#settings-mapping-section")).to_be_visible(timeout=15_000)
+    # Error message must not be shown
+    expect(page.locator("#settings-mapping-loading")).to_be_hidden()
+
+
+# ── 4. First-run — configure Discogs field mappings ──────────────────────────
+# Requires --full-reset (follows test 3; Discogs credentials already saved).
+# Sets all 9 custom field → SN column mappings, saves, reopens and verifies.
+
+FIELD_MAPPINGS = {
+    "purchase_date": "4",
+    "is_new":        "9",
+    "price":         "7",
+    "pp":            "6",
+    "retailer":      "5",
+    "order_ref":     "10",
+    "curr_cond":     "1",
+    "sleeve_cond":   "2",
+    "notes":         "3",
+}
+
+@pytest.mark.first_run
+def test_first_run_field_mappings(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    expect(page.locator("#settings-mapping-section")).to_be_visible(timeout=15_000)
+    # Set each dropdown
+    for db_col, field_id in FIELD_MAPPINGS.items():
+        page.locator(f"select[data-db-col='{db_col}']").select_option(field_id)
+    page.click("#btn-save-settings")
+    # Close and reopen to verify persistence
+    page.locator("#modal-settings button", has_text="Close").click()
+    expect(page.locator("#modal-settings")).not_to_have_class(re.compile(r"\bopen\b"))
+    page.click("#btn-settings")
+    expect(page.locator("#settings-mapping-section")).to_be_visible(timeout=15_000)
+    for db_col, field_id in FIELD_MAPPINGS.items():
+        expect(page.locator(f"select[data-db-col='{db_col}']")).to_have_value(field_id)
+
+
+# ── 101. App load ────────────────────────────────────────────────────────────
 
 def test_app_loads(page: Page):
     goto(page)
@@ -29,13 +114,15 @@ def test_app_loads(page: Page):
     expect(page.locator("#main-content")).to_be_visible()
 
 
-# ── 2. Add record via Discogs lookup ─────────────────────────────────────────
+# ── 102. Add record via Discogs lookup ───────────────────────────────────────
 
 def test_add_record(page: Page):
     goto(page)
     page.click("#btn-add-record")
     expect(page.locator("#modal-form")).to_be_visible()
-    page.fill("#f-discogs-id", "99999999")
+    # Release ID from .env.test (SN_TEST_ADD_RELEASE_ID); defaults to r3019857 (Kind of Blue).
+    # Update to a release from the test Discogs account once golden DB is curated.
+    page.fill("#f-discogs-id", SN_TEST_ADD_RELEASE_ID)
     page.click("#fetch-btn")
     # Discogs fetch populates fields; wait for artist to appear
     expect(page.locator("#f-artist")).not_to_be_empty(timeout=15_000)
@@ -43,7 +130,7 @@ def test_add_record(page: Page):
     expect(page.locator("#modal-form")).to_be_hidden()
 
 
-# ── 3. Collection table renders records ───────────────────────────────────────
+# ── 103. Collection table renders records ───────────────────────────────────────
 
 def test_collection_table_shows_records(page: Page):
     goto(page)
@@ -53,7 +140,7 @@ def test_collection_table_shows_records(page: Page):
     expect(rows.first).to_be_visible()
 
 
-# ── 4. Collection tile view ───────────────────────────────────────────────────
+# ── 104. Collection tile view ───────────────────────────────────────────────────
 
 def test_collection_tile_view(page: Page):
     goto(page)
@@ -64,7 +151,7 @@ def test_collection_tile_view(page: Page):
     expect(tiles.first.locator(".tile-artist")).to_be_visible()
 
 
-# ── 5. Column sort ────────────────────────────────────────────────────────────
+# ── 105. Column sort ────────────────────────────────────────────────────────────
 
 def test_column_sort(page: Page):
     goto(page)
@@ -80,7 +167,7 @@ def test_column_sort(page: Page):
     expect(page.locator("th.sort-asc", has_text="Artist")).to_have_count(0)
 
 
-# ── 6. Group by artist ────────────────────────────────────────────────────────
+# ── 106. Group by artist ────────────────────────────────────────────────────────
 
 def test_group_by_artist(page: Page):
     goto(page)
@@ -90,7 +177,7 @@ def test_group_by_artist(page: Page):
     expect(page.locator("#main-content .artist-group-header").first).to_be_visible()
 
 
-# ── 7. Format filter bar ──────────────────────────────────────────────────────
+# ── 107. Format filter bar ──────────────────────────────────────────────────────
 
 def test_format_filter_bar(page: Page):
     goto(page)
@@ -108,7 +195,7 @@ def test_format_filter_bar(page: Page):
             expect(rows.nth(i).locator(".format-tags")).to_contain_text(first_tag_text)
 
 
-# ── 8. Search bar filters results ─────────────────────────────────────────────
+# ── 108. Search bar filters results ─────────────────────────────────────────────
 
 def test_search_bar_filters(page: Page):
     goto(page)
@@ -119,7 +206,7 @@ def test_search_bar_filters(page: Page):
     expect(page.locator("#main-content table tbody tr")).to_have_count(rows_before)
 
 
-# ── 9. Record detail modal ────────────────────────────────────────────────────
+# ── 109. Record detail modal ────────────────────────────────────────────────────
 
 def test_record_detail_modal(page: Page):
     goto(page)
@@ -131,7 +218,7 @@ def test_record_detail_modal(page: Page):
     expect(page.locator("#detail-modal-title")).not_to_be_empty()
 
 
-# ── 10. Tracklist tab ─────────────────────────────────────────────────────────
+# ── 110. Tracklist tab ─────────────────────────────────────────────────────────
 
 def test_tracklist_tab(page: Page):
     goto(page)
@@ -144,7 +231,7 @@ def test_tracklist_tab(page: Page):
     expect(page.locator("#tracklist-content")).to_be_visible()
 
 
-# ── 11. Edit record ───────────────────────────────────────────────────────────
+# ── 111. Edit record ───────────────────────────────────────────────────────────
 
 def test_edit_record(page: Page):
     goto(page)
@@ -154,41 +241,48 @@ def test_edit_record(page: Page):
     page.fill("#f-notes", "Smoke test note")
     page.click("#save-btn")
     expect(page.locator("#modal-form")).to_be_hidden()
-    expect(page.locator("#main-content")).to_contain_text("Smoke test note")
+    # Re-open the same record and verify the note persisted (notes are not shown in the table row)
+    page.locator("#main-content table tbody tr").first.locator("[data-action='edit']").click()
+    expect(page.locator("#modal-form")).to_be_visible()
+    expect(page.locator("#f-notes")).to_have_value("Smoke test note")
 
 
-# ── 12. Delete record ─────────────────────────────────────────────────────────
+# ── 112. Delete record ─────────────────────────────────────────────────────────
 
 def test_delete_record(page: Page):
     goto(page)
     page.click("#btn-table")
     rows_before = page.locator("#main-content table tbody tr").count()
-    page.locator("#main-content table tbody tr").first.locator("[data-action='delete']").click()
-    # Confirm deletion in dialog
     page.on("dialog", lambda d: d.accept())
+    page.locator("#main-content table tbody tr").first.locator("[data-action='delete']").click()
     expect(page.locator("#main-content table tbody tr")).to_have_count(rows_before - 1)
 
 
-# ── 13. KPI — total count ─────────────────────────────────────────────────────
+# ── 113. KPI — total count ─────────────────────────────────────────────────────
 
 def test_kpi_total_count(page: Page):
     goto(page)
     total_text = page.locator("#s-total").inner_text()
     total = int(re.search(r"\d+", total_text).group())
+    # TODO: once golden DB is curated with a known record count, replace with an exact assertion
     assert total > 0
 
 
-# ── 14. KPI — collection cost ─────────────────────────────────────────────────
+# ── 114. KPI — collection cost ─────────────────────────────────────────────────
 
 def test_kpi_collection_cost(page: Page):
     goto(page)
-    # Golden DB should have records with price > 0
+    # Golden DB must have records with price > 0
     expect(page.locator("#s-cost")).to_be_visible()
     cost_text = page.locator("#s-cost").inner_text()
-    assert any(c.isdigit() for c in cost_text)
+    # Must contain the currency symbol and at least one digit (i.e. "£12.50", not just "£0.00")
+    assert "£" in cost_text
+    cost_value = float(re.search(r"[\d.]+", cost_text).group())
+    # TODO: once golden DB is curated, replace with exact expected cost
+    assert cost_value > 0
 
 
-# ── 15. Wishlist section loads ────────────────────────────────────────────────
+# ── 115. Wishlist section loads ────────────────────────────────────────────────
 
 def test_wishlist_section_loads(page: Page):
     goto(page)
@@ -200,7 +294,7 @@ def test_wishlist_section_loads(page: Page):
     expect(page.locator("#show-fulfilled")).to_be_visible()
 
 
-# ── 16. Wishlist search modal ─────────────────────────────────────────────────
+# ── 116. Wishlist search modal ─────────────────────────────────────────────────
 
 def test_wishlist_search_modal(page: Page):
     goto(page)
@@ -212,7 +306,7 @@ def test_wishlist_search_modal(page: Page):
     expect(page.locator("#wishlist-search-results")).not_to_be_empty(timeout=15_000)
 
 
-# ── 17. Add to wishlist ───────────────────────────────────────────────────────
+# ── 117. Add to wishlist ───────────────────────────────────────────────────────
 
 def test_add_to_wishlist(page: Page):
     goto(page)
@@ -229,7 +323,7 @@ def test_add_to_wishlist(page: Page):
     expect(page.locator("#main-content table tbody tr")).to_have_count(items_before + 1, timeout=10_000)
 
 
-# ── 18. Wishlist tile view ────────────────────────────────────────────────────
+# ── 118. Wishlist tile view ────────────────────────────────────────────────────
 
 def test_wishlist_tile_view(page: Page):
     goto(page)
@@ -239,7 +333,7 @@ def test_wishlist_tile_view(page: Page):
     expect(tiles.first).to_be_visible()
 
 
-# ── 19. Wishlist detail modal ─────────────────────────────────────────────────
+# ── 119. Wishlist detail modal ─────────────────────────────────────────────────
 
 def test_wishlist_detail_modal(page: Page):
     goto(page)
@@ -250,7 +344,7 @@ def test_wishlist_detail_modal(page: Page):
     expect(page.locator("#wishlist-detail-notes")).to_be_visible()
 
 
-# ── 20. Mark wishlist item fulfilled ─────────────────────────────────────────
+# ── 120. Mark wishlist item fulfilled ─────────────────────────────────────────
 
 def test_mark_wishlist_fulfilled(page: Page):
     goto(page)
@@ -265,7 +359,7 @@ def test_mark_wishlist_fulfilled(page: Page):
     expect(page.locator("#main-content table tbody tr")).to_have_count(rows_before - 1, timeout=5_000)
 
 
-# ── 21. Delete wishlist item ──────────────────────────────────────────────────
+# ── 121. Delete wishlist item ──────────────────────────────────────────────────
 
 def test_delete_wishlist_item(page: Page):
     goto(page)
@@ -279,17 +373,17 @@ def test_delete_wishlist_item(page: Page):
     expect(page.locator("#main-content table tbody tr")).to_have_count(rows_before - 1, timeout=5_000)
 
 
-# ── 22. Settings modal open/close ─────────────────────────────────────────────
+# ── 122. Settings modal open/close ─────────────────────────────────────────────
 
 def test_settings_modal_open_close(page: Page):
     goto(page)
     page.click("#btn-settings")
     expect(page.locator("#modal-settings")).to_be_visible()
-    page.locator("#modal-settings .modal-close").click()
+    page.locator("#modal-settings button", has_text="Close").click()
     expect(page.locator("#modal-settings")).to_be_hidden()
 
 
-# ── 23. Settings — currency symbol ───────────────────────────────────────────
+# ── 123. Settings — currency symbol ───────────────────────────────────────────
 
 def test_settings_currency_change(page: Page):
     goto(page)
@@ -297,13 +391,13 @@ def test_settings_currency_change(page: Page):
     expect(page.locator("#modal-settings")).to_be_visible()
     page.fill("#settings-currency", "$")
     page.click("#btn-save-settings")
-    page.locator("#modal-settings .modal-close").click()
+    page.locator("#modal-settings button", has_text="Close").click()
     # KPI cost should now show $
     cost_text = page.locator("#s-cost").inner_text()
     assert "$" in cost_text
 
 
-# ── 24. Export CSV ────────────────────────────────────────────────────────────
+# ── 124. Export CSV ────────────────────────────────────────────────────────────
 
 def test_export_csv_download(page: Page):
     goto(page)
@@ -314,7 +408,7 @@ def test_export_csv_download(page: Page):
     assert download.suggested_filename.endswith(".csv")
 
 
-# ── 25. Export DB ─────────────────────────────────────────────────────────────
+# ── 125. Export DB ─────────────────────────────────────────────────────────────
 
 def test_export_db_download(page: Page):
     goto(page)
@@ -325,7 +419,7 @@ def test_export_db_download(page: Page):
     assert download.suggested_filename.endswith(".zip")
 
 
-# ── 26. Import CSV opens sync diff modal ──────────────────────────────────────
+# ── 126. Import CSV opens sync diff modal ──────────────────────────────────────
 
 def test_import_csv_opens_diff_modal(page: Page):
     goto(page)
@@ -343,17 +437,21 @@ def test_import_csv_opens_diff_modal(page: Page):
     expect(page.locator("#modal-discogs-sync")).to_be_visible(timeout=10_000)
 
 
-# ── 27. Collection sync preview ───────────────────────────────────────────────
+# ── 127. Collection sync preview ───────────────────────────────────────────────
 
 def test_collection_sync_preview(page: Page):
     goto(page)
     page.click("#btn-settings")
     page.click("#btn-sync-discogs")
     expect(page.locator("#modal-discogs-sync")).to_be_visible(timeout=20_000)
+    # Loading spinner must clear before we check content
+    expect(page.locator("#sync-preview-loading")).to_be_hidden(timeout=20_000)
     expect(page.locator("#sync-preview-content")).to_be_visible()
+    # Content must be non-empty — either diff rows or "Everything is in sync."
+    expect(page.locator("#sync-preview-content")).not_to_be_empty()
 
 
-# ── 28. Auth screen ───────────────────────────────────────────────────────────
+# ── 128. Auth screen ───────────────────────────────────────────────────────────
 
 def test_auth_screen(page: Page):
     load_blank_db()
@@ -367,7 +465,7 @@ def test_auth_screen(page: Page):
     expect(page.locator("#stats-bar")).to_be_visible()
 
 
-# ── 29. KPI — Collection Value ────────────────────────────────────────────────
+# ── 129. KPI — Collection Value ────────────────────────────────────────────────
 
 def test_kpi_collection_value(page: Page):
     goto(page)
@@ -377,7 +475,7 @@ def test_kpi_collection_value(page: Page):
     assert any(c.isdigit() for c in val_text)
 
 
-# ── 30. Record detail — image carousel ───────────────────────────────────────
+# ── 130. Record detail — image carousel ───────────────────────────────────────
 # Requires golden DB to have at least one record with >1 cached image.
 
 def test_record_detail_carousel(page: Page):
@@ -393,7 +491,7 @@ def test_record_detail_carousel(page: Page):
     expect(arrows.first).to_be_visible()
 
 
-# ── 31. Record detail — Use as Cover ─────────────────────────────────────────
+# ── 131. Record detail — Use as Cover ─────────────────────────────────────────
 # Requires golden DB to have a record with >1 cached image.
 
 def test_record_set_cover(page: Page):
@@ -413,7 +511,7 @@ def test_record_set_cover(page: Page):
     expect(page.locator(".toast")).to_contain_text("Cover updated", timeout=5_000)
 
 
-# ── 32. Wishlist — Show Fulfilled toggle ──────────────────────────────────────
+# ── 132. Wishlist — Show Fulfilled toggle ──────────────────────────────────────
 
 def test_wishlist_show_fulfilled_toggle(page: Page):
     goto(page)
@@ -431,24 +529,27 @@ def test_wishlist_show_fulfilled_toggle(page: Page):
     expect(page.locator("#main-content table tbody tr")).to_have_count(rows_before, timeout=5_000)
 
 
-# ── 33. Wishlist — Save notes persists ───────────────────────────────────────
+# ── 133. Wishlist — Save notes persists ───────────────────────────────────────
 
 def test_wishlist_save_notes(page: Page):
     goto(page)
     page.click("#btn-wishlist-nav")
     page.click("#btn-table")
-    page.locator("#main-content table tbody tr").first.click()
+    first_row = page.locator("#main-content table tbody tr").first
+    # Capture the artist/title text so we can re-identify the row after reload
+    row_text = first_row.inner_text()
+    first_row.click()
     expect(page.locator("#modal-wishlist-detail")).to_be_visible()
     page.fill("#wishlist-detail-notes", "Smoke test note persist")
     page.click("#wishlist-detail-save-btn")
     expect(page.locator("#modal-wishlist-detail")).to_be_hidden(timeout=5_000)
-    # Reopen and verify
-    page.locator("#main-content table tbody tr").first.click()
+    # Re-open by matching the same row text (list re-sorts after save)
+    page.locator("#main-content table tbody tr", has_text=row_text.split("\t")[0]).first.click()
     expect(page.locator("#modal-wishlist-detail")).to_be_visible()
     expect(page.locator("#wishlist-detail-notes")).to_have_value("Smoke test note persist")
 
 
-# ── 34. Export Images ─────────────────────────────────────────────────────────
+# ── 134. Export Images ─────────────────────────────────────────────────────────
 
 def test_export_images_download(page: Page):
     goto(page)
@@ -459,7 +560,7 @@ def test_export_images_download(page: Page):
     assert download.suggested_filename.endswith(".zip")
 
 
-# ── 35. Export All ────────────────────────────────────────────────────────────
+# ── 135. Export All ────────────────────────────────────────────────────────────
 
 def test_export_all_download(page: Page):
     goto(page)
@@ -470,7 +571,7 @@ def test_export_all_download(page: Page):
     assert download.suggested_filename.endswith(".zip")
 
 
-# ── 36. Import CSV — apply sync ───────────────────────────────────────────────
+# ── 136. Import CSV — apply sync ───────────────────────────────────────────────
 
 def test_import_csv_apply_sync(page: Page):
     goto(page)
@@ -492,7 +593,7 @@ def test_import_csv_apply_sync(page: Page):
     expect(page.locator("#modal-discogs-sync")).to_be_hidden(timeout=10_000)
 
 
-# ── 37. Settings — Include P&P changes cost ───────────────────────────────────
+# ── 137. Settings — Include P&P changes cost ───────────────────────────────────
 # Requires golden DB to have at least one record with pp > 0.
 
 def test_settings_include_pp(page: Page):
@@ -501,7 +602,7 @@ def test_settings_include_pp(page: Page):
     page.click("#btn-settings")
     page.check("#include-pp-toggle")
     page.click("#btn-save-settings")
-    page.locator("#modal-settings .modal-close").click()
+    page.locator("#modal-settings button", has_text="Close").click()
     cost_with_pp = page.locator("#s-cost").inner_text()
     # Cost should have changed if any records have p&p
     if cost_without_pp == cost_with_pp:
@@ -509,7 +610,7 @@ def test_settings_include_pp(page: Page):
     assert cost_without_pp != cost_with_pp
 
 
-# ── 38. Settings — Show Valuations toggles KPI ───────────────────────────────
+# ── 138. Settings — Show Valuations toggles KPI ───────────────────────────────
 
 def test_settings_show_valuations(page: Page):
     goto(page)
@@ -518,36 +619,40 @@ def test_settings_show_valuations(page: Page):
     page.click("#btn-settings")
     page.uncheck("#show-valuations")
     page.click("#btn-save-settings")
-    page.locator("#modal-settings .modal-close").click()
+    page.locator("#modal-settings button", has_text="Close").click()
     # KPI stat item should now be hidden
     expect(page.locator("#s-valuation").locator("..")).to_be_hidden()
     # Re-enable
     page.click("#btn-settings")
     page.check("#show-valuations")
     page.click("#btn-save-settings")
-    page.locator("#modal-settings .modal-close").click()
+    page.locator("#modal-settings button", has_text="Close").click()
     expect(page.locator("#s-valuation").locator("..")).to_be_visible()
 
 
-# ── 39. Settings — Hide format tags ──────────────────────────────────────────
+# ── 139. Settings — Hide format tags ──────────────────────────────────────────
 
 def test_settings_hide_format_tags(page: Page):
     goto(page)
+    # Ensure tags bar is visible
+    if not page.locator("#format-filter-bar").is_visible():
+        page.click("#show-tags")
     page.click("#btn-settings")
-    # Disable hide-format-tags; all tags should show in filter bar after save
+    # Disable hiding — default hidden tags (e.g. "Album") should now appear in the filter bar
     page.uncheck("#hide-format-tags-toggle")
     page.click("#btn-save-settings")
-    page.locator("#modal-settings .modal-close").click()
-    # Re-enable
+    page.locator("#modal-settings button", has_text="Close").click()
+    # At least one of the default hidden tags should now be visible (golden DB has Albums)
+    expect(page.locator("#format-filter-bar .format-tag", has_text="Album")).to_be_visible()
+    # Re-enable hiding — "Album" tag should disappear
     page.click("#btn-settings")
     page.check("#hide-format-tags-toggle")
     page.click("#btn-save-settings")
-    page.locator("#modal-settings .modal-close").click()
-    # Verify setting saved without error (no toast error visible)
-    expect(page.locator(".toast.toast-error")).to_have_count(0)
+    page.locator("#modal-settings button", has_text="Close").click()
+    expect(page.locator("#format-filter-bar .format-tag", has_text="Album")).to_have_count(0)
 
 
-# ── 40. Danger Zone — Delete All Records ─────────────────────────────────────
+# ── 140. Danger Zone — Delete All Records ─────────────────────────────────────
 
 def test_danger_zone_delete_all(page: Page):
     goto(page)
@@ -560,7 +665,7 @@ def test_danger_zone_delete_all(page: Page):
     expect(page.locator("#main-content")).to_contain_text("Your collection is empty", timeout=5_000)
 
 
-# ── 41. Empty collection state shows restore button ──────────────────────────
+# ── 141. Empty collection state shows restore button ──────────────────────────
 
 def test_empty_collection_restore_button(page: Page):
     # Load blank DB so collection is empty
@@ -571,7 +676,7 @@ def test_empty_collection_restore_button(page: Page):
     expect(page.locator("#main-content label", has_text="Restore from backup")).to_be_visible()
 
 
-# ── 42. Danger Zone — Factory Reset ──────────────────────────────────────────
+# ── 142. Danger Zone — Factory Reset ──────────────────────────────────────────
 
 def test_danger_zone_factory_reset(page: Page):
     goto(page)
@@ -585,7 +690,7 @@ def test_danger_zone_factory_reset(page: Page):
     expect(page.locator("#s-cost")).to_contain_text("£")
 
 
-# ── 43. Danger Zone — Clear Image Cache ──────────────────────────────────────
+# ── 143. Danger Zone — Clear Image Cache ──────────────────────────────────────
 
 def test_danger_zone_clear_images(page: Page):
     goto(page)
@@ -596,7 +701,7 @@ def test_danger_zone_clear_images(page: Page):
     expect(page.locator(".toast")).to_contain_text("deleted", timeout=5_000)
 
 
-# ── 44. Danger Zone — Change Access Key ──────────────────────────────────────
+# ── 144. Danger Zone — Change Access Key ──────────────────────────────────────
 
 def test_danger_zone_change_access_key(page: Page):
     goto(page)
@@ -612,14 +717,14 @@ def test_danger_zone_change_access_key(page: Page):
     expect(page.locator("#stats-bar")).to_be_visible()
 
 
-# ── 45. Danger Zone — Import DB (restore from backup) ─────────────────────────
-# Uploads blank.db zip via the Danger Zone, confirms dialog, waits for reload.
+# ── 145. Danger Zone — Import DB (restore from backup) ─────────────────────────
+# Uploads blank.sql zip via the Danger Zone, confirms dialog, waits for reload.
 
 def test_danger_zone_import_db(page: Page):
     import io, zipfile, sqlite3
     from tests.layer2.conftest import FIXTURES_DIR
-    # Build a zip from blank.db (SQL text dump)
-    sql_text = (FIXTURES_DIR / "blank.db").read_text(encoding="utf-8")
+    # Build a zip from blank.sql (SQL text dump)
+    sql_text = (FIXTURES_DIR / "blank.sql").read_text(encoding="utf-8")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("sleevenotes.sql", sql_text)

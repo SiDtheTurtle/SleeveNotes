@@ -6,10 +6,10 @@ SleeveNotes has no test infrastructure. FR73 required an extensive manual test c
 
 Two-layer approach:
 - **Layer 1** — pytest + httpx API tests. Fast, no Docker. Catches broken endpoints and business logic cheaply.
-- **Layer 2** — Playwright smoke tests. Runs against a dedicated test Docker container (port 2027). Catches what a human would notice.
+- **Layer 2** — Playwright smoke tests. Runs against the local dev container on port 2026. Catches what a human would notice.
 
 **Branch workflow:**
-1. Implement baseline tests on `main` branch
+1. Implement baseline tests on `feat/regression-tests` → merge to `main`
 2. Run on `main` → establish green baseline
 3. Switch to `feat/wishlist-versions-v2` → run baseline (regression check — all should still pass)
 4. Add FR73-specific tests on the feature branch
@@ -21,14 +21,13 @@ Two-layer approach:
 ```
 tests/
   conftest.py              # shared Layer 1 fixtures
-  pytest.ini               # asyncio_mode=auto, smoke marker, default exclusion
   requirements-test.txt    # test dependencies
   .env.test                # local secrets — gitignored
+  .env.test.example        # committed template with blank values
   fixtures/
-    golden.db              # golden DB — gitignored (personal, backed up on NAS)
-    blank.db              # empty initialised DB — committed (no personal data)
-    edge/
-      large_wishlist.db    # edge case DBs — gitignored, created as needed
+    golden.sql             # golden DB (SQL text dump) — gitignored (personal data)
+    blank.sql              # empty initialised DB (SQL text dump) — committed (no personal data)
+    edge/                  # edge case DBs — gitignored, created as needed
   layer1/
     __init__.py
     test_health_auth.py
@@ -40,9 +39,11 @@ tests/
     test_admin.py
   layer2/
     __init__.py
-    conftest.py            # loads .env.test, loads golden DB into test container
+    conftest.py            # loads .env.test, manages golden DB, browser context
     test_smoke.py
-compose.test.yml           # test Docker stack (port 2027, separate data volume)
+pytest.ini                 # at project root; asyncio_mode, smoke + first_run markers, default exclusion
+prepare-backup-for-test.sh # helper: patches live backup zip with test credentials
+run-first-run.sh           # helper: runs the first-run test suite with --full-reset
 ```
 
 FR73 additions (on `feat/wishlist-versions-v2` only, added in a later session):
@@ -56,283 +57,226 @@ FR73 additions (on `feat/wishlist-versions-v2` only, added in a later session):
 
 ---
 
-## Gitignored Local Files
+## Architecture: No Separate Test Container
 
-All of the following are added to `.gitignore`. None are secret, but they contain personal data or are environment-specific. The NAS backup covers them.
+**The test suite runs against the local dev container on port 2026** — the same container used for development. There is no separate `compose.test.yml`.
+
+The `--full-reset` flag in `run-first-run.sh` tears down and rebuilds this container using both `compose.yml` and `compose.override.yml` (which forces a local build and sets `SN_DEV=true`). This means:
+- Tests always run against the current local branch
+- The dev banner is present (allowing tests to assert dev-only UI state)
+- No port conflicts — there is only one container
+
+**Implication:** Running `--full-reset` destroys the working dev container. The interactive YES prompt guards against accidental destruction.
+
+---
+
+## Gitignored Local Files
 
 **`tests/.env.test`** — credentials for Layer 2:
 ```
-DISCOGS_TEST_USERNAME=<test account username>
+DISCOGS_TEST_USERNAME=sleevenotes_test
 DISCOGS_TEST_TOKEN=<test account API token>
-SN_TEST_API_KEY=<SleeveNotes access key on test container>
+SN_TEST_API_KEY=<SleeveNotes access key — set during first-run tests>
+SN_TEST_ADD_RELEASE_ID=[r35207593]
 ```
-A `tests/.env.test.example` with blank values is committed as a template.
 
-**`tests/fixtures/golden.db`** — the primary Layer 2 start state (see below).
+**`tests/fixtures/golden.sql`** — the primary Layer 2 start state (SQL text dump, not a SQLite binary). See DB States section.
 
-**`tests/fixtures/edge/*.db`** — edge case DBs created as needed.
+**`tests/fixtures/edge/*.sql`** — edge case DBs created as needed.
 
 ---
 
 ## DB States
 
-Layer 2 tests start from a known DB state rather than building from scratch each run. This catches bugs that a blank DB never would — migration guards on existing columns, KPI calculations with accumulated data, sort behaviour with realistic record counts, etc.
+Layer 2 tests start from a known DB state. This catches bugs that a blank DB never would — KPI calculations with accumulated data, sort behaviour with realistic record counts, etc.
 
-### Golden DB (`tests/fixtures/golden.db`)
+### Golden DB (`tests/fixtures/golden.sql`)
 
-The default start state for almost all Layer 2 tests. A realistic "lived-in" DB curated manually using the test Discogs account: a spread of records with varied conditions, formats, prices, and dates; a few wishlist items; at least one fulfilled item. Created and maintained by the developer.
+The default start state for tests 101–145. A realistic collection exported from the live app, with live credentials replaced by test credentials. Stored as a raw SQL text dump (not a zip) so `_load_db()` in conftest can re-wrap it for the import API.
 
-**Loading into the test container:** The Layer 2 session fixture POSTs `golden.db` to `POST /api/import/db` on `:2027` at the start of each run. This replaces whatever is in the test container's volume.
+**Creating / updating:**
+1. Take a full backup from the live app: Settings → Export All
+2. Run `./tests/prepare-backup-for-test.sh tests/fixtures/sleevenotes_backup.zip`
+   - This replaces `discogs_username`, `discogs_token`, and `api_key` with test values from `.env.test`
+   - Outputs `tests/fixtures/sleevenotes_backup-test-ready.zip`
+3. Import the test-ready zip into the local container via the UI
+4. Export just the DB: `GET /api/export/db` (or use the script below)
+5. Extract and save: `./tests/prepare-backup-for-test.sh` handles this, or run manually:
 
-**Updating the golden DB:** Run the test container normally (`:2027`), make changes via the UI, then `GET /api/export/db` and unzip the `.sql` into `tests/fixtures/golden.db`. Commit the update to git is intentionally not possible — it lives on the NAS only.
+```bash
+/home/kieran/.venvs/sleevenotes-tests/bin/python - <<'EOF'
+import httpx, zipfile, io
+from pathlib import Path
+r = httpx.get("http://localhost:2026/api/export/db", headers={"X-API-Key": "NeverGonnaGiveYouUp"}, timeout=30)
+r.raise_for_status()
+with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+    sql_name = next(n for n in z.namelist() if n.endswith(".sql"))
+    sql = z.read(sql_name)
+Path("tests/fixtures/golden.sql").write_bytes(sql)
+EOF
+```
 
-### Blank DB (`tests/fixtures/blank.db`)
+**Loading:** `_load_db()` in conftest re-wraps the SQL in a zip and POSTs to `/api/import/db`. Then `_configure_credentials()` PUTs test credentials from `.env.test`.
 
-An empty but fully initialised DB (schema created, all settings at defaults, no records). Committed to the repo — contains no personal data. Used explicitly by tests that require a fresh-install state:
-- First-run auth screen
-- Empty collection placeholder
-- Factory reset result
-- `POST /api/admin/factory-reset` expected outcome
+### Blank DB (`tests/fixtures/blank.sql`)
 
-Generated once by calling `init_db()` against a blank file and committed.
-
-### Edge Case DBs (`tests/fixtures/edge/`)
-
-Created on demand for specific scenarios. Gitignored. Examples:
-- `large_wishlist.db` — hundreds of wishlist items (pagination testing)
-- `missing_covers.db` — records with no cached cover images
-
-Each edge case DB is documented inline in the test that uses it, with notes on how to recreate it.
+Empty but fully initialised (schema only, settings at defaults, no records). Committed to the repo — no personal data. Used by first-run tests and danger zone tests that require a pristine state.
 
 ---
 
-## Test Docker Stack — `compose.test.yml`
+## Test Numbering
 
-Separate stack so the live container on :2026 is never touched during testing.
-
-```yaml
-services:
-  sleevenotes-test:
-    build: .
-    ports:
-      - "2027:2026"
-    volumes:
-      - sleevenotes-test-data:/data
-    environment:
-      - DEV=true
-
-volumes:
-  sleevenotes-test-data:
-```
-
-Run before Layer 2: `docker compose -f compose.test.yml up --build -d`
-
-Layer 2 `conftest.py` session fixture PUTs the test Discogs credentials and SN API key to `:2027/api/settings` on startup, and resets the DB via `/api/admin/factory-reset` between test modules to ensure clean state.
-
----
-
-## Dependencies
-
-**`tests/requirements-test.txt`**
-```
-pytest>=8.0
-pytest-asyncio>=0.23
-httpx>=0.27
-pytest-mock>=3.12
-playwright>=1.44
-pytest-playwright>=0.5
-python-dotenv>=1.0
-```
-
-Install: `pip install -r tests/requirements-test.txt && playwright install chromium`
+| Range | Suite | Trigger |
+|-------|-------|---------|
+| 1–99 | First-run setup flow | `./tests/run-first-run.sh` (requires `--full-reset`) |
+| 101–145 | Golden DB smoke suite | `pytest tests/layer2/ -m smoke` |
 
 ---
 
 ## pytest.ini
 
+Located at **project root** (not `tests/`).
+
 ```ini
 [pytest]
 asyncio_mode = auto
+testpaths = tests
 markers =
-    smoke: Playwright E2E smoke tests (require compose.test.yml running on :2027)
+    smoke: Playwright E2E smoke tests (require the dev container running on :2026)
+    first_run: Tests that require a --full-reset blank container (no golden DB, no API key)
 addopts = -m "not smoke"
 ```
 
 ---
 
-## Layer 1 — API Tests
-
-**65 tests across 7 files — all passing on Windows and Linux.** ✅
-
-All 32 API endpoints are covered. See `tests/TEST_INDEX.md` for the full per-test reference.
-
-### `tests/conftest.py` — shared fixtures
-
-- **`client`** fixture: monkeypatches `app.DB_PATH` to `tmp_path / "test.db"` and `app.IMAGES_DIR` to `tmp_path / "images"`, resets `app._cached_api_key = None`, calls `app.init_db()`, yields `AsyncClient(transport=ASGITransport(app=app.app), base_url="http://test")`
-- **`mock_discogs`** fixture: patches `app.discogs_get` and `app.discogs_post` as `AsyncMock`s; returns `(mock_get, mock_post)` tuple for tests to configure
-- **`mock_download_images`** fixture: patches `app.download_all_images` as a no-op `AsyncMock`
-
-### `test_health_auth.py` — 7 tests
-- Health, auth status (unconfigured + configured), auth bypass, protected endpoint blocked/allowed
-
-### `test_records.py` — 14 tests
-- CRUD, soft-delete, tracklist/images endpoints, refresh (updates Discogs fields, preserves user fields, 404), set-cover (updates cover_file + is_cover flag, 404)
-- Refresh and set-cover tests use an async `side_effect` function to dispatch different mock responses for `/releases/` vs `/marketplace/stats/` URLs in the same `asyncio.gather` call
-
-### `test_settings.py` — 4 tests
-- Defaults present, api_key excluded, update persists
-
-### `test_discogs.py` — 5 tests
-- Returns full metadata, accepts bare numeric ID, wishlist_match present/absent, propagates Discogs error status
-- Uses async `side_effect` dispatching on URL to mock two concurrent Discogs calls
-
-### `test_wishlist.py` — 9 tests
-- CRUD, duplicate 409, fulfilled hide/show, search (mocked Discogs results → shaped response)
-
-### `test_collection_sync.py` — 10 tests
-- `compute_diff` called directly (empty DB, matching instance_id, changed field, db_only), sync creates records, currency mismatch, collection fields (no username 400, returns JSON), collection preview (no username 400, returns diff)
-
-### `test_import_export.py` — 11 tests
-- Export CSV (headers, with record, excludes deleted), export DB zip, export images zip, export all zip
-- Import CSV (returns diff, existing record unchanged), import DB round-trip, import images, import all round-trip
-- **Cross-platform note:** `import_db` calls `DB_PATH.unlink()` — a Linux-only pattern (Windows holds WAL file locks). Both round-trip tests use `monkeypatch.setattr(app_module, "DB_PATH", app_module.DB_PATH.parent / "restored.db")` to redirect to a non-existent path before calling the endpoint. `unlink(missing_ok=True)` on a non-existent file is a no-op on both platforms; `executescript` then creates a fresh DB at the new path.
-
-### `test_admin.py` — 5 tests
-- Format (deletes records, preserves settings), factory reset (deletes records, restores defaults), clear images
-
----
-
 ## Layer 2 — Playwright Smoke Tests
 
-All marked `@pytest.mark.smoke`. Target `http://localhost:2027` (test container). A session-scoped fixture configures Discogs + SN credentials from `tests/.env.test` and resets the DB before each module.
+### `tests/layer2/conftest.py` — key design decisions
 
-### `tests/layer2/conftest.py`
-- Load `tests/.env.test` via `python-dotenv`
-- Session fixture: POST `golden.db` to `/api/import/db` on `:2027`; PUT `discogs_username`, `discogs_token`, `api_key` from `.env.test`
-- Per-test autouse fixture: restores golden DB via `/api/import/db` before each test (ensures clean slate even if previous test left dirty state)
-- Tests that require blank DB call a helper that POSTs `blank.db` instead, then restore golden after
-- `page` fixture injects `X-API-Key` header for all requests
+- **Session-scoped `browser_context`**: localStorage persists across all tests within a run. This is intentional — accumulation exposes real bugs that a reset-per-test approach would hide.
+- **Per-test `page` fixture**: fresh tab per test within the shared context.
+- **`restore_golden_db` autouse fixture**: reloads `golden.sql` into the container before each non-first_run test. Ensures each test starts clean without clearing browser state.
+- **`maybe_full_reset`**: nukes and rebuilds the container with `compose.yml + compose.override.yml` (local build + `SN_DEV=true`). Requires interactive YES confirmation.
+- **`require_full_reset_for_first_run`**: auto-skips first_run tests if `--full-reset` was not passed.
 
-### `tests/layer2/test_smoke.py` — 45 tests across all functional areas
+### Modal assertions
 
-| # | Area | Test description |
-|---|------|-----------------|
-| 1 | App load | Navigate `/`; KPI bar and collection table visible |
-| 2 | Add record | Open add modal; enter Discogs ID; Fetch populates fields; Save; record in table |
-| 3 | Collection table | Seeded record shows correct artist, title, year columns |
-| 4 | Collection tiles | Switch to Tile view; cover tile renders with artist label |
-| 5 | Column sort | Click Artist header; rows reorder; click again reverses; click again clears |
-| 6 | Group by artist | Enable Group by Artist; artist heading rows appear |
-| 7 | Format filter | Format tag bar visible; click a tag; table filters to matching records only |
-| 8 | Search bar | Type partial artist name; table filters live |
-| 9 | Record detail modal | Tile view: tap cover once (overlay), tap again → detail modal opens with metadata |
-| 10 | Tracklist tab | In detail modal, click Tracklist tab; track rows render |
-| 11 | Edit record | Click edit; change Notes field; Save; updated value visible in table row |
-| 12 | Delete record | Click delete on row; confirm; row removed; total count decrements |
-| 13 | KPI — total | Add a record; Total Records KPI increments |
-| 14 | KPI — cost | Add record with price; Collection Cost KPI reflects it |
-| 15 | Wishlist section | Click Wishlist nav; wishlist table renders; format bar hidden |
-| 16 | Wishlist search | Click search bar / Enter; search modal opens; type query; results appear |
-| 17 | Add to wishlist | Add result; item appears in wishlist table with artist, title, year |
-| 18 | Wishlist tiles | Switch to Tile view in wishlist; cover tile renders |
-| 19 | Wishlist detail | Click wishlist item; detail modal opens; notes field editable |
-| 20 | Mark fulfilled | Check fulfilled; Save; item hidden |
-| 21 | Delete wishlist item | Open detail; Delete; item removed from list |
-| 22 | Settings — open/close | Gear icon opens modal; Close dismisses without change |
-| 23 | Settings — currency | Change currency to `$`; Save; KPI cost shows `$` symbol |
-| 24 | Export CSV | Click Export CSV; download triggers |
-| 25 | Export DB | Click Export Database; zip download triggers |
-| 26 | Import CSV | Upload a minimal valid Discogs CSV; sync diff modal opens |
-| 27 | Collection sync | Settings → Sync Collection; preview modal loads with diff sections |
-| 28 | Auth screen | Set an API key; reload page; auth screen appears; enter key; app loads |
-| 29 | KPI — value | Collection Value KPI visible and shows a digit (requires golden DB with valuations) |
-| 30 | Image carousel | Record with >1 image shows carousel arrows in detail modal (skips if single image) |
-| 31 | Use as Cover | Navigate carousel to next image; click Use as Cover; toast confirms |
-| 32 | Show Fulfilled toggle | Mark item fulfilled, then toggle Show Fulfilled — item reappears |
-| 33 | Wishlist notes persist | Edit notes in detail modal; Save; reopen; notes retained |
-| 34 | Export Images | Click Export Images; zip download triggers |
-| 35 | Export All | Click Export All; zip download triggers |
-| 36 | Import CSV — apply | Upload CSV; wait for diff; click Apply Sync; modal closes |
-| 37 | Settings — Include P&P | Toggle on; Save; cost KPI changes (skips if no p&p in golden DB) |
-| 38 | Settings — Show Valuations | Toggle off; Save; KPI hidden. Toggle on; Save; KPI visible again |
-| 39 | Settings — Hide format tags | Toggle off/on; Save each time; no error toast |
-| 40 | Danger Zone — Delete All | Unlock safety toggle; confirm; empty collection state shown |
-| 41 | Empty collection state | Blank DB loaded; "Your collection is empty" and restore button visible |
-| 42 | Danger Zone — Factory Reset | Unlock; confirm; empty state; cost KPI shows default £ |
-| 43 | Danger Zone — Clear Images | Unlock; confirm; toast confirms deletion count |
-| 44 | Danger Zone — Change Key | Unlock; enter new key; save; update headers; app still loads |
-| 45 | Danger Zone — Import DB | Unlock; upload blank.db zip; confirm; page reloads to empty collection |
+SleeveNotes modals use `opacity: 0 / pointer-events: none` for closed state — **not** `display: none`. Therefore:
+- `to_be_hidden()` / `to_be_visible()` **does not work** for open/closed modal state
+- Use `not_to_have_class(re.compile(r"\bopen\b"))` to assert a modal is closed
+- `to_be_visible()` works fine for asserting content *inside* an open modal
 
-**Golden DB curation notes:**
-- Tests 14, 29, 37: require records with `price > 0`, `valuation > 0`, and `pp > 0` respectively
-- Tests 30, 31: require at least one record with >1 cached image (add a Discogs release with multiple images)
-- Test 32: requires at least one unfulfilled wishlist item
-
----
-
-## Critical Files
-
-| File | Purpose |
-|------|---------|
-| `app.py` | Source under test — no changes needed |
-| `tests/conftest.py` | Layer 1 fixture: patches `app.DB_PATH`, calls `init_db()`, yields `AsyncClient` |
-| `tests/pytest.ini` | asyncio_mode, smoke marker, default `-m "not smoke"` |
-| `tests/requirements-test.txt` | All test dependencies |
-| `tests/.env.test` | Credentials — gitignored |
-| `tests/.env.test.example` | Committed template with blank values |
-| `tests/fixtures/golden.db` | Golden DB — gitignored, on NAS backup |
-| `tests/fixtures/blank.db` | Empty initialised DB — committed (no personal data) |
-| `tests/fixtures/edge/` | Edge case DBs — gitignored, created as needed |
-| `compose.test.yml` | Test Docker stack on port 2027 |
-| `tests/layer1/*.py` | API regression tests |
-| `tests/layer2/conftest.py` | Loads secrets, loads golden DB into test container |
-| `tests/layer2/test_smoke.py` | 28 Playwright UI tests |
-
----
-
-## Running Tests
+### Running first-run tests
 
 ```bash
-# Layer 1 only (fast, no Docker needed)
-pytest tests/layer1/ -v
+./tests/run-first-run.sh
+```
 
-# Start test container (for Layer 2)
-docker compose -f compose.test.yml up --build -d
+Runs tests 1–4 with `--full-reset --headed --slowmo=1500`. Destroys and rebuilds the container from the current local branch. Requires interactive YES confirmation.
 
-# Layer 2
-pytest tests/layer2/ -m smoke -v
+### Running the golden DB suite
 
-# Both layers
-pytest tests/ -m smoke -v
-
-# FR73-specific (on feature branch, added later)
-pytest tests/layer1/test_wishlist_versions.py tests/layer1/test_wantlist.py -v
-pytest tests/layer2/test_smoke_versions.py -m smoke -v
+```bash
+/home/kieran/.venvs/sleevenotes-tests/bin/python -m pytest tests/layer2/ -m smoke -v
 ```
 
 ---
 
-## Verification
+## Layer 2 — Test Index
 
-1. Checkout `main`
-2. `pip install -r tests/requirements-test.txt && playwright install chromium`
-3. `pytest tests/layer1/ -v` → all green, 65 tests (baseline) ✅ **Done**
-4. `docker compose -f compose.test.yml up --build -d`
-5. Populate `tests/.env.test` with test Discogs credentials
-6. `pytest tests/layer2/ -m smoke -v` → all green
-7. Checkout `feat/wishlist-versions-v2`
-8. `pytest tests/layer1/ -v` → still all green (regression confirmed)
-9. Add FR73 test files; run to validate feature branch
+### First-run suite (1–4)
+
+| # | Name | What it tests |
+|---|------|--------------|
+| 1 | `test_first_run_auth_prompt` | Blank container shows "Choose an access key" setup screen |
+| 2 | `test_first_run_set_api_key` | Set API key via UI; app loads with empty collection |
+| 3 | `test_first_run_discogs_credentials` | Enter Discogs username + token; save; field mapping section loads |
+| 4 | `test_first_run_field_mappings` | Set all 9 field mappings; save; close; reopen; verify persistence |
+
+**Status: all 4 passing ✅**
+
+### Golden DB suite (101–145)
+
+| # | Area | Test description |
+|---|------|-----------------|
+| 101 | App load | Navigate `/`; KPI bar, toolbar, main content visible |
+| 102 | Add record | Open add modal; enter Discogs ID; fetch populates fields; save; record appears |
+| 103 | Collection table | Golden DB has at least one record visible in table |
+| 104 | Collection tiles | Switch to Tile view; tile renders with artist label |
+| 105 | Column sort | Click Artist header; asc → desc → cleared |
+| 106 | Group by artist | Enable Group by Artist; artist heading rows appear |
+| 107 | Format filter bar | Click a format tag; table filters to matching records |
+| 108 | Search bar | Type partial artist name; table filters live |
+| 109 | Record detail modal | Tile: tap → overlay; tap again → detail modal with metadata |
+| 110 | Tracklist tab | In detail modal, click Tracklist tab; track rows render |
+| 111 | Edit record | Edit Notes; Save; reopen edit form; value retained |
+| 112 | Delete record | Delete a record; row removed; count decrements |
+| 113 | KPI — total | Total Records KPI visible and non-zero |
+| 114 | KPI — cost | Collection Cost KPI shows currency symbol and value > 0 |
+| 115 | Wishlist section | Click Wishlist nav; wishlist table renders; format bar hidden |
+| 116 | Wishlist search | Open search modal; type query; results appear |
+| 117 | Add to wishlist | Add a result; item appears in wishlist table |
+| 118 | Wishlist tiles | Switch to Tile view in wishlist; cover tile renders |
+| 119 | Wishlist detail | Click item; detail modal opens; notes field editable |
+| 120 | Mark fulfilled | Check fulfilled; Save; item hidden from default view |
+| 121 | Delete wishlist item | Open detail; Delete; item removed |
+| 122 | Settings — open/close | Gear icon opens modal; Close dismisses |
+| 123 | Settings — currency | Change to `$`; Save; KPI cost shows `$` |
+| 124 | Export CSV | Export CSV; download triggers |
+| 125 | Export DB | Export Database; zip download triggers |
+| 126 | Import CSV | Upload valid Discogs CSV; sync diff modal opens |
+| 127 | Collection sync | Sync Collection; preview modal loads with content |
+| 128 | Auth screen | Set API key; reload; auth screen appears; enter key; app loads |
+| 129 | KPI — value | Collection Value KPI visible with a digit |
+| 130 | Image carousel | Record with >1 image shows carousel arrows |
+| 131 | Use as Cover | Navigate carousel; click Use as Cover; toast confirms |
+| 132 | Show Fulfilled toggle | Mark fulfilled; toggle Show Fulfilled; item reappears |
+| 133 | Wishlist notes persist | Edit notes; Save; reopen; notes retained |
+| 134 | Export Images | Export Images; zip download triggers |
+| 135 | Export All | Export All; zip download triggers |
+| 136 | Import CSV — apply | Upload CSV; apply sync; modal closes |
+| 137 | Settings — Include P&P | Toggle on; Save; cost KPI changes |
+| 138 | Settings — Show Valuations | Toggle off; KPI hidden. Toggle on; KPI visible |
+| 139 | Settings — Hide format tags | Toggle off; Album tag visible. Toggle on; tag hidden |
+| 140 | Danger Zone — Delete All | Confirm; empty collection state shown |
+| 141 | Empty collection state | "Your collection is empty" and restore button visible |
+| 142 | Danger Zone — Factory Reset | Confirm; empty state; cost KPI shows `£` |
+| 143 | Danger Zone — Clear Images | Confirm; toast shows deletion count |
+| 144 | Danger Zone — Change Key | Enter new key; save; app still loads |
+| 145 | Danger Zone — Import DB | Upload blank.sql zip; page reloads to empty collection |
+
+**Status: not yet run against current golden DB — next step.**
+
+---
+
+## Layer 1 — API Tests
+
+**65 tests across 7 files — all passing. ✅**
+
+All 32 API endpoints covered. See `tests/TEST_INDEX.md` for full reference.
+
+---
+
+## Dependencies
+
+Install once:
+```bash
+/home/kieran/.venvs/sleevenotes-tests/bin/pip install -r tests/requirements-test.txt
+/home/kieran/.venvs/sleevenotes-tests/bin/playwright install chromium
+```
+
+Python venv: `/home/kieran/.venvs/sleevenotes-tests/`
 
 ---
 
 ## Next Steps
 
-1. ~~**Review `tests/TEST_INDEX.md` for completeness**~~ ✅ **Done** — all 32 API endpoints covered across 65 Layer 1 tests; `TEST_INDEX.md` updated to match
-2. ~~**Expand Layer 2 coverage**~~ ✅ **Done** — 45 smoke tests (up from 28); gap analysis identified missing areas; `blank.db` fixed to SQL text format; `TEST_INDEX.md` updated to match
-3. **Set up test Discogs account** — create a throwaway Discogs account; populate `tests/.env.test` with its username and token
-3. **Start test container and curate golden DB** — `docker compose -f compose.test.yml up --build -d`; use the UI at `:2027` to add a realistic spread of records and wishlist items using the test account; export via `/api/export/db` and save to `tests/fixtures/golden.db`
-4. **Run Layer 2 smoke tests** — `pytest tests/layer2/ -m smoke -v`; fix any selector mismatches against the live UI
-5. **Run Layer 1 baseline against `feat/wishlist-versions-v2`** — checkout the FR73 branch; `pytest tests/layer1/ -v` should still be all green (regression check)
-6. **Add FR73-specific tests** — `tests/layer1/test_wishlist_versions.py`, `tests/layer1/test_wantlist.py`, `tests/layer2/test_smoke_versions.py`
-7. **Merge and release** — once all tests pass on both branches, merge `feat/regression-tests` to `main`; the workflow then repeats from step 5 for FR73
+1. ~~Layer 1 API tests (65 tests, all endpoints)~~ ✅
+2. ~~Layer 2 efficacy review and fixes~~ ✅
+3. ~~First-run test suite (tests 1–4)~~ ✅ — all passing
+4. ~~Golden DB curation~~ ✅ — `tests/fixtures/golden.sql` saved from live
+5. **Run tests 101–145 against golden DB** — fix any selector mismatches or assertion gaps
+6. **Add SleeveNotes to NoveriaBackup.sh** — pause container, tar `/data` volume, unpause; currently not backed up
+7. **Merge `feat/regression-tests` to `main`** once 101–145 are passing
+8. **Regression check on `feat/wishlist-versions-v2`** — checkout branch; run Layer 1; all should still be green
+9. **Add FR73-specific tests** — `test_wishlist_versions.py`, `test_wantlist.py`, `test_smoke_versions.py`
