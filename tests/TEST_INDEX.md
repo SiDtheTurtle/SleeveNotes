@@ -176,3 +176,20 @@ Run with: `pytest tests/layer2/ -m smoke -v`
 | 26 | `test_import_csv_opens_diff_modal` | Uploading a CSV file opens the sync diff modal | Diff modal becomes visible |
 | 27 | `test_collection_sync_preview` | Sync Collection in settings loads the preview modal | Diff modal and preview content visible |
 | 28 | `test_auth_screen` | Setting an API key forces the auth screen on reload | Auth screen visible; entering the correct key loads the app |
+| 29 | `test_kpi_collection_value` | Collection Value KPI is visible and populated | KPI text contains at least one digit (golden DB must have records with valuations) |
+| 30 | `test_record_detail_carousel` | Records with multiple images show carousel arrows in the detail modal | Prev/next arrows visible; skips if golden DB record has only one image |
+| 31 | `test_record_set_cover` | Navigating the carousel and clicking Use as Cover updates the cover | "Cover updated" toast appears; skips if record has only one image |
+| 32 | `test_wishlist_show_fulfilled_toggle` | Show Fulfilled toggle reveals items hidden after marking fulfilled | After toggling on, row count returns to the value before fulfilment |
+| 33 | `test_wishlist_save_notes` | Notes saved in the wishlist detail modal persist after close and reopen | Reopened modal shows the previously entered text |
+| 34 | `test_export_images_download` | Export Images button triggers a file download | A `.zip` file download begins |
+| 35 | `test_export_all_download` | Export All button triggers a file download | A `.zip` file download begins |
+| 36 | `test_import_csv_apply_sync` | Uploading a CSV and clicking Apply Sync applies changes to SN | Sync modal closes after apply |
+| 37 | `test_settings_include_pp` | Include P&P toggle changes the Collection Cost KPI | Cost KPI value differs after toggling on (skips if no records with p&p) |
+| 38 | `test_settings_show_valuations` | Show Valuations toggle hides and restores the Collection Value KPI | KPI stat hidden after toggle off; restored after toggle on |
+| 39 | `test_settings_hide_format_tags` | Hide format tags toggle saves without error | No error toast after toggling off and on with Save |
+| 40 | `test_danger_zone_delete_all` | Delete All Records wipes the collection | Empty collection state shown after confirm |
+| 41 | `test_empty_collection_restore_button` | Blank DB shows the empty state with a restore-from-backup button | "Your collection is empty" text and restore button visible |
+| 42 | `test_danger_zone_factory_reset` | Factory Reset wipes records and restores default settings | Empty state shown; cost KPI shows default £ symbol |
+| 43 | `test_danger_zone_clear_images` | Clear Image Cache deletes cached covers | Toast confirms deletion count |
+| 44 | `test_danger_zone_change_access_key` | Changing the access key via Danger Zone takes effect | Toast confirms update; app loads with new key injected |
+| 45 | `test_danger_zone_import_db` | Import DB via Danger Zone replaces the database | Page reloads to empty collection state after importing blank DB |

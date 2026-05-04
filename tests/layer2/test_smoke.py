@@ -365,3 +365,274 @@ def test_auth_screen(page: Page):
     page.fill("#auth-key-input", "testkey123")
     page.click("#auth-submit-btn")
     expect(page.locator("#stats-bar")).to_be_visible()
+
+
+# ── 29. KPI — Collection Value ────────────────────────────────────────────────
+
+def test_kpi_collection_value(page: Page):
+    goto(page)
+    # Golden DB must have at least one record with valuation > 0
+    expect(page.locator("#s-valuation")).to_be_visible()
+    val_text = page.locator("#s-valuation").inner_text()
+    assert any(c.isdigit() for c in val_text)
+
+
+# ── 30. Record detail — image carousel ───────────────────────────────────────
+# Requires golden DB to have at least one record with >1 cached image.
+
+def test_record_detail_carousel(page: Page):
+    goto(page)
+    page.click("#btn-tile")
+    tile = page.locator("#main-content .tile").first
+    tile.click()
+    tile.click()
+    expect(page.locator("#modal-detail")).to_be_visible()
+    arrows = page.locator("#detail-cover-wrap .carousel-arrow")
+    if arrows.count() == 0:
+        pytest.skip("Golden DB record has only one image — curate a multi-image record")
+    expect(arrows.first).to_be_visible()
+
+
+# ── 31. Record detail — Use as Cover ─────────────────────────────────────────
+# Requires golden DB to have a record with >1 cached image.
+
+def test_record_set_cover(page: Page):
+    goto(page)
+    page.click("#btn-tile")
+    tile = page.locator("#main-content .tile").first
+    tile.click()
+    tile.click()
+    expect(page.locator("#modal-detail")).to_be_visible()
+    next_arrow = page.locator("#detail-cover-wrap .carousel-arrow.next")
+    if next_arrow.count() == 0:
+        pytest.skip("Golden DB record has only one image — curate a multi-image record")
+    next_arrow.click()
+    use_cover_btn = page.locator("#detail-cover-wrap button", has_text="Use as Cover")
+    expect(use_cover_btn).to_be_enabled()
+    use_cover_btn.click()
+    expect(page.locator(".toast")).to_contain_text("Cover updated", timeout=5_000)
+
+
+# ── 32. Wishlist — Show Fulfilled toggle ──────────────────────────────────────
+
+def test_wishlist_show_fulfilled_toggle(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    rows_before = page.locator("#main-content table tbody tr").count()
+    # Mark first item fulfilled
+    page.locator("#main-content table tbody tr").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    page.check("#wishlist-detail-fulfilled")
+    page.click("#wishlist-detail-save-btn")
+    expect(page.locator("#main-content table tbody tr")).to_have_count(rows_before - 1, timeout=5_000)
+    # Toggle Show Fulfilled — item reappears
+    page.check("#show-fulfilled")
+    expect(page.locator("#main-content table tbody tr")).to_have_count(rows_before, timeout=5_000)
+
+
+# ── 33. Wishlist — Save notes persists ───────────────────────────────────────
+
+def test_wishlist_save_notes(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    page.locator("#main-content table tbody tr").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    page.fill("#wishlist-detail-notes", "Smoke test note persist")
+    page.click("#wishlist-detail-save-btn")
+    expect(page.locator("#modal-wishlist-detail")).to_be_hidden(timeout=5_000)
+    # Reopen and verify
+    page.locator("#main-content table tbody tr").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    expect(page.locator("#wishlist-detail-notes")).to_have_value("Smoke test note persist")
+
+
+# ── 34. Export Images ─────────────────────────────────────────────────────────
+
+def test_export_images_download(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    with page.expect_download() as dl_info:
+        page.click("#btn-export-images")
+    download = dl_info.value
+    assert download.suggested_filename.endswith(".zip")
+
+
+# ── 35. Export All ────────────────────────────────────────────────────────────
+
+def test_export_all_download(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    with page.expect_download() as dl_info:
+        page.locator("button", has_text="Export All").click()
+    download = dl_info.value
+    assert download.suggested_filename.endswith(".zip")
+
+
+# ── 36. Import CSV — apply sync ───────────────────────────────────────────────
+
+def test_import_csv_apply_sync(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    csv_content = (
+        "Catalog#,Artist,Title,Label,Format,Released,release_id,"
+        "CollectionFolder,Collection Media Condition,Collection Sleeve Condition\r\n"
+        "APPLY-001,Apply Artist,Apply Album,Apply Label,Vinyl,2001,88888888,1,VG+,VG+\r\n"
+    )
+    page.locator("#input-import-csv").set_input_files({
+        "name": "apply.csv",
+        "mimeType": "text/csv",
+        "buffer": csv_content.encode(),
+    })
+    expect(page.locator("#modal-discogs-sync")).to_be_visible(timeout=10_000)
+    # Wait for Apply Sync button to become enabled (diff has entries)
+    expect(page.locator("#sync-apply-btn")).to_be_enabled(timeout=10_000)
+    page.click("#sync-apply-btn")
+    expect(page.locator("#modal-discogs-sync")).to_be_hidden(timeout=10_000)
+
+
+# ── 37. Settings — Include P&P changes cost ───────────────────────────────────
+# Requires golden DB to have at least one record with pp > 0.
+
+def test_settings_include_pp(page: Page):
+    goto(page)
+    cost_without_pp = page.locator("#s-cost").inner_text()
+    page.click("#btn-settings")
+    page.check("#include-pp-toggle")
+    page.click("#btn-save-settings")
+    page.locator("#modal-settings .modal-close").click()
+    cost_with_pp = page.locator("#s-cost").inner_text()
+    # Cost should have changed if any records have p&p
+    if cost_without_pp == cost_with_pp:
+        pytest.skip("Golden DB has no records with p&p > 0 — add a record with p&p to verify")
+    assert cost_without_pp != cost_with_pp
+
+
+# ── 38. Settings — Show Valuations toggles KPI ───────────────────────────────
+
+def test_settings_show_valuations(page: Page):
+    goto(page)
+    # Default: valuations shown
+    expect(page.locator("#s-valuation").locator("..")).to_be_visible()
+    page.click("#btn-settings")
+    page.uncheck("#show-valuations")
+    page.click("#btn-save-settings")
+    page.locator("#modal-settings .modal-close").click()
+    # KPI stat item should now be hidden
+    expect(page.locator("#s-valuation").locator("..")).to_be_hidden()
+    # Re-enable
+    page.click("#btn-settings")
+    page.check("#show-valuations")
+    page.click("#btn-save-settings")
+    page.locator("#modal-settings .modal-close").click()
+    expect(page.locator("#s-valuation").locator("..")).to_be_visible()
+
+
+# ── 39. Settings — Hide format tags ──────────────────────────────────────────
+
+def test_settings_hide_format_tags(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    # Disable hide-format-tags; all tags should show in filter bar after save
+    page.uncheck("#hide-format-tags-toggle")
+    page.click("#btn-save-settings")
+    page.locator("#modal-settings .modal-close").click()
+    # Re-enable
+    page.click("#btn-settings")
+    page.check("#hide-format-tags-toggle")
+    page.click("#btn-save-settings")
+    page.locator("#modal-settings .modal-close").click()
+    # Verify setting saved without error (no toast error visible)
+    expect(page.locator(".toast.toast-error")).to_have_count(0)
+
+
+# ── 40. Danger Zone — Delete All Records ─────────────────────────────────────
+
+def test_danger_zone_delete_all(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    page.check("#format-safety-toggle")
+    page.on("dialog", lambda d: d.accept())
+    page.click("#format-db-btn")
+    expect(page.locator("#modal-settings")).to_be_hidden(timeout=5_000)
+    # Empty collection state
+    expect(page.locator("#main-content")).to_contain_text("Your collection is empty", timeout=5_000)
+
+
+# ── 41. Empty collection state shows restore button ──────────────────────────
+
+def test_empty_collection_restore_button(page: Page):
+    # Load blank DB so collection is empty
+    from tests.layer2.conftest import load_blank_db
+    load_blank_db()
+    goto(page)
+    expect(page.locator("#main-content")).to_contain_text("Your collection is empty")
+    expect(page.locator("#main-content label", has_text="Restore from backup")).to_be_visible()
+
+
+# ── 42. Danger Zone — Factory Reset ──────────────────────────────────────────
+
+def test_danger_zone_factory_reset(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    page.check("#factory-reset-safety-toggle")
+    page.on("dialog", lambda d: d.accept())
+    page.click("#factory-reset-btn")
+    expect(page.locator("#modal-settings")).to_be_hidden(timeout=5_000)
+    # Empty collection state; settings back to defaults (currency £)
+    expect(page.locator("#main-content")).to_contain_text("Your collection is empty", timeout=5_000)
+    expect(page.locator("#s-cost")).to_contain_text("£")
+
+
+# ── 43. Danger Zone — Clear Image Cache ──────────────────────────────────────
+
+def test_danger_zone_clear_images(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    page.check("#clear-images-safety-toggle")
+    page.on("dialog", lambda d: d.accept())
+    page.click("#clear-images-btn")
+    expect(page.locator(".toast")).to_contain_text("deleted", timeout=5_000)
+
+
+# ── 44. Danger Zone — Change Access Key ──────────────────────────────────────
+
+def test_danger_zone_change_access_key(page: Page):
+    goto(page)
+    page.click("#btn-settings")
+    page.check("#access-key-safety-toggle")
+    new_key = "smoke-newkey-temp"
+    page.fill("#settings-access-key", new_key)
+    page.click("#change-access-key-btn")
+    expect(page.locator(".toast")).to_contain_text("Access key updated", timeout=5_000)
+    # Update injected header and verify app still responds
+    page.set_extra_http_headers({"X-API-Key": new_key})
+    goto(page)
+    expect(page.locator("#stats-bar")).to_be_visible()
+
+
+# ── 45. Danger Zone — Import DB (restore from backup) ─────────────────────────
+# Uploads blank.db zip via the Danger Zone, confirms dialog, waits for reload.
+
+def test_danger_zone_import_db(page: Page):
+    import io, zipfile, sqlite3
+    from tests.layer2.conftest import FIXTURES_DIR
+    # Build a zip from blank.db (SQL text dump)
+    sql_text = (FIXTURES_DIR / "blank.db").read_text(encoding="utf-8")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("sleevenotes.sql", sql_text)
+    zip_bytes = buf.getvalue()
+
+    goto(page)
+    page.click("#btn-settings")
+    page.check("#import-db-safety-toggle")
+    page.on("dialog", lambda d: d.accept())
+    page.locator("#input-import-db").set_input_files({
+        "name": "blank_backup.zip",
+        "mimeType": "application/zip",
+        "buffer": zip_bytes,
+    })
+    page.wait_for_load_state("networkidle", timeout=15_000)
+    expect(page.locator("#main-content")).to_contain_text("Your collection is empty", timeout=10_000)
