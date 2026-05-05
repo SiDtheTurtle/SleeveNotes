@@ -138,16 +138,15 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh SQLi
 
 ## Layer 2 — Playwright Smoke Tests
 
-Browser-level tests that run against the local dev container on port 2026. Require `tests/.env.test` with test Discogs credentials. A golden database (`tests/fixtures/golden.sql`) is loaded before each test.
+Browser-level tests that run against the local dev container on port 2026. Require `tests/.env.test` with test credentials. All tests live in a single sequential journey in `layer2/test_smoke.py`.
 
-Run with: `pytest tests/layer2/ -m smoke -v`  
-First-run suite: `./tests/run-first-run.sh` (rebuilds container from current branch)
+Run with: `./tests/run-first-run.sh [start]` — accepts an optional start number to resume mid-run.
 
 ---
 
 ### First-run Tests — `layer2/test_smoke.py` (tests 1–4)
 
-Require `--full-reset`. Run via `./tests/run-first-run.sh` only. Test the initial setup flow on a blank container with no API key or credentials configured.
+Require `--full-reset`. Test the initial setup flow on a blank container with no API key or credentials configured.
 
 | # | Test | Purpose | Expected outcome |
 |---|------|---------|-----------------|
@@ -160,20 +159,32 @@ Require `--full-reset`. Run via `./tests/run-first-run.sh` only. Test the initia
 
 ---
 
-### Smoke Tests — `layer2/test_smoke.py` (tests 101–145)
+### Collection Home — `layer2/test_smoke.py` (tests 5–10)
 
-Golden DB loaded before each test. Run with `pytest tests/layer2/ -m smoke -v`.
+Golden DB (`tests/fixtures/golden.zip`) restored via `/api/import/all` before test 5. Tests 6–10 accumulate on that state.
 
 | # | Test | Purpose | Expected outcome |
 |---|------|---------|-----------------|
+| 5 | `test_collection_home_loads` | Golden DB restored; collection screen renders with real data | Collection nav active; KPI bar populated; at least one table row |
+| 6 | `test_collection_tile_view` | Switch to Tile view and back to Table | Tiles visible with overlay artist label; table restored on return |
+| 7 | `test_column_sort` | Click Artist column header to cycle sort | asc (▲) → desc (▼) → cleared; `sorted` class tracks state |
+| 8 | `test_group_by_artist` | Enable Group by Artist and disable it | Artist group headers appear; disappear after second toggle — **ungroup assertion currently failing** |
+| 9 | `test_format_filter_bar` | Click a format tag to filter the table | Visible rows all contain the selected tag |
+| 10 | `test_search_bar_filters` | Type in the search bar to filter records | Non-matching search returns zero rows; clearing restores full list |
+
+**Status: tests 5–7 passing ✅ · test 8 partially failing (ungroup step) 🔴 · tests 9–10 not yet confirmed**
+
+---
+
+### Remaining to port — `layer2/test_smoke.py` (old 101–145 numbering)
+
+These tests are yet to be rewritten as part of the sequential journey. The table below serves as the porting backlog.
+
+| Old # | Test | Purpose | Expected outcome |
+|-------|------|---------|-----------------|
 | 101 | `test_app_loads` | App shell renders correctly on load | KPI bar, toolbar, and main content area all visible |
 | 102 | `test_add_record` | Full add-record flow via Discogs lookup | Enter a Discogs ID → Fetch populates fields → Save → modal closes |
 | 103 | `test_collection_table_shows_records` | Collection table renders real data from the golden DB | At least one row visible in the table |
-| 104 | `test_collection_tile_view` | Switching to tile view renders cover tiles | Tiles visible, each with an artist label |
-| 105 | `test_column_sort` | Clicking a column header sorts the table | Artist header cycles asc → desc → cleared |
-| 106 | `test_group_by_artist` | Group by artist toggle changes the table layout | Artist heading rows appear between record rows |
-| 107 | `test_format_filter_bar` | Clicking a format tag filters the table | Only records matching the tag remain visible |
-| 108 | `test_search_bar_filters` | Typing in the search bar filters records live | Non-matching search returns zero rows; clearing restores full list |
 | 109 | `test_record_detail_modal` | Tapping a tile twice opens the detail modal | Modal visible with a non-empty title |
 | 110 | `test_tracklist_tab` | Tracklist tab in the detail modal is reachable | Tracklist content area becomes visible |
 | 111 | `test_edit_record` | Editing a record's notes persists the change | Notes field retains updated value on reopen |
@@ -194,7 +205,7 @@ Golden DB loaded before each test. Run with `pytest tests/layer2/ -m smoke -v`.
 | 126 | `test_import_csv_opens_diff_modal` | Uploading a CSV file opens the sync diff modal | Diff modal becomes visible |
 | 127 | `test_collection_sync_preview` | Sync Collection in settings loads the preview modal | Diff modal and preview content visible |
 | 128 | `test_auth_screen` | Setting an API key forces the auth screen on reload | Auth screen visible; entering the correct key loads the app |
-| 129 | `test_kpi_collection_value` | Collection Value KPI is visible and populated | KPI text contains at least one digit (golden DB must have records with valuations) |
+| 129 | `test_kpi_collection_value` | Collection Value KPI is visible and populated | KPI text contains at least one digit |
 | 130 | `test_record_detail_carousel` | Records with multiple images show carousel arrows in the detail modal | Prev/next arrows visible; skips if golden DB record has only one image |
 | 131 | `test_record_set_cover` | Navigating the carousel and clicking Use as Cover updates the cover | "Cover updated" toast appears; skips if record has only one image |
 | 132 | `test_wishlist_show_fulfilled_toggle` | Show Fulfilled toggle reveals items hidden after marking fulfilled | After toggling on, row count returns to the value before fulfilment |

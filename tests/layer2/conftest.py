@@ -32,11 +32,13 @@ def browser_context(browser, browser_context_args):
 
 
 @pytest.fixture
-def page(browser_context):
+def page(browser_context, request):
     """Fresh page (tab) per test within the shared session context."""
-    page = browser_context.new_page()
-    yield page
-    page.close()
+    p = browser_context.new_page()
+    if request.config.getoption("--inject-api-key") and SN_TEST_API_KEY:
+        p.add_init_script(f"localStorage.setItem('sn_apiKey', JSON.stringify({repr(SN_TEST_API_KEY)}))")
+    yield p
+    p.close()
 
 
 def pytest_addoption(parser):
@@ -47,8 +49,14 @@ def pytest_addoption(parser):
         help=(
             "Destroy and rebuild the test container + volume before running. "
             "Requires interactive confirmation. Leaves the container in a blank-DB state "
-            "so first-run tests (1, 2) can exercise the setup flow."
+            "so first-run tests (1–4) can exercise the setup flow."
         ),
+    )
+    parser.addoption(
+        "--inject-api-key",
+        action="store_true",
+        default=False,
+        help="Inject the app API key into the container at session start. Use when starting mid-session from test 3 onwards.",
     )
 
 
@@ -88,6 +96,9 @@ def maybe_full_reset(request):
         ["docker", "compose", "-f", compose_file, "-f", compose_override, "down", "-v"],
         check=True,
     )
+    # Explicitly remove the named volume — compose down -v does not remove
+    # volumes with an explicit `name:` set in the compose file.
+    subprocess.run(["docker", "volume", "rm", "sleevenotes_data"], check=False)
     subprocess.run(
         ["docker", "compose", "-f", compose_file, "-f", compose_override, "up", "--build", "-d"],
         check=True,
@@ -106,28 +117,46 @@ def maybe_full_reset(request):
     pytest.exit("Test container did not become healthy within 60 s after full reset.")
 
 
+
 @pytest.fixture(scope="session", autouse=True)
-def configure_test_container(maybe_full_reset):
+def configure_test_container(request, maybe_full_reset):
     """Load golden DB and credentials into the test container once per session.
 
     Depends on maybe_full_reset so it always runs after the container is ready.
-    Skips (with a warning) if golden.sql does not exist yet — tests 1 and 2
-    manage their own state and do not need it.
+    Skips if --full-reset was passed — the container must stay blank for the
+    first_run tests; test 5 loads the golden DB explicitly via restore_golden_db.
+    Skips (with a warning) if golden.zip does not exist yet.
     """
-    golden = FIXTURES_DIR / "golden.sql"
-    if not golden.exists():
+    if request.config.getoption("--inject-api-key"):
+        return
+    if request.config.getoption("--full-reset"):
+        return
+    if not (FIXTURES_DIR / "golden.zip").exists():
         import warnings
         warnings.warn(
-            "golden.sql not found — tests 101–145 will fail. "
-            "Curate the golden DB and export via /api/export/db first.",
+            "golden.zip not found — tests 5+ will fail. "
+            "Curate the golden DB and export via /api/export/all first.",
             stacklevel=2,
         )
         return
-    _load_db(golden)
-    _configure_credentials()
+    _restore_golden()
+
+
+def _restore_golden():
+    """Restore DB + images from golden.zip via /api/import/all."""
+    golden_zip = FIXTURES_DIR / "golden.zip"
+    with golden_zip.open("rb") as f:
+        r = httpx.post(
+            f"{BASE_URL}/api/import/all",
+            files={"file": ("golden.zip", f, "application/zip")},
+            headers=api_headers(),
+            timeout=60,
+        )
+    r.raise_for_status()
 
 
 def _load_db(db_path: Path):
+    """Restore DB only from a .sql file via /api/import/db. Used for blank DB."""
     import zipfile, io
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
@@ -161,22 +190,13 @@ def load_blank_db():
     # Intentionally does NOT call _configure_credentials — blank state has no key set.
 
 
-@pytest.fixture(autouse=True)
-def restore_golden_db(request):
-    """Restore golden DB before every smoke test so each test starts clean.
-
-    Skips for first_run-marked tests — those rely on the blank container state
-    left by --full-reset and must not have the golden DB loaded over them.
-    Skips silently if golden.sql does not exist yet.
-    """
-    if request.node.get_closest_marker("first_run"):
-        yield
-        return
-    golden = FIXTURES_DIR / "golden.sql"
-    if golden.exists():
-        _load_db(golden)
-        _configure_credentials()
-    yield
+@pytest.fixture
+def restore_golden_db():
+    """Restore DB + images from golden.zip via /api/import/all.
+    Declare as a parameter on any test that needs a known-good state before it runs."""
+    if not (FIXTURES_DIR / "golden.zip").exists():
+        pytest.skip("golden.zip not found — curate the golden DB first.")
+    _restore_golden()
 
 
 @pytest.fixture(autouse=True)
