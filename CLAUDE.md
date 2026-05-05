@@ -69,7 +69,7 @@ docker exec sleevenotes rm /data/sleevenotes.db
 | `year` | INTEGER | Release year |
 | `format` | TEXT | e.g. "Vinyl, LP, Album" |
 | `cover_file` | TEXT | Cached image filename in `/data/images/` |
-| `is_new` | INTEGER | NULL = unknown, 0 = Pre-Owned, 1 = New |
+| `is_new` | TEXT | NULL = unknown, `"Pre-Owned"` = pre-owned, `"New"` = new |
 | `curr_cond` | TEXT | S/M/NM/VG+/VG/G+/G/F/P — media condition |
 | `sleeve_cond` | TEXT | Same scale — sleeve condition |
 | `retailer` | TEXT | |
@@ -338,7 +338,7 @@ S (Sealed) → M → NM → VG+ → VG → G+ → G → F → P
 - **Date storage:** Always YYYY-MM-DD in DB. `normalise_date()` (backend) and `toISODate()` (frontend) handle DD/MM/YYYY on the way in. `fmtDate()` converts to DD/MM/YYYY for display only.
 - **Cover images:** Cached on first fetch; re-download skipped if file already exists. Multiple images per release stored in `images` table (up to 8). User can set cover via detail modal.
 - **Valuation:** Per-record, sourced from `/marketplace/stats/{id}` on fetch/refresh. Summed for the Collection Value KPI.
-- **is_new:** Three-state — `NULL` (unknown/not set, no badge shown), `0` (Pre-Owned), `1` (New). Records imported without a mapped `is_new` field get NULL.
+- **is_new:** Three-state — `NULL` (unknown/not set, no badge shown), `"Pre-Owned"`, `"New"`. Stored as TEXT. Records imported without a mapped `is_new` field get NULL.
 - **Rate limiting:** Single process-wide broker (`_discogs_acquire()`) enforces 55 req/min. All Discogs calls use `discogs_get()` / `discogs_post()`. No manual sleep/batch logic.
 - **Background refresh:** After collection sync creates new records, `_refresh_new_records` runs as a FastAPI background task. Frontend calls `startCoverPoll(n)` to reload until covers appear.
 - **SPA routing:** `GET /{full_path:path}` serves static files or falls back to `index.html`. API routes are defined before this catch-all.

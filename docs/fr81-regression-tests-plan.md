@@ -195,9 +195,18 @@ Full run destroys and rebuilds the container. Requires interactive YES confirmat
 | 5 | Collection home | Golden DB restored; KPI bar populated; at least one table row | ✅ |
 | 6 | Tile view | Switch to Tile; tiles visible with overlay artist; switch back to Table | ✅ |
 | 7 | Column sort | Click Artist header; asc (▲) → desc (▼) → cleared; `sorted` class tracks state | ✅ |
-| 8 | Group by artist | Enable Group by Artist; artist heading rows appear; disable; rows gone | 🔴 ungroup step failing |
-| 9 | Format filter bar | Click a format tag; visible rows all contain the tag | not yet confirmed |
-| 10 | Search bar | Type partial artist name; table filters live; clear restores full list | not yet confirmed |
+| 8 | Group by artist | Enable Group by Artist; group-header rows appear; disable; rows gone | ✅ |
+| 9 | Format filter bar | Click a format tag; visible rows all contain the tag | ✅ |
+| 10 | Search bar | Type partial artist name; table filters live; clear restores full list | ✅ |
+| 11 | Surprise Me | Click Surprise Me; detail modal opens | ✅ |
+| 12 | Record detail fields | Open London Grammar — If You Wait; all fields populated; cover and carousel present | ✅ |
+| 13 | Tracklist with headings | Open Raye — This Music May Contain Hope; switch to Tracklist tab; track rows and heading rows present | ✅ |
+| 14 | Record modal navigation | Open Raye; click next arrow; modal updates to Fleetwood Mac — Rumours | ✅ |
+| 15 | Cover image lightbox | Open Raye; click cover image; lightbox opens with correct src | ✅ |
+| 16 | Sync Metadata | Open Raye edit form; assert fetch-btn says "Sync Metadata"; click it; discogs-preview card appears with artist | ✅ |
+| 17 | Sync Custom Fields | Open Raye edit form; click Sync Custom Fields; diff modal opens and preview content loads | ✅ |
+| 18 | Edit record fields | Edit all 9 purchase/condition fields on Raye; save; reopen detail; assert all 9 values persisted | ✅ |
+| 19 | Use as Cover | Open Raye; carousel arrow to image 2; Use as Cover; toast confirms; button disabled for new cover | ✅ |
 
 **Remaining to port from old suite (backlog):**
 
@@ -205,11 +214,7 @@ Full run destroys and rebuilds the container. Requires interactive YES confirmat
 |-------|------|-----------------|
 | 102 | Add record | Open add modal; enter Discogs ID; fetch populates fields; save; record appears |
 | 109 | Record detail modal | Tile: tap → overlay; tap again → detail modal with metadata |
-| 110 | Tracklist tab | In detail modal, click Tracklist tab; track rows render |
-| 111 | Edit record | Edit Notes; Save; reopen edit form; value retained |
 | 112 | Delete record | Delete a record; row removed; count decrements |
-| 113 | KPI — total | Total Records KPI visible and non-zero |
-| 114 | KPI — cost | Collection Cost KPI shows currency symbol and value > 0 |
 | 115 | Wishlist section | Click Wishlist nav; wishlist table renders; format bar hidden |
 | 116 | Wishlist search | Open search modal; type query; results appear |
 | 117 | Add to wishlist | Add a result; item appears in wishlist table |
@@ -224,9 +229,6 @@ Full run destroys and rebuilds the container. Requires interactive YES confirmat
 | 126 | Import CSV | Upload valid Discogs CSV; sync diff modal opens |
 | 127 | Collection sync | Sync Collection; preview modal loads with content |
 | 128 | Auth screen | Set API key; reload; auth screen appears; enter key; app loads |
-| 129 | KPI — value | Collection Value KPI visible with a digit |
-| 130 | Image carousel | Record with >1 image shows carousel arrows |
-| 131 | Use as Cover | Navigate carousel; click Use as Cover; toast confirms |
 | 132 | Show Fulfilled toggle | Mark fulfilled; toggle Show Fulfilled; item reappears |
 | 133 | Wishlist notes persist | Edit notes; Save; reopen; notes retained |
 | 134 | Export Images | Export Images; zip download triggers |
@@ -271,9 +273,11 @@ Python venv: `/home/kieran/.venvs/sleevenotes-tests/`
 3. ~~First-run test suite (tests 1–4)~~ ✅ — all passing
 4. ~~Golden DB curation~~ ✅ — `tests/fixtures/golden.zip` (SQL + images) exported from live
 5. ~~Mid-session restart~~ ✅ — `--inject-api-key` seeds browser localStorage; `JSON.stringify` required to match `lsSet` encoding
-6. **Fix test 8 ungroup assertion** — `test_group_by_artist` group step passes, ungroup step failing
-7. **Port remaining backlog tests (9–10, then 102–145)** as sequential journey tests
-8. **Add SleeveNotes to NoveriaBackup.sh** — pause container, tar `/data` volume, unpause; currently not backed up
-9. **Merge `feat/regression-tests` to `main`** once suite is stable
-10. **Regression check on `feat/wishlist-versions-v2`** — checkout branch; run Layer 1; all should still be green
-11. **Add FR73-specific tests** — `test_wishlist_versions.py`, `test_wantlist.py`, `test_smoke_versions.py`
+6. ~~Fix test 8 ungroup assertion~~ ✅ — click `.toggle-track`, use `.group-header` selector
+7. ~~Tests 9–15~~ ✅ — format filter bar, search bar, Surprise Me, record detail fields, tracklist, navigation, lightbox all passing
+8. ~~Run tests 16–19 and mark ✅~~ ✅ — sync metadata, sync custom fields, edit fields, use as cover
+9. **Port remaining backlog tests (102–145)** as sequential journey tests — audit selectors against HTML before writing
+9. **Add SleeveNotes to NoveriaBackup.sh** — pause container, tar `/data` volume, unpause; currently not backed up
+10. **Merge `feat/regression-tests` to `main`** once suite is stable
+11. **Regression check on `feat/wishlist-versions-v2`** — checkout branch; run Layer 1; all should still be green
+12. **Add FR73-specific tests** — `test_wishlist_versions.py`, `test_wantlist.py`, `test_smoke_versions.py`
