@@ -25,7 +25,7 @@ tests/
   .env.test                # local secrets — gitignored
   .env.test.example        # committed template with blank values
   fixtures/
-    golden.sql             # golden DB (SQL text dump) — gitignored (personal data)
+    golden.zip             # golden DB backup (SQL + images) — gitignored (personal data)
     blank.sql              # empty initialised DB (SQL text dump) — committed (no personal data)
     edge/                  # edge case DBs — gitignored, created as needed
   layer1/
@@ -42,8 +42,7 @@ tests/
     conftest.py            # loads .env.test, manages golden DB, browser context
     test_smoke.py
 pytest.ini                 # at project root; asyncio_mode, smoke + first_run markers, default exclusion
-prepare-backup-for-test.sh # helper: patches live backup zip with test credentials
-run-first-run.sh           # helper: runs the first-run test suite with --full-reset
+run-first-run.sh           # runs the full sequential test suite; accepts optional start number
 ```
 
 FR73 additions (on `feat/wishlist-versions-v2` only, added in a later session):
@@ -80,7 +79,7 @@ SN_TEST_API_KEY=<SleeveNotes access key — set during first-run tests>
 SN_TEST_ADD_RELEASE_ID=[r35207593]
 ```
 
-**`tests/fixtures/golden.sql`** — the primary Layer 2 start state (SQL text dump, not a SQLite binary). See DB States section.
+**`tests/fixtures/golden.zip`** — the primary Layer 2 start state (SQL + images combined backup). See DB States section.
 
 **`tests/fixtures/edge/*.sql`** — edge case DBs created as needed.
 
@@ -90,33 +89,17 @@ SN_TEST_ADD_RELEASE_ID=[r35207593]
 
 Layer 2 tests start from a known DB state. This catches bugs that a blank DB never would — KPI calculations with accumulated data, sort behaviour with realistic record counts, etc.
 
-### Golden DB (`tests/fixtures/golden.sql`)
+### Golden DB (`tests/fixtures/golden.zip`)
 
-The default start state for tests 101–145. A realistic collection exported from the live app, with live credentials replaced by test credentials. Stored as a raw SQL text dump (not a zip) so `_load_db()` in conftest can re-wrap it for the import API.
+The start state for test 5 onwards. A realistic collection exported from the live app via Settings → Export All, with test credentials baked in (`api_key`, `discogs_username`, `discogs_token` must match `.env.test` values). Stored as a combined zip (SQL + images) so cover thumbnails are present after restore.
 
 **Creating / updating:**
-1. Take a full backup from the live app: Settings → Export All
-2. Run `./tests/prepare-backup-for-test.sh tests/fixtures/sleevenotes_backup.zip`
-   - This replaces `discogs_username`, `discogs_token`, and `api_key` with test values from `.env.test`
-   - Outputs `tests/fixtures/sleevenotes_backup-test-ready.zip`
-3. Import the test-ready zip into the local container via the UI
-4. Export just the DB: `GET /api/export/db` (or use the script below)
-5. Extract and save: `./tests/prepare-backup-for-test.sh` handles this, or run manually:
+1. Configure the local container with test credentials (`SN_TEST_API_KEY`, `DISCOGS_TEST_USERNAME`, `DISCOGS_TEST_TOKEN` from `.env.test`)
+2. Settings → Export All → save as `tests/fixtures/golden.zip`
 
-```bash
-/home/kieran/.venvs/sleevenotes-tests/bin/python - <<'EOF'
-import httpx, zipfile, io
-from pathlib import Path
-r = httpx.get("http://localhost:2026/api/export/db", headers={"X-API-Key": "NeverGonnaGiveYouUp"}, timeout=30)
-r.raise_for_status()
-with zipfile.ZipFile(io.BytesIO(r.content)) as z:
-    sql_name = next(n for n in z.namelist() if n.endswith(".sql"))
-    sql = z.read(sql_name)
-Path("tests/fixtures/golden.sql").write_bytes(sql)
-EOF
-```
+**Loading:** `_restore_golden()` in conftest POSTs `golden.zip` to `/api/import/all`, restoring both DB and images in one step. No separate credential injection needed — the zip contains the correct credentials already.
 
-**Loading:** `_load_db()` in conftest re-wraps the SQL in a zip and POSTs to `/api/import/db`. Then `_configure_credentials()` PUTs test credentials from `.env.test`.
+**Key requirement:** the `api_key` stored in `golden.zip` must equal `SN_TEST_API_KEY` in `.env.test`, otherwise the browser's injected key will be rejected after restore.
 
 ### Blank DB (`tests/fixtures/blank.sql`)
 
@@ -126,10 +109,24 @@ Empty but fully initialised (schema only, settings at defaults, no records). Com
 
 ## Test Numbering
 
-| Range | Suite | Trigger |
-|-------|-------|---------|
-| 1–99 | First-run setup flow | `./tests/run-first-run.sh` (requires `--full-reset`) |
-| 101–145 | Golden DB smoke suite | `pytest tests/layer2/ -m smoke` |
+All Layer 2 tests form a single sequential journey in `test_smoke.py`. Tests run in order; DB state accumulates across tests within a session.
+
+| Range | Suite | Notes |
+|-------|-------|-------|
+| 1–4 | First-run setup flow | Require `--full-reset`; skipped automatically otherwise |
+| 5+ | Collection & feature tests | Test 5 restores golden DB via `restore_golden_db` fixture; subsequent tests build on that state |
+
+### Running
+
+```bash
+./tests/run-first-run.sh        # full run from test 1 (--full-reset)
+./tests/run-first-run.sh 5      # resume from test 5 (--inject-api-key)
+./tests/run-first-run.sh 3      # resume from test 3 (--inject-api-key)
+```
+
+`--inject-api-key`: injects `SN_TEST_API_KEY` into the browser's localStorage (via `page.add_init_script`) so the auth screen is bypassed when resuming mid-session. Does not touch the server DB.
+
+**localStorage note:** `lsSet()` in the frontend stores values via `JSON.stringify`. The init script must therefore use `JSON.stringify` too: `localStorage.setItem('sn_apiKey', JSON.stringify(key))`.
 
 ---
 
@@ -154,9 +151,10 @@ addopts = -m "not smoke"
 ### `tests/layer2/conftest.py` — key design decisions
 
 - **Session-scoped `browser_context`**: localStorage persists across all tests within a run. This is intentional — accumulation exposes real bugs that a reset-per-test approach would hide.
-- **Per-test `page` fixture**: fresh tab per test within the shared context.
-- **`restore_golden_db` autouse fixture**: reloads `golden.sql` into the container before each non-first_run test. Ensures each test starts clean without clearing browser state.
-- **`maybe_full_reset`**: nukes and rebuilds the container with `compose.yml + compose.override.yml` (local build + `SN_DEV=true`). Requires interactive YES confirmation.
+- **Per-test `page` fixture**: fresh tab per test within the shared context. When `--inject-api-key` is set, adds an init script that pre-seeds `localStorage.sn_apiKey` (JSON-stringified) before the page's own JS runs.
+- **`restore_golden_db` fixture**: non-autouse, function-scoped. Declares as a parameter only on tests that need a known-good state (currently test 5 only). Calls `_restore_golden()` which POSTs `golden.zip` to `/api/import/all`. No credential injection — credentials are baked into the zip.
+- **`maybe_full_reset`**: nukes and rebuilds the container with `compose.yml + compose.override.yml` (local build + `SN_DEV=true`). Requires interactive YES confirmation. Also runs `docker volume rm sleevenotes_data` explicitly, since `compose down -v` does not remove volumes with an explicit `name:` in the compose file.
+- **`configure_test_container`**: session-scoped autouse. With `--full-reset`: no-op (container must stay blank for tests 1–4). With `--inject-api-key`: no-op (browser handles key injection; DB already in correct state). Otherwise: restores golden DB at session start.
 - **`require_full_reset_for_first_run`**: auto-skips first_run tests if `--full-reset` was not passed.
 
 ### Modal assertions
@@ -166,19 +164,14 @@ SleeveNotes modals use `opacity: 0 / pointer-events: none` for closed state — 
 - Use `not_to_have_class(re.compile(r"\bopen\b"))` to assert a modal is closed
 - `to_be_visible()` works fine for asserting content *inside* an open modal
 
-### Running first-run tests
+### Running
 
 ```bash
-./tests/run-first-run.sh
+./tests/run-first-run.sh        # full run from test 1 (--full-reset)
+./tests/run-first-run.sh 5      # resume from test 5 (--inject-api-key)
 ```
 
-Runs tests 1–4 with `--full-reset --headed --slowmo=1500`. Destroys and rebuilds the container from the current local branch. Requires interactive YES confirmation.
-
-### Running the golden DB suite
-
-```bash
-/home/kieran/.venvs/sleevenotes-tests/bin/python -m pytest tests/layer2/ -m smoke -v
-```
+Full run destroys and rebuilds the container. Requires interactive YES confirmation.
 
 ---
 
@@ -195,18 +188,22 @@ Runs tests 1–4 with `--full-reset --headed --slowmo=1500`. Destroys and rebuil
 
 **Status: all 4 passing ✅**
 
-### Golden DB suite (101–145)
+### Collection & feature suite (5+)
 
-| # | Area | Test description |
-|---|------|-----------------|
-| 101 | App load | Navigate `/`; KPI bar, toolbar, main content visible |
+| # | Area | Test description | Status |
+|---|------|-----------------|--------|
+| 5 | Collection home | Golden DB restored; KPI bar populated; at least one table row | ✅ |
+| 6 | Tile view | Switch to Tile; tiles visible with overlay artist; switch back to Table | ✅ |
+| 7 | Column sort | Click Artist header; asc (▲) → desc (▼) → cleared; `sorted` class tracks state | ✅ |
+| 8 | Group by artist | Enable Group by Artist; artist heading rows appear; disable; rows gone | 🔴 ungroup step failing |
+| 9 | Format filter bar | Click a format tag; visible rows all contain the tag | not yet confirmed |
+| 10 | Search bar | Type partial artist name; table filters live; clear restores full list | not yet confirmed |
+
+**Remaining to port from old suite (backlog):**
+
+| Old # | Area | Test description |
+|-------|------|-----------------|
 | 102 | Add record | Open add modal; enter Discogs ID; fetch populates fields; save; record appears |
-| 103 | Collection table | Golden DB has at least one record visible in table |
-| 104 | Collection tiles | Switch to Tile view; tile renders with artist label |
-| 105 | Column sort | Click Artist header; asc → desc → cleared |
-| 106 | Group by artist | Enable Group by Artist; artist heading rows appear |
-| 107 | Format filter bar | Click a format tag; table filters to matching records |
-| 108 | Search bar | Type partial artist name; table filters live |
 | 109 | Record detail modal | Tile: tap → overlay; tap again → detail modal with metadata |
 | 110 | Tracklist tab | In detail modal, click Tracklist tab; track rows render |
 | 111 | Edit record | Edit Notes; Save; reopen edit form; value retained |
@@ -245,8 +242,6 @@ Runs tests 1–4 with `--full-reset --headed --slowmo=1500`. Destroys and rebuil
 | 144 | Danger Zone — Change Key | Enter new key; save; app still loads |
 | 145 | Danger Zone — Import DB | Upload blank.sql zip; page reloads to empty collection |
 
-**Status: not yet run against current golden DB — next step.**
-
 ---
 
 ## Layer 1 — API Tests
@@ -274,9 +269,11 @@ Python venv: `/home/kieran/.venvs/sleevenotes-tests/`
 1. ~~Layer 1 API tests (65 tests, all endpoints)~~ ✅
 2. ~~Layer 2 efficacy review and fixes~~ ✅
 3. ~~First-run test suite (tests 1–4)~~ ✅ — all passing
-4. ~~Golden DB curation~~ ✅ — `tests/fixtures/golden.sql` saved from live
-5. **Run tests 101–145 against golden DB** — fix any selector mismatches or assertion gaps
-6. **Add SleeveNotes to NoveriaBackup.sh** — pause container, tar `/data` volume, unpause; currently not backed up
-7. **Merge `feat/regression-tests` to `main`** once 101–145 are passing
-8. **Regression check on `feat/wishlist-versions-v2`** — checkout branch; run Layer 1; all should still be green
-9. **Add FR73-specific tests** — `test_wishlist_versions.py`, `test_wantlist.py`, `test_smoke_versions.py`
+4. ~~Golden DB curation~~ ✅ — `tests/fixtures/golden.zip` (SQL + images) exported from live
+5. ~~Mid-session restart~~ ✅ — `--inject-api-key` seeds browser localStorage; `JSON.stringify` required to match `lsSet` encoding
+6. **Fix test 8 ungroup assertion** — `test_group_by_artist` group step passes, ungroup step failing
+7. **Port remaining backlog tests (9–10, then 102–145)** as sequential journey tests
+8. **Add SleeveNotes to NoveriaBackup.sh** — pause container, tar `/data` volume, unpause; currently not backed up
+9. **Merge `feat/regression-tests` to `main`** once suite is stable
+10. **Regression check on `feat/wishlist-versions-v2`** — checkout branch; run Layer 1; all should still be green
+11. **Add FR73-specific tests** — `test_wishlist_versions.py`, `test_wantlist.py`, `test_smoke_versions.py`
