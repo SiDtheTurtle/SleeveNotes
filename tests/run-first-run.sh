@@ -10,6 +10,7 @@ ALL_TESTS=(
     "tests/layer2/test_smoke.py::test_first_run_field_mappings"
     "tests/layer2/test_smoke.py::test_collection_home_loads"
     "tests/layer2/test_smoke.py::test_collection_tile_view"
+    "tests/layer2/test_smoke.py::test_record_detail_tile"
     "tests/layer2/test_smoke.py::test_column_sort"
     "tests/layer2/test_smoke.py::test_group_by_artist"
     "tests/layer2/test_smoke.py::test_format_filter_bar"
@@ -23,6 +24,8 @@ ALL_TESTS=(
     "tests/layer2/test_smoke.py::test_sync_custom_fields"
     "tests/layer2/test_smoke.py::test_edit_record_fields"
     "tests/layer2/test_smoke.py::test_use_as_cover"
+    "tests/layer2/test_smoke.py::test_add_record"
+    "tests/layer2/test_smoke.py::test_delete_record"
 )
 
 TOTAL=${#ALL_TESTS[@]}

@@ -194,27 +194,27 @@ Full run destroys and rebuilds the container. Requires interactive YES confirmat
 |---|------|-----------------|--------|
 | 5 | Collection home | Golden DB restored; KPI bar populated; at least one table row | ✅ |
 | 6 | Tile view | Switch to Tile; tiles visible with overlay artist; switch back to Table | ✅ |
-| 7 | Column sort | Click Artist header; asc (▲) → desc (▼) → cleared; `sorted` class tracks state | ✅ |
-| 8 | Group by artist | Enable Group by Artist; group-header rows appear; disable; rows gone | ✅ |
-| 9 | Format filter bar | Click a format tag; visible rows all contain the tag | ✅ |
-| 10 | Search bar | Type partial artist name; table filters live; clear restores full list | ✅ |
-| 11 | Surprise Me | Click Surprise Me; detail modal opens | ✅ |
-| 12 | Record detail fields | Open London Grammar — If You Wait; all fields populated; cover and carousel present | ✅ |
-| 13 | Tracklist with headings | Open Raye — This Music May Contain Hope; switch to Tracklist tab; track rows and heading rows present | ✅ |
-| 14 | Record modal navigation | Open Raye; click next arrow; modal updates to Fleetwood Mac — Rumours | ✅ |
-| 15 | Cover image lightbox | Open Raye; click cover image; lightbox opens with correct src | ✅ |
-| 16 | Sync Metadata | Open Raye edit form; assert fetch-btn says "Sync Metadata"; click it; discogs-preview card appears with artist | ✅ |
-| 17 | Sync Custom Fields | Open Raye edit form; click Sync Custom Fields; diff modal opens and preview content loads | ✅ |
-| 18 | Edit record fields | Edit all 9 purchase/condition fields on Raye; save; reopen detail; assert all 9 values persisted | ✅ |
-| 19 | Use as Cover | Open Raye; carousel arrow to image 2; Use as Cover; toast confirms; button disabled for new cover | ✅ |
+| 7 | Tile detail | Click tile → overlay; click View → detail modal opens | ✅ |
+| 8 | Column sort | Click Artist header; asc (▲) → desc (▼) → cleared; `sorted` class tracks state | ✅ |
+| 9 | Group by artist | Enable Group by Artist; group-header rows appear; disable; rows gone | ✅ |
+| 10 | Format filter bar | Click a format tag; visible rows all contain the tag | ✅ |
+| 11 | Search bar | Type partial artist name; table filters live; clear restores full list | ✅ |
+| 12 | Surprise Me | Click Surprise Me; detail modal opens | ✅ |
+| 13 | Record detail fields | Open London Grammar — If You Wait; all fields populated; cover and carousel present | ✅ |
+| 14 | Tracklist with headings | Open Raye — This Music May Contain Hope; switch to Tracklist tab; track rows and heading rows present | ✅ |
+| 15 | Record modal navigation | Open Raye; click next arrow; modal updates to Fleetwood Mac — Rumours | ✅ |
+| 16 | Cover image lightbox | Open Raye; click cover image; lightbox opens with correct src | ✅ |
+| 17 | Sync Metadata | Open Raye edit form; assert fetch-btn says "Sync Metadata"; click it; discogs-preview card appears with artist | ✅ |
+| 18 | Sync Custom Fields | Open Raye edit form; click Sync Custom Fields; diff modal opens and preview content loads | ✅ |
+| 19 | Edit record fields | Edit all 9 purchase/condition fields on Raye; save; reopen detail; assert all 9 values persisted | ✅ |
+| 20 | Use as Cover | Open Raye; carousel arrow to image 2; Use as Cover; toast confirms; button disabled for new cover | ✅ |
+| 21 | Add record | Open add modal; enter Discogs ID (Rick Astley); fetch populates fields + preview; save; row count +1 | ✅ |
+| 22 | Delete record | Open Rick Astley via edit form; delete via confirm dialog; row count -1 | ✅ |
 
 **Remaining to port from old suite (backlog):**
 
 | Old # | Area | Test description |
 |-------|------|-----------------|
-| 102 | Add record | Open add modal; enter Discogs ID; fetch populates fields; save; record appears |
-| 109 | Record detail modal | Tile: tap → overlay; tap again → detail modal with metadata |
-| 112 | Delete record | Delete a record; row removed; count decrements |
 | 115 | Wishlist section | Click Wishlist nav; wishlist table renders; format bar hidden |
 | 116 | Wishlist search | Open search modal; type query; results appear |
 | 117 | Add to wishlist | Add a result; item appears in wishlist table |
@@ -274,9 +274,8 @@ Python venv: `/home/kieran/.venvs/sleevenotes-tests/`
 4. ~~Golden DB curation~~ ✅ — `tests/fixtures/golden.zip` (SQL + images) exported from live
 5. ~~Mid-session restart~~ ✅ — `--inject-api-key` seeds browser localStorage; `JSON.stringify` required to match `lsSet` encoding
 6. ~~Fix test 8 ungroup assertion~~ ✅ — click `.toggle-track`, use `.group-header` selector
-7. ~~Tests 9–15~~ ✅ — format filter bar, search bar, Surprise Me, record detail fields, tracklist, navigation, lightbox all passing
-8. ~~Run tests 16–19 and mark ✅~~ ✅ — sync metadata, sync custom fields, edit fields, use as cover
-9. **Port remaining backlog tests (102–145)** as sequential journey tests — audit selectors against HTML before writing
+7. ~~Tests 9–22~~ ✅ — format filter, search, Surprise Me, detail fields, tracklist, navigation, lightbox, sync metadata, sync custom fields, edit fields, use as cover, tile detail, add record, delete record
+8. **Port remaining backlog tests (115–145)** as sequential journey tests — audit selectors against HTML before writing
 9. **Add SleeveNotes to NoveriaBackup.sh** — pause container, tar `/data` volume, unpause; currently not backed up
 10. **Merge `feat/regression-tests` to `main`** once suite is stable
 11. **Regression check on `feat/wishlist-versions-v2`** — checkout branch; run Layer 1; all should still be green

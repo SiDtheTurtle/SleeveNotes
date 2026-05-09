@@ -152,7 +152,23 @@ def test_collection_tile_view(page: Page):
     expect(page.locator("#main-content table tbody tr").first).to_be_visible()
 
 
-# ── 7. Column sort cycles asc → desc → cleared ────────────────────────────────
+# ── 7. Tile — overlay then View button opens detail modal ─────────────────────
+
+def test_record_detail_tile(page: Page):
+    goto(page)
+    page.click("#btn-tile")
+    first_tile = page.locator("#main-content .tile").first
+    expect(first_tile).to_be_visible()
+    first_tile.click()
+    # First tap activates tile and shows overlay
+    expect(first_tile).to_have_class(re.compile(r"\bactive\b"))
+    # Click the View button inside the overlay to open detail modal
+    first_tile.locator("button", has_text="View").click()
+    expect(page.locator("#modal-detail")).to_be_visible()
+    expect(page.locator("#detail-modal-title")).not_to_be_empty()
+
+
+# ── 8. Column sort cycles asc → desc → cleared ────────────────────────────────
 
 def test_column_sort(page: Page):
     goto(page)
@@ -168,7 +184,7 @@ def test_column_sort(page: Page):
     expect(artist_th).not_to_have_class(re.compile(r"\bsorted\b"))
 
 
-# ── 8. Group by artist toggle and restore ─────────────────────────────────────
+# ── 9. Group by artist toggle and restore ─────────────────────────────────────
 
 def test_group_by_artist(page: Page):
     goto(page)
@@ -180,7 +196,7 @@ def test_group_by_artist(page: Page):
     expect(page.locator("#main-content .group-header")).to_have_count(0)
 
 
-# ── 9. Format filter bar filters the table ────────────────────────────────────
+# ── 10. Format filter bar filters the table ───────────────────────────────────
 
 def test_format_filter_bar(page: Page):
     goto(page)
@@ -197,7 +213,7 @@ def test_format_filter_bar(page: Page):
         expect(rows.nth(i).locator(".fmt-tag").filter(has_text=first_tag_text)).not_to_have_count(0)
 
 
-# ── 10. Search bar filters results live ───────────────────────────────────────
+# ── 11. Search bar filters results live ───────────────────────────────────────
 
 def test_search_bar_filters(page: Page):
     goto(page)
@@ -209,7 +225,7 @@ def test_search_bar_filters(page: Page):
     expect(page.locator("#main-content table tbody tr")).to_have_count(rows_before)
 
 
-# ── 11. Surprise Me opens detail modal ───────────────────────────────────────────
+# ── 12. Surprise Me opens detail modal ───────────────────────────────────────────
 
 def test_surprise_me(page: Page):
     goto(page)
@@ -218,7 +234,7 @@ def test_surprise_me(page: Page):
     expect(page.locator("#modal-detail")).to_be_visible()
 
 
-# ── 12. Record detail modal — all fields populated (London Grammar) ───────────
+# ── 13. Record detail modal — all fields populated (London Grammar) ───────────
 # Relies on clean_artists being enabled in the golden DB.
 
 def test_record_detail_fields(page: Page):
@@ -242,7 +258,7 @@ def test_record_detail_fields(page: Page):
     expect(page.locator("#detail-cover-wrap .carousel-arrow")).not_to_have_count(0, timeout=10_000)
 
 
-# ── 13. Tracklist tab — tracks and heading rows (Raye) ────────────────────────
+# ── 14. Tracklist tab — tracks and heading rows (Raye) ────────────────────────
 # Raye's This Music May Contain Hope has side-break heading rows, which is rare
 # and worth asserting explicitly.
 
@@ -261,7 +277,7 @@ def test_tracklist_with_headings(page: Page):
     expect(page.locator("#tracklist-content .tracklist-heading").first).to_be_visible()
 
 
-# ── 14. Record modal navigation arrows ────────────────────────────────────────
+# ── 15. Record modal navigation arrows ────────────────────────────────────────
 # Opens Raye without filtering so the full collection is in the nav list.
 # Next record in default (id ASC) order is Fleetwood Mac — Rumours.
 
@@ -275,7 +291,7 @@ def test_record_modal_navigation(page: Page):
     expect(page.locator("#detail-modal-title")).to_contain_text("Fleetwood Mac")
 
 
-# ── 15. Cover image opens lightbox ────────────────────────────────────────────
+# ── 16. Cover image opens lightbox ────────────────────────────────────────────
 
 def test_cover_image_lightbox(page: Page):
     goto(page)
@@ -289,7 +305,7 @@ def test_cover_image_lightbox(page: Page):
     expect(page.locator("#lightbox-img")).to_have_attribute("src", re.compile(r"/images/"))
 
 
-# ── 16. Edit form — Sync Metadata button fires and preview appears ─────────────
+# ── 17. Edit form — Sync Metadata button fires and preview appears ─────────────
 
 def test_sync_metadata(page: Page):
     goto(page)
@@ -309,7 +325,7 @@ def test_sync_metadata(page: Page):
     page.locator("#modal-form button", has_text="Cancel").click()
 
 
-# ── 17. Edit form — Sync Custom Fields opens diff modal ───────────────────────
+# ── 18. Edit form — Sync Custom Fields opens diff modal ───────────────────────
 
 def test_sync_custom_fields(page: Page):
     goto(page)
@@ -329,7 +345,7 @@ def test_sync_custom_fields(page: Page):
     page.locator("#modal-form button", has_text="Cancel").click()
 
 
-# ── 18. Edit record — all 9 purchase/condition fields persist after save ──────
+# ── 19. Edit record — all 9 purchase/condition fields persist after save ──────
 
 def test_edit_record_fields(page: Page):
     goto(page)
@@ -371,7 +387,7 @@ def test_edit_record_fields(page: Page):
     expect(detail_val("Notes")).to_have_text("Test edit notes")
 
 
-# ── 19. Carousel — Use as Cover changes the cover image ───────────────────────
+# ── 20. Carousel — Use as Cover changes the cover image ───────────────────────
 
 def test_use_as_cover(page: Page):
     goto(page)
@@ -390,3 +406,43 @@ def test_use_as_cover(page: Page):
     # Carousel rebuilds — current image (new cover, index 0) has disabled Use as Cover
     expect(page.locator("#detail-cover-wrap .carousel-arrow")).not_to_have_count(0, timeout=10_000)
     expect(page.locator(".carousel-meta button", has_text="Use as Cover")).to_be_disabled()
+
+
+# ── 21. Add record via Discogs lookup ────────────────────────────────────────
+
+def test_add_record(page: Page):
+    goto(page)
+    page.click("#btn-table")
+    before = page.locator("#main-content table tbody tr").count()
+    page.click("#btn-add-record")
+    expect(page.locator("#modal-form")).to_be_visible()
+    expect(page.locator("#form-modal-title")).to_have_text("Add Record")
+    expect(page.locator("#fetch-btn")).to_have_text("Fetch")
+    page.fill("#f-discogs-id", SN_TEST_ADD_RELEASE_ID)
+    page.click("#fetch-btn")
+    # Discogs fetch populates fields and shows preview card
+    expect(page.locator("#f-artist")).not_to_be_empty(timeout=15_000)
+    expect(page.locator("#discogs-preview")).to_be_visible()
+    page.click("#save-btn")
+    expect(page.locator("#modal-form")).not_to_have_class(re.compile(r"\bopen\b"))
+    expect(page.locator("#main-content table tbody tr")).to_have_count(before + 1, timeout=10_000)
+
+
+# ── 22. Delete record ─────────────────────────────────────────────────────────
+# Deletes the record added in test 20. Opens it via the edit form where the
+# Delete button lives, accepts the confirm dialog, and asserts row count drops.
+
+def test_delete_record(page: Page):
+    goto(page)
+    page.click("#btn-table")
+    before = page.locator("#main-content table tbody tr").count()
+    page.locator("#main-content table tbody tr", has_text="Never Gonna Give You Up").first.click()
+    expect(page.locator("#modal-detail")).to_be_visible()
+    page.click("#detail-edit-btn")
+    expect(page.locator("#modal-form")).to_be_visible()
+    expect(page.locator("#delete-btn")).to_be_visible()
+    page.on("dialog", lambda d: d.accept())
+    page.click("#delete-btn")
+    expect(page.locator("#modal-form")).not_to_have_class(re.compile(r"\bopen\b"))
+    expect(page.locator("#toasts .toast")).to_contain_text("Record deleted", timeout=5_000)
+    expect(page.locator("#main-content table tbody tr")).to_have_count(before - 1, timeout=10_000)
