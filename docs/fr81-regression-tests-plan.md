@@ -210,18 +210,23 @@ Full run destroys and rebuilds the container. Requires interactive YES confirmat
 | 20 | Use as Cover | Open Raye; carousel arrow to image 2; Use as Cover; toast confirms; button disabled for new cover | ✅ |
 | 21 | Add record | Open add modal; enter Discogs ID (Rick Astley); fetch populates fields + preview; save; row count +1 | ✅ |
 | 22 | Delete record | Open Rick Astley via edit form; delete via confirm dialog; row count -1 | ✅ |
+| 23 | Wishlist section loads | Click Wishlist nav; table renders; format bar hidden; Show Fulfilled toggle present | ✅ |
+| 24 | Wishlist column sort | Click Artist header; asc (▲) → desc (▼) → cleared | ✅ |
+| 25 | Wishlist tile view | Switch to Tile; tiles visible; switch back to Table | ✅ |
+| 26 | Wishlist search modal | Click search bar; modal opens; type query; results appear | ✅ |
+| 27 | Wishlist detail modal | Click golden DB item; modal opens; notes and fulfilled fields present; Close dismisses | ✅ |
+| 28 | Add to wishlist | Search for Rick Astley; add m96559; item appears in table | ✅ |
+| 29 | Wishlist match prompt | Add r35207593 to collection; wishlist_match banner shown; confirm fulfils wishlist item; record deleted | ✅ |
+| 30 | Unfulfil wishlist item | Open fulfilled Rick Astley item; uncheck fulfilled; save; item visible in default view | ✅ |
+| 31 | Show Fulfilled toggle | Toggle on; fulfilled item appears; toggle off; item hidden | ✅ |
+| 32 | Wishlist notes persist | Edit notes on Rick Astley item; save; reopen; notes retained | ✅ |
+| 33 | Mark fulfilled | Check fulfilled; save; item hidden from default view | ✅ |
+| 34 | Delete wishlist item | Open fulfilled Rick Astley via Show Fulfilled; delete via confirm; row count -1 | ✅ |
 
 **Remaining to port from old suite (backlog):**
 
 | Old # | Area | Test description |
 |-------|------|-----------------|
-| 115 | Wishlist section | Click Wishlist nav; wishlist table renders; format bar hidden |
-| 116 | Wishlist search | Open search modal; type query; results appear |
-| 117 | Add to wishlist | Add a result; item appears in wishlist table |
-| 118 | Wishlist tiles | Switch to Tile view in wishlist; cover tile renders |
-| 119 | Wishlist detail | Click item; detail modal opens; notes field editable |
-| 120 | Mark fulfilled | Check fulfilled; Save; item hidden from default view |
-| 121 | Delete wishlist item | Open detail; Delete; item removed |
 | 122 | Settings — open/close | Gear icon opens modal; Close dismisses |
 | 123 | Settings — currency | Change to `$`; Save; KPI cost shows `$` |
 | 124 | Export CSV | Export CSV; download triggers |
@@ -229,8 +234,6 @@ Full run destroys and rebuilds the container. Requires interactive YES confirmat
 | 126 | Import CSV | Upload valid Discogs CSV; sync diff modal opens |
 | 127 | Collection sync | Sync Collection; preview modal loads with content |
 | 128 | Auth screen | Set API key; reload; auth screen appears; enter key; app loads |
-| 132 | Show Fulfilled toggle | Mark fulfilled; toggle Show Fulfilled; item reappears |
-| 133 | Wishlist notes persist | Edit notes; Save; reopen; notes retained |
 | 134 | Export Images | Export Images; zip download triggers |
 | 135 | Export All | Export All; zip download triggers |
 | 136 | Import CSV — apply | Upload CSV; apply sync; modal closes |

@@ -159,7 +159,7 @@ Require `--full-reset`. Test the initial setup flow on a blank container with no
 
 ---
 
-### Collection & feature suite — `layer2/test_smoke.py` (tests 5–20)
+### Collection & feature suite — `layer2/test_smoke.py` (tests 5–34)
 
 Golden DB (`tests/fixtures/golden.zip`) restored via `/api/import/all` before test 5. Tests accumulate on that state.
 
@@ -183,8 +183,20 @@ Golden DB (`tests/fixtures/golden.zip`) restored via `/api/import/all` before te
 | 20 | `test_use_as_cover` | Open Raye; carousel to image 2; Use as Cover; toast confirms; button disabled | "Cover updated" toast; Use as Cover disabled on new cover |
 | 21 | `test_add_record` | Open add modal; enter Discogs ID; fetch populates fields and preview; save; row count increments | `#f-artist` non-empty; `#discogs-preview` visible; table row count +1 |
 | 22 | `test_delete_record` | Open Rick Astley — Never Gonna Give You Up via edit form; delete via confirm dialog; row count decrements | "Record deleted" toast; table row count -1 |
+| 23 | `test_wishlist_section_loads` | Click Wishlist nav; table renders; format bar hidden; Show Fulfilled toggle present | Wishlist table visible; `#format-filter-bar` hidden; `label.toggle-row` visible |
+| 24 | `test_wishlist_column_sort` | Click Artist header; asc (▲) → desc (▼) → cleared | `sorted` class tracks state |
+| 25 | `test_wishlist_tile_view` | Switch to Tile; tiles visible; switch back to Table | Tiles render; table restored |
+| 26 | `test_wishlist_search_modal` | Click search bar; modal opens; type query; results appear | `#modal-wishlist-search` open; result rows non-empty |
+| 27 | `test_wishlist_detail_modal` | Click golden DB item; modal opens; notes and fulfilled fields present; Close dismisses | `#modal-wishlist-detail` open; `#wishlist-detail-notes` and `#wishlist-detail-fulfilled` present |
+| 28 | `test_add_to_wishlist` | Search for Rick Astley; add m96559; item appears in table | Row with "Rick Astley" present; row count +1 |
+| 29 | `test_wishlist_match_prompt` | Add r35207593 to collection; wishlist_match banner shown; confirm fulfils wishlist item; collection record deleted | "is on your wishlist" in preview; fulfilled row visible under Show Fulfilled |
+| 30 | `test_wishlist_unfulfil` | Open fulfilled Rick Astley item; uncheck fulfilled; save; item visible in default view | Row present without Show Fulfilled toggle |
+| 31 | `test_wishlist_show_fulfilled_toggle` | Toggle on; fulfilled item appears; toggle off; item hidden | Row count changes as expected |
+| 32 | `test_wishlist_notes_persist` | Edit notes on Rick Astley item; save; reopen; notes retained | Saved notes text present on reopen |
+| 33 | `test_mark_wishlist_fulfilled` | Check fulfilled; save; item hidden from default view | Row count decrements in default view |
+| 34 | `test_delete_wishlist_item` | Open fulfilled Rick Astley via Show Fulfilled; delete via confirm; row count -1 | Row absent after deletion |
 
-**Status: tests 5–22 passing ✅ · test 7 pending first run**
+**Status: tests 5–34 passing ✅**
 
 ---
 
@@ -194,36 +206,25 @@ These tests are yet to be written as part of the sequential journey.
 
 | # | Test | Purpose | Expected outcome |
 |---|------|---------|-----------------|
-| 21 | `test_delete_record` | Deleting a record removes it from the table | Row count decrements by one |
-| 22 | `test_record_detail_tile` | Tile: tap → overlay; tap again → detail modal | Modal visible with a non-empty title |
-| 23 | `test_wishlist_section_loads` | Switching to the Wishlist section works | Wishlist content visible; format bar hidden; Show Fulfilled toggle present |
-| 24 | `test_wishlist_search_modal` | Search bar opens the master release search modal | Modal appears; results load after typing a query |
-| 25 | `test_add_to_wishlist` | Adding a search result to the wishlist works | Item appears in the wishlist table |
-| 26 | `test_wishlist_tile_view` | Wishlist tile view renders covers | Tiles visible in wishlist |
-| 27 | `test_wishlist_detail_modal` | Clicking a wishlist item opens its detail modal | Modal visible with editable notes field |
-| 28 | `test_wishlist_save_notes` | Notes saved in the wishlist detail modal persist after close and reopen | Reopened modal shows the previously entered text |
-| 29 | `test_mark_wishlist_fulfilled` | Marking an item fulfilled hides it from the list | Row count decrements; item gone from default view |
-| 30 | `test_wishlist_show_fulfilled_toggle` | Show Fulfilled toggle reveals fulfilled items | Row count returns to pre-fulfilment value |
-| 31 | `test_delete_wishlist_item` | Deleting a wishlist item removes it permanently | Row count decrements after delete |
-| 32 | `test_settings_modal_open_close` | Settings modal opens and closes cleanly | Modal appears on gear click; disappears on Close |
-| 33 | `test_settings_currency_change` | Changing the currency symbol takes effect | KPI cost displays the new symbol after save |
-| 34 | `test_settings_include_pp` | Include P&P toggle changes the Collection Cost KPI | Cost KPI value differs after toggling on |
-| 35 | `test_settings_show_valuations` | Show Valuations toggle hides and restores the Collection Value KPI | KPI hidden after toggle off; restored after toggle on |
-| 36 | `test_settings_hide_format_tags` | Hide format tags toggle saves without error | Album tag visible after toggle off; hidden after toggle on |
-| 37 | `test_export_csv_download` | Export CSV button triggers a file download | A `.csv` file download begins |
-| 38 | `test_export_db_download` | Export Database button triggers a file download | A `.zip` file download begins |
-| 39 | `test_export_images_download` | Export Images button triggers a file download | A `.zip` file download begins |
-| 40 | `test_export_all_download` | Export All button triggers a file download | A `.zip` file download begins |
-| 41 | `test_import_csv_opens_diff_modal` | Uploading a CSV file opens the sync diff modal | Diff modal becomes visible |
-| 42 | `test_import_csv_apply_sync` | Uploading a CSV and clicking Apply Sync applies changes | Sync modal closes after apply |
-| 43 | `test_collection_sync_preview` | Sync Collection in settings loads the preview modal | Diff modal and preview content visible |
-| 44 | `test_danger_zone_delete_all` | Delete All Records wipes the collection | Empty collection state shown after confirm |
-| 45 | `test_empty_collection_restore_button` | Blank DB shows the empty state with a restore button | "Your collection is empty" and restore button visible |
-| 46 | `test_danger_zone_factory_reset` | Factory Reset wipes records and restores default settings | Empty state shown; cost KPI shows default £ symbol |
-| 47 | `test_danger_zone_clear_images` | Clear Image Cache deletes cached covers | Toast confirms deletion count |
-| 48 | `test_danger_zone_change_access_key` | Changing the access key via Danger Zone takes effect | Toast confirms update; app loads with new key injected |
-| 49 | `test_danger_zone_import_db` | Import DB via Danger Zone replaces the database | Page reloads to empty collection state after importing blank DB |
-| 50 | `test_auth_screen` | Setting an API key forces the auth screen on reload | Auth screen visible; entering the correct key loads the app |
+| 35 | `test_settings_modal_open_close` | Settings modal opens and closes cleanly | Modal appears on gear click; disappears on Close |
+| 36 | `test_settings_currency_change` | Changing the currency symbol takes effect | KPI cost displays the new symbol after save |
+| 37 | `test_settings_include_pp` | Include P&P toggle changes the Collection Cost KPI | Cost KPI value differs after toggling on |
+| 38 | `test_settings_show_valuations` | Show Valuations toggle hides and restores the Collection Value KPI | KPI hidden after toggle off; restored after toggle on |
+| 39 | `test_settings_hide_format_tags` | Hide format tags toggle saves without error | Album tag visible after toggle off; hidden after toggle on |
+| 40 | `test_export_csv_download` | Export CSV button triggers a file download | A `.csv` file download begins |
+| 41 | `test_export_db_download` | Export Database button triggers a file download | A `.zip` file download begins |
+| 42 | `test_export_images_download` | Export Images button triggers a file download | A `.zip` file download begins |
+| 43 | `test_export_all_download` | Export All button triggers a file download | A `.zip` file download begins |
+| 44 | `test_import_csv_opens_diff_modal` | Uploading a CSV file opens the sync diff modal | Diff modal becomes visible |
+| 45 | `test_import_csv_apply_sync` | Uploading a CSV and clicking Apply Sync applies changes | Sync modal closes after apply |
+| 46 | `test_collection_sync_preview` | Sync Collection in settings loads the preview modal | Diff modal and preview content visible |
+| 47 | `test_danger_zone_delete_all` | Delete All Records wipes the collection | Empty collection state shown after confirm |
+| 48 | `test_empty_collection_restore_button` | Blank DB shows the empty state with a restore button | "Your collection is empty" and restore button visible |
+| 49 | `test_danger_zone_factory_reset` | Factory Reset wipes records and restores default settings | Empty state shown; cost KPI shows default £ symbol |
+| 50 | `test_danger_zone_clear_images` | Clear Image Cache deletes cached covers | Toast confirms deletion count |
+| 51 | `test_danger_zone_change_access_key` | Changing the access key via Danger Zone takes effect | Toast confirms update; app loads with new key injected |
+| 52 | `test_danger_zone_import_db` | Import DB via Danger Zone replaces the database | Page reloads to empty collection state after importing blank DB |
+| 53 | `test_auth_screen` | Setting an API key forces the auth screen on reload | Auth screen visible; entering the correct key loads the app |
 
 ---
 
@@ -231,13 +232,6 @@ These tests are yet to be written as part of the sequential journey.
 
 | Old # | Test | Purpose | Expected outcome |
 |-------|------|---------|-----------------|
-| 115 | `test_wishlist_section_loads` | Switching to the Wishlist section works | Wishlist content visible; format bar hidden; Show Fulfilled toggle present |
-| 116 | `test_wishlist_search_modal` | Search bar opens the master release search modal | Modal appears; results load after typing a query |
-| 117 | `test_add_to_wishlist` | Adding a search result to the wishlist works | Item appears in the wishlist table |
-| 118 | `test_wishlist_tile_view` | Wishlist tile view renders covers | Tiles visible in wishlist |
-| 119 | `test_wishlist_detail_modal` | Clicking a wishlist item opens its detail modal | Modal visible with editable notes field |
-| 120 | `test_mark_wishlist_fulfilled` | Marking an item fulfilled hides it from the list | Row count decrements; item gone from default view |
-| 121 | `test_delete_wishlist_item` | Deleting a wishlist item removes it permanently | Row count decrements after delete |
 | 122 | `test_settings_modal_open_close` | Settings modal opens and closes cleanly | Modal appears on gear click; disappears on Close |
 | 123 | `test_settings_currency_change` | Changing the currency symbol takes effect immediately | KPI cost displays the new symbol after save |
 | 124 | `test_export_csv_download` | Export CSV button triggers a file download | A `.csv` file download begins |
@@ -245,8 +239,6 @@ These tests are yet to be written as part of the sequential journey.
 | 126 | `test_import_csv_opens_diff_modal` | Uploading a CSV file opens the sync diff modal | Diff modal becomes visible |
 | 127 | `test_collection_sync_preview` | Sync Collection in settings loads the preview modal | Diff modal and preview content visible |
 | 128 | `test_auth_screen` | Setting an API key forces the auth screen on reload | Auth screen visible; entering the correct key loads the app |
-| 132 | `test_wishlist_show_fulfilled_toggle` | Show Fulfilled toggle reveals items hidden after marking fulfilled | After toggling on, row count returns to the value before fulfilment |
-| 133 | `test_wishlist_save_notes` | Notes saved in the wishlist detail modal persist after close and reopen | Reopened modal shows the previously entered text |
 | 134 | `test_export_images_download` | Export Images button triggers a file download | A `.zip` file download begins |
 | 135 | `test_export_all_download` | Export All button triggers a file download | A `.zip` file download begins |
 | 136 | `test_import_csv_apply_sync` | Uploading a CSV and clicking Apply Sync applies changes to SN | Sync modal closes after apply |

@@ -26,6 +26,18 @@ ALL_TESTS=(
     "tests/layer2/test_smoke.py::test_use_as_cover"
     "tests/layer2/test_smoke.py::test_add_record"
     "tests/layer2/test_smoke.py::test_delete_record"
+    "tests/layer2/test_smoke.py::test_wishlist_section_loads"
+    "tests/layer2/test_smoke.py::test_wishlist_column_sort"
+    "tests/layer2/test_smoke.py::test_wishlist_tile_view"
+    "tests/layer2/test_smoke.py::test_wishlist_search_modal"
+    "tests/layer2/test_smoke.py::test_wishlist_detail_modal"
+    "tests/layer2/test_smoke.py::test_add_to_wishlist"
+    "tests/layer2/test_smoke.py::test_wishlist_match_prompt"
+    "tests/layer2/test_smoke.py::test_wishlist_unfulfil"
+    "tests/layer2/test_smoke.py::test_wishlist_show_fulfilled_toggle"
+    "tests/layer2/test_smoke.py::test_wishlist_notes_persist"
+    "tests/layer2/test_smoke.py::test_mark_wishlist_fulfilled"
+    "tests/layer2/test_smoke.py::test_delete_wishlist_item"
 )
 
 TOTAL=${#ALL_TESTS[@]}

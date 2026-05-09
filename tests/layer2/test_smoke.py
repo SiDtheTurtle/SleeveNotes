@@ -27,6 +27,13 @@ def goto(page: Page, path: str = "/"):
     page.goto(f"{BASE_URL}{path}")
 
 
+def set_show_fulfilled(page: Page, checked: bool):
+    """Toggle the Show Fulfilled checkbox to a specific state.
+    The underlying input is visually hidden; click the toggle-track instead."""
+    if page.locator("#show-fulfilled").is_checked() != checked:
+        page.locator("#show-fulfilled + .toggle-track").click()
+
+
 # ── 1. First-run — auth setup prompt ─────────────────────────────────────────
 # Requires --full-reset (blank container, no API key configured).
 
@@ -446,3 +453,216 @@ def test_delete_record(page: Page):
     expect(page.locator("#modal-form")).not_to_have_class(re.compile(r"\bopen\b"))
     expect(page.locator("#toasts .toast")).to_contain_text("Record deleted", timeout=5_000)
     expect(page.locator("#main-content table tbody tr")).to_have_count(before - 1, timeout=10_000)
+
+
+# ── 23. Wishlist section loads ────────────────────────────────────────────────
+
+def test_wishlist_section_loads(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    expect(page.locator("#btn-wishlist-nav")).to_have_class(re.compile(r"\bactive\b"))
+    # Format filter bar is always hidden in wishlist section
+    expect(page.locator("#format-filter-bar")).to_be_hidden()
+    # Show Fulfilled toggle present
+    expect(page.locator("label.toggle-row", has=page.locator("#show-fulfilled"))).to_be_visible()
+    # Golden DB has wishlist items — at least one row visible
+    expect(page.locator("#main-content table tbody tr").first).to_be_visible()
+
+
+# ── 24. Wishlist column sort ──────────────────────────────────────────────────
+
+def test_wishlist_column_sort(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    artist_th = page.locator("th", has_text="Artist")
+    artist_th.click()
+    expect(artist_th).to_have_class(re.compile(r"\bsorted\b"))
+    expect(artist_th.locator(".sort-arrow")).to_have_text("▲")
+    artist_th.click()
+    expect(artist_th).to_have_class(re.compile(r"\bsorted\b"))
+    expect(artist_th.locator(".sort-arrow")).to_have_text("▼")
+    artist_th.click()
+    expect(artist_th).not_to_have_class(re.compile(r"\bsorted\b"))
+
+
+# ── 25. Wishlist tile view ────────────────────────────────────────────────────
+
+def test_wishlist_tile_view(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-tile")
+    expect(page.locator("#main-content .tile").first).to_be_visible()
+    page.click("#btn-table")
+    expect(page.locator("#main-content table tbody tr").first).to_be_visible()
+
+
+# ── 26. Wishlist search modal ─────────────────────────────────────────────────
+
+def test_wishlist_search_modal(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    page.fill("#search", "Never Gonna Give You Up")
+    page.keyboard.press("Enter")
+    expect(page.locator("#modal-wishlist-search")).to_be_visible()
+    expect(page.locator("#wishlist-search-results")).to_contain_text("Rick Astley", timeout=15_000)
+    page.locator("#modal-wishlist-search button", has_text="Close").click()
+    expect(page.locator("#modal-wishlist-search")).not_to_have_class(re.compile(r"\bopen\b"))
+
+
+# ── 27. Wishlist detail modal opens ──────────────────────────────────────────
+# Uses an existing golden DB item — no need to add first.
+
+def test_wishlist_detail_modal(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    page.locator("#main-content table tbody tr").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    expect(page.locator("#wishlist-detail-notes")).to_be_visible()
+    expect(page.locator("#wishlist-detail-fulfilled")).to_be_visible()
+    page.locator("#modal-wishlist-detail button", has_text="Close").click()
+    expect(page.locator("#modal-wishlist-detail")).not_to_have_class(re.compile(r"\bopen\b"))
+
+
+# ── 28. Add to wishlist ───────────────────────────────────────────────────────
+# Adds m96559 (Rick Astley — Never Gonna Give You Up master release).
+# This item is used as the test vehicle for tests 28–34.
+
+SN_TEST_WISHLIST_MASTER_ID = "96559"
+
+def test_add_to_wishlist(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    before = page.locator("#main-content table tbody tr").count()
+    page.fill("#search", "Never Gonna Give You Up")
+    page.keyboard.press("Enter")
+    expect(page.locator("#modal-wishlist-search")).to_be_visible()
+    expect(page.locator("#wishlist-search-results")).to_contain_text("Rick Astley", timeout=15_000)
+    rick_result = page.locator("#wishlist-search-results div", has_text="Rick Astley").first
+    rick_result.locator("button", has_text="Add").click()
+    # Modal closes automatically after a successful add
+    expect(page.locator("#modal-wishlist-search")).not_to_have_class(re.compile(r"\bopen\b"), timeout=10_000)
+    expect(page.locator("#main-content table tbody tr")).to_have_count(before + 1, timeout=10_000)
+
+
+# ── 29. Wishlist match — add matching collection record triggers fulfilled prompt
+# Adds r35207593 (the collection release of m96559) — the app should detect the
+# wishlist match and prompt to mark it fulfilled. Accepting fulfils the wishlist
+# item. The collection record is then deleted to keep the DB tidy.
+
+def test_wishlist_match_prompt(page: Page):
+    goto(page)
+    # Register once — handles both the wishlist_match confirm and the delete confirm
+    page.on("dialog", lambda d: d.accept())
+    page.click("#btn-table")
+    page.click("#btn-add-record")
+    expect(page.locator("#modal-form")).to_be_visible()
+    page.fill("#f-discogs-id", SN_TEST_ADD_RELEASE_ID)
+    page.click("#fetch-btn")
+    expect(page.locator("#f-artist")).not_to_be_empty(timeout=15_000)
+    # Preview card shows wishlist match warning
+    expect(page.locator("#discogs-preview")).to_contain_text("is on your wishlist", timeout=5_000)
+    page.click("#save-btn")
+    expect(page.locator("#modal-form")).not_to_have_class(re.compile(r"\bopen\b"))
+    # Wishlist item should now be fulfilled — verify via Show Fulfilled toggle
+    page.click("#btn-wishlist-nav")
+    set_show_fulfilled(page, True)
+    expect(page.locator("#main-content table tbody tr.wishlist-row-fulfilled",
+                         has_text="Never Gonna Give You Up")).to_be_visible(timeout=5_000)
+    # Clean up — delete the collection record
+    page.click("#btn-collection")
+    page.locator("#main-content table tbody tr", has_text="Never Gonna Give You Up").first.click()
+    expect(page.locator("#modal-detail")).to_be_visible()
+    page.click("#detail-edit-btn")
+    page.click("#delete-btn")
+    expect(page.locator("#modal-form")).not_to_have_class(re.compile(r"\bopen\b"))
+
+
+# ── 30. Unfulfil wishlist item to reset state for remaining tests ─────────────
+
+def test_wishlist_unfulfil(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    set_show_fulfilled(page, True)
+    page.locator("#main-content table tbody tr.wishlist-row-fulfilled",
+                  has_text="Never Gonna Give You Up").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    page.locator("#wishlist-detail-fulfilled").uncheck()
+    page.click("#wishlist-detail-save-btn")
+    expect(page.locator("#toasts .toast")).to_contain_text("Saved", timeout=5_000)
+    page.locator("#modal-wishlist-detail button", has_text="Close").click()
+    expect(page.locator("#modal-wishlist-detail")).not_to_have_class(re.compile(r"\bopen\b"))
+    # Item should now appear in the default (unfulfilled) view
+    set_show_fulfilled(page, False)
+    expect(page.locator("#main-content table tbody tr",
+                         has_text="Never Gonna Give You Up")).to_be_visible()
+
+
+# ── 31. Show Fulfilled toggle reveals fulfilled items ─────────────────────────
+# Runs before the tests that use set_show_fulfilled as setup.
+
+def test_wishlist_show_fulfilled_toggle(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    before = page.locator("#main-content table tbody tr").count()
+    set_show_fulfilled(page, True)
+    expect(page.locator("#main-content table tbody tr")).to_have_count(before + 1, timeout=5_000)
+    expect(page.locator("#main-content table tbody tr.wishlist-row-fulfilled",
+                         has_text="Never Gonna Give You Up")).to_be_visible()
+    set_show_fulfilled(page, False)
+
+
+# ── 32. Wishlist notes persist after save ─────────────────────────────────────
+
+def test_wishlist_notes_persist(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    page.locator("#main-content table tbody tr", has_text="Never Gonna Give You Up").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    page.fill("#wishlist-detail-notes", "Test wishlist note")
+    page.click("#wishlist-detail-save-btn")
+    expect(page.locator("#toasts .toast")).to_contain_text("Saved", timeout=5_000)
+    page.locator("#modal-wishlist-detail button", has_text="Close").click()
+    expect(page.locator("#modal-wishlist-detail")).not_to_have_class(re.compile(r"\bopen\b"))
+    # Reopen and verify
+    page.locator("#main-content table tbody tr", has_text="Never Gonna Give You Up").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    expect(page.locator("#wishlist-detail-notes")).to_have_value("Test wishlist note")
+
+
+# ── 33. Mark wishlist item fulfilled — hides from default view ────────────────
+
+def test_mark_wishlist_fulfilled(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    before = page.locator("#main-content table tbody tr").count()
+    page.locator("#main-content table tbody tr", has_text="Never Gonna Give You Up").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    page.locator("#wishlist-detail-fulfilled").check()
+    page.click("#wishlist-detail-save-btn")
+    expect(page.locator("#toasts .toast")).to_contain_text("Saved", timeout=5_000)
+    page.locator("#modal-wishlist-detail button", has_text="Close").click()
+    expect(page.locator("#modal-wishlist-detail")).not_to_have_class(re.compile(r"\bopen\b"))
+    expect(page.locator("#main-content table tbody tr")).to_have_count(before - 1, timeout=5_000)
+
+
+# ── 34. Delete wishlist item ─────────────────────────────────────────────────
+
+def test_delete_wishlist_item(page: Page):
+    goto(page)
+    page.click("#btn-wishlist-nav")
+    page.click("#btn-table")
+    set_show_fulfilled(page, True)
+    before = page.locator("#main-content table tbody tr").count()
+    page.locator("#main-content table tbody tr.wishlist-row-fulfilled",
+                  has_text="Never Gonna Give You Up").first.click()
+    expect(page.locator("#modal-wishlist-detail")).to_be_visible()
+    page.on("dialog", lambda d: d.accept())
+    page.click("#wishlist-detail-delete-btn")
+    expect(page.locator("#modal-wishlist-detail")).not_to_have_class(re.compile(r"\bopen\b"))
+    expect(page.locator("#main-content table tbody tr")).to_have_count(before - 1, timeout=5_000)
