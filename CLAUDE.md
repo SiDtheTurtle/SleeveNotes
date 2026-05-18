@@ -1,5 +1,7 @@
 # SleeveNotes
 
+**In Claude Code sessions, do not run off and design and code without explicit instruction. Wait for parameters for the developer session. Do not change files without asking first.**
+
 A personal vinyl record collection manager. Single-page app backed by a FastAPI/SQLite server, containerised with Docker.
 
 ## Stack
