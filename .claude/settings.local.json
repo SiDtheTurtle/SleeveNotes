@@ -25,7 +25,9 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/manifest.json)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/sw.js)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-192.png)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-512.png)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:2026/icon-512.png)",
+      "Read(//home/kieran/.venvs/sleevenotes-tests/bin/**)",
+      "Bash(timeout 300 /home/kieran/.venvs/sleevenotes-tests/bin/pytest tests/layer1/ -q)"
     ]
   }
 }
