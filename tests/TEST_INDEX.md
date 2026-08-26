@@ -1,7 +1,15 @@
 # Test Index
 
-Human-readable reference for the SleeveNotes regression test suite.  
-Run with: `pytest tests/layer1/ -v` (Layer 1) or `pytest tests/layer2/ -m smoke -v` (Layer 2).
+Human-readable reference for the SleeveNotes API test suite.
+
+Run from the repo root:
+
+```bash
+pytest
+```
+
+No container, no Discogs account, no environment variables. Each test gets a
+fresh SQLite database; Discogs calls are mocked.
 
 ---
 
@@ -135,44 +143,3 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh SQLi
 | `test_clear_images_returns_ok` | Clear image cache endpoint is reachable and succeeds | `POST /api/admin/clear-images` returns 200 |
 
 ---
-
-## Layer 2 — Playwright Smoke Tests
-
-Browser-level tests that run against a live Docker container on port 2027. Require `docker compose -f compose.test.yml up --build -d` and `tests/.env.test` with a test Discogs account. A golden database is loaded before each test.
-
-Run with: `pytest tests/layer2/ -m smoke -v`
-
----
-
-### Smoke Tests — `layer2/test_smoke.py`
-
-| # | Test | Purpose | Expected outcome |
-|---|------|---------|-----------------|
-| 1 | `test_app_loads` | App shell renders correctly on load | KPI bar, toolbar, and main content area all visible |
-| 2 | `test_add_record` | Full add-record flow via Discogs lookup | Enter a Discogs ID → Fetch populates fields → Save → modal closes |
-| 3 | `test_collection_table_shows_records` | Collection table renders real data from the golden DB | At least one row visible in the table |
-| 4 | `test_collection_tile_view` | Switching to tile view renders cover tiles | Tiles visible, each with an artist label |
-| 5 | `test_column_sort` | Clicking a column header sorts the table | Artist header cycles asc → desc → cleared |
-| 6 | `test_group_by_artist` | Group by artist toggle changes the table layout | Artist heading rows appear between record rows |
-| 7 | `test_format_filter_bar` | Clicking a format tag filters the table | Only records matching the tag remain visible |
-| 8 | `test_search_bar_filters` | Typing in the search bar filters records live | Non-matching search returns zero rows; clearing restores full list |
-| 9 | `test_record_detail_modal` | Tapping a tile twice opens the detail modal | Modal visible with a non-empty title |
-| 10 | `test_tracklist_tab` | Tracklist tab in the detail modal is reachable | Tracklist content area becomes visible |
-| 11 | `test_edit_record` | Editing a record's notes persists the change | Updated notes visible in the table after save |
-| 12 | `test_delete_record` | Deleting a record removes it from the table | Row count decrements by one |
-| 13 | `test_kpi_total_count` | Total Records KPI shows a count greater than zero | KPI displays a positive integer |
-| 14 | `test_kpi_collection_cost` | Collection Cost KPI displays a value | KPI text contains at least one digit |
-| 15 | `test_wishlist_section_loads` | Switching to the Wishlist section works | Wishlist content visible; format bar hidden; Show Fulfilled toggle present |
-| 16 | `test_wishlist_search_modal` | Search bar opens the master release search modal | Modal appears; results load after typing a query |
-| 17 | `test_add_to_wishlist` | Adding a search result to the wishlist works | Item appears in the wishlist table |
-| 18 | `test_wishlist_tile_view` | Wishlist tile view renders covers | Tiles visible in wishlist |
-| 19 | `test_wishlist_detail_modal` | Clicking a wishlist item opens its detail modal | Modal visible with editable notes field |
-| 20 | `test_mark_wishlist_fulfilled` | Marking an item fulfilled hides it from the list | Row count decrements; item gone from default view |
-| 21 | `test_delete_wishlist_item` | Deleting a wishlist item removes it permanently | Row count decrements after delete |
-| 22 | `test_settings_modal_open_close` | Settings modal opens and closes cleanly | Modal appears on gear click; disappears on Close |
-| 23 | `test_settings_currency_change` | Changing the currency symbol takes effect immediately | KPI cost displays the new symbol after save |
-| 24 | `test_export_csv_download` | Export CSV button triggers a file download | A `.csv` file download begins |
-| 25 | `test_export_db_download` | Export Database button triggers a file download | A `.zip` file download begins |
-| 26 | `test_import_csv_opens_diff_modal` | Uploading a CSV file opens the sync diff modal | Diff modal becomes visible |
-| 27 | `test_collection_sync_preview` | Sync Collection in settings loads the preview modal | Diff modal and preview content visible |
-| 28 | `test_auth_screen` | Setting an API key forces the auth screen on reload | Auth screen visible; entering the correct key loads the app |
