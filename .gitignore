@@ -2,10 +2,20 @@
 __pycache__/
 *.pyc
 *.pyo
+.venv/
 
 # Database & runtime data
 *.db
 data/
+# blank.db has no personal data and is committed (negation must follow *.db)
+!tests/fixtures/blank.db
+
+# Test secrets and fixtures (personal data — backed up on NAS)
+# Backup zips embed a live discogs_token and api_key — never commit them.
+tests/.env.test
+tests/fixtures/*.zip
+tests/fixtures/golden.db
+tests/fixtures/edge/
 
 # OS
 .DS_Store
