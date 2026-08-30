@@ -3475,7 +3475,7 @@ function renderWishlistTiles() {
   }
 
   el.innerHTML = `<div class="tile-grid">${items.map(w => `
-    <div class="tile" onclick="openWishlistDetail(${w.id})">
+    <div class="tile${selectedTileId === w.id ? ' active' : ''}" data-id="${w.id}" onclick="wishlistTileClick(event,${w.id})">
       ${w.pending
         ? (w.thumb ? `<img class="tile-img" src="${esc(w.thumb)}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">⏳</div>`)
         : (w.cover_file ? `<img class="tile-img" src="${imgSrc(w.cover_file, 'm')}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy" onerror="${imgFallback(esc(w.cover_file))}">` : `<div class="tile-placeholder">♡</div>`)}
@@ -3484,8 +3484,20 @@ function renderWishlistTiles() {
         <div class="tile-overlay-artist">${esc(displayArtist(w.artist))}</div>
         <div class="tile-overlay-title">${esc(w.title)}</div>
         ${w.year ? `<div style="font-size:11px;color:var(--cream);opacity:0.8;font-family:var(--font-mono);margin-top:0.15rem">${w.year}</div>` : ''}
+        <button class="btn btn-primary" style="font-size:16px;padding:0.6rem 2rem;margin-top:0.25rem" onclick="openWishlistDetail(${w.id})">View</button>
       </div>
     </div>`).join('')}</div>`;
+}
+
+// Mirrors tileClick() for the collection view — first tap activates the tile
+// and shows the overlay; the overlay's View button opens the detail modal.
+function wishlistTileClick(e, id) {
+  if (e.target.closest('button')) return;
+  e.stopPropagation();
+  selectedTileId = selectedTileId === id ? null : id;
+  document.querySelectorAll('.tile').forEach(t => {
+    t.classList.toggle('active', Number(t.dataset.id) === selectedTileId);
+  });
 }
 
 function renderWishlist() {
