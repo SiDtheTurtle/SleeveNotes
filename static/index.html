@@ -4141,6 +4141,13 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft') lightboxStep(-1);
   else if (e.key === 'ArrowRight') lightboxStep(1);
 });
+// ESC closes the topmost open modal (lightbox handled above takes priority)
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('lightbox').classList.contains('open')) return;
+  const open = document.querySelectorAll('.modal-backdrop.open');
+  if (open.length) closeModal(open[open.length - 1].id);
+});
 window.addEventListener('offline', () => {
   clearTimeout(_reachabilityPollTimer);
   _reachabilityPollTimer = null;
