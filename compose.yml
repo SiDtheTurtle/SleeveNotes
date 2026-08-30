@@ -1,3 +1,5 @@
+name: sleevenotes
+
 services:
   sleevenotes:
     image: ghcr.io/sidtheturtle/sleevenotes:latest
