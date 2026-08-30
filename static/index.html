@@ -1414,6 +1414,14 @@
           <button id="btn-export-images" class="btn btn-secondary btn-sm" onclick="doExportImages(this)">Export Images</button>
           <button id="btn-export-all" class="btn btn-secondary btn-sm" onclick="doExportAll(this)">Export All</button>
         </div>
+        <div style="height:1px;background:var(--border);margin:0.25rem 0"></div>
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--ink)">Rebuild Thumbnails</div>
+          <div style="font-size:12px;color:var(--ink-light);margin-top:2px">Regenerates the small and medium cover images used by the grid, table and detail views. Run this after restoring an older image backup. Non-destructive.</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <button id="btn-rebuild-thumbs" class="btn btn-secondary btn-sm" onclick="doRebuildThumbnails(this)">Rebuild Thumbnails</button>
+        </div>
       </div>
 
       <div style="border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:0.75rem;">
@@ -1939,7 +1947,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   loadRecords();
   loadWishlist();
+  precacheImages();
 });
+
+// Ask the service worker to cache every pre-sized derivative so the grid,
+// table and detail modals all render offline (the full-size lightbox is not
+// cached — see FR #80). No-op when offline or the server is unreachable.
+async function precacheImages() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const r = await apiFetch('/api/images/manifest');
+    if (!r.ok) return;
+    const files = await r.json();
+    if (!Array.isArray(files) || !files.length) return;
+    const reg = await navigator.serviceWorker.ready;
+    (reg.active || navigator.serviceWorker.controller)?.postMessage({ type: 'precache-images', files });
+  } catch { /* offline / no server — cache stays as-is */ }
+}
 
 // ── Data ───────────────────────────────────────────────────────────────────
 let discogsUsername = '';
@@ -2235,7 +2259,7 @@ function renderTiles() {
   el.innerHTML = `<div class="tile-grid">${rows.map(r => `
     <div class="tile${selectedTileId === r.id ? ' active' : ''}" data-id="${r.id}" onclick="tileClick(event,${r.id})">
       ${r.cover_file
-        ? `<img class="tile-img" src="/images/${r.cover_file}" alt="${esc(displayArtist(r.artist))} - ${esc(r.title)}" loading="lazy">`
+        ? `<img class="tile-img" src="${imgSrc(r.cover_file, 'm')}" alt="${esc(displayArtist(r.artist))} - ${esc(r.title)}" loading="lazy" onerror="${imgFallback(r.cover_file)}">`
         : `<div class="tile-placeholder">♪</div>`}
       <div class="tile-overlay">
         <div class="tile-overlay-artist">${esc(displayArtist(r.artist))}</div>
@@ -2284,7 +2308,7 @@ async function openDetail(id) {
       <div class="detail-layout">
         <div id="detail-cover-wrap">
           ${r.cover_file
-            ? `<img class="detail-cover detail-cover-clickable" src="/images/${r.cover_file}" alt="cover" onclick="openLightbox('/images/${r.cover_file}')">`
+            ? `<img class="detail-cover detail-cover-clickable" src="${imgSrc(r.cover_file, 'm')}" alt="cover" onclick="openLightbox('/images/${r.cover_file}')" onerror="${imgFallback(r.cover_file)}">`
             : `<div class="detail-cover-placeholder">♪</div>`}
         </div>
         <div class="detail-fields">
@@ -2394,7 +2418,7 @@ function setupCarousel(recordId, images, currentCover) {
     wrap.innerHTML = `
       <div class="carousel-wrap">
         <div class="carousel-img-wrap">
-          <img src="/images/${esc(img.filename)}" alt="cover ${idx+1}" class="detail-cover-clickable" onclick="carouselLightbox()" style="cursor:zoom-in">
+          <img src="${imgSrc(img.filename, 'm')}" alt="cover ${idx+1}" class="detail-cover-clickable" onclick="carouselLightbox()" style="cursor:zoom-in" onerror="${imgFallback(esc(img.filename))}">
           ${images.length > 1 ? `
             <button class="carousel-arrow prev" onclick="carouselStep(-1)">&#8249;</button>
             <button class="carousel-arrow next" onclick="carouselStep(1)">&#8250;</button>` : ''}
@@ -2522,7 +2546,7 @@ async function fetchDiscogs() {
     const prev = document.getElementById('discogs-preview');
     prev.classList.remove('hidden');
     prev.innerHTML = `<div class="discogs-preview">
-      ${d.cover_file ? `<img src="/images/${d.cover_file}" alt="cover">` : '<div style="width:60px;height:60px;background:var(--surface);border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--groove)">♪</div>'}
+      ${d.cover_file ? `<img src="${imgSrc(d.cover_file, 's')}" alt="cover" onerror="${imgFallback(d.cover_file)}">` : '<div style="width:60px;height:60px;background:var(--surface);border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--groove)">♪</div>'}
       <div class="discogs-preview-info">
         <div class="discogs-preview-artist">${esc(d.artist)}</div>
         <div class="discogs-preview-title">${esc(d.title)}</div>
@@ -3360,6 +3384,24 @@ async function doClearImages() {
   }
 }
 
+async function doRebuildThumbnails(btn) {
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Rebuilding…';
+  try {
+    const r = await apiFetch('/api/admin/regenerate-thumbnails', { method: 'POST' });
+    if (!r.ok) throw new Error();
+    const { processed } = await r.json();
+    precacheImages();
+    toast(`Thumbnails rebuilt for ${processed} image${processed !== 1 ? 's' : ''}`, 'success');
+  } catch {
+    toast('Failed to rebuild thumbnails', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
 // ── Wishlist ───────────────────────────────────────────────────────────────
 
 async function loadWishlist() {
@@ -3418,7 +3460,7 @@ function renderWishlistTiles() {
     <div class="tile" onclick="openWishlistDetail(${w.id})">
       ${w.pending
         ? (w.thumb ? `<img class="tile-img" src="${esc(w.thumb)}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">⏳</div>`)
-        : (w.cover_file ? `<img class="tile-img" src="/images/${esc(w.cover_file)}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy">` : `<div class="tile-placeholder">♡</div>`)}
+        : (w.cover_file ? `<img class="tile-img" src="${imgSrc(w.cover_file, 'm')}" alt="${esc(displayArtist(w.artist))} - ${esc(w.title)}" loading="lazy" onerror="${imgFallback(esc(w.cover_file))}">` : `<div class="tile-placeholder">♡</div>`)}
       ${w.pending ? `<div class="tile-pending-badge">Pending</div>` : ''}
       <div class="tile-overlay">
         <div class="tile-overlay-artist">${esc(displayArtist(w.artist))}</div>
@@ -3454,7 +3496,7 @@ function renderWishlist() {
     <tr class="${w.fulfilled ? 'wishlist-row-fulfilled' : ''} data-row" style="cursor:pointer" onclick="openWishlistDetail(${w.id})">
       <td class="col-cover">${w.pending
         ? (w.thumb ? `<img class="cover-thumb" src="${esc(w.thumb)}" alt="" loading="lazy">` : `<div class="cover-placeholder">⏳</div>`)
-        : (w.cover_file ? `<img class="cover-thumb" src="/images/${esc(w.cover_file)}" alt="" loading="lazy">` : `<div class="cover-placeholder">♡</div>`)}</td>
+        : (w.cover_file ? `<img class="cover-thumb" src="${imgSrc(w.cover_file, 's')}" alt="" loading="lazy" onerror="${imgFallback(esc(w.cover_file))}">` : `<div class="cover-placeholder">♡</div>`)}</td>
       <td class="overflow" title="${esc(displayArtist(w.artist))}">${esc(displayArtist(w.artist))}</td>
       <td class="overflow" title="${esc(w.title)}">${esc(w.title)}</td>
       <td class="text-mono col-sm">${w.year || '—'}</td>
@@ -3635,7 +3677,7 @@ function openWishlistDetail(id) {
     <div class="detail-layout" style="margin-bottom:1.25rem">
       <div>
         ${w.cover_file
-          ? `<img class="detail-cover detail-cover-clickable" src="/images/${esc(w.cover_file)}" alt="cover" onclick="openLightbox('/images/${esc(w.cover_file)}')">`
+          ? `<img class="detail-cover detail-cover-clickable" src="${imgSrc(w.cover_file, 'm')}" alt="cover" onclick="openLightbox('/images/${esc(w.cover_file)}')" onerror="${imgFallback(esc(w.cover_file))}">`
           : `<div class="detail-cover-placeholder">♡</div>`}
       </div>
       <div class="detail-fields">
@@ -3746,8 +3788,22 @@ function openPendingWishlistDetail(id) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+// Pre-sized cover derivatives (backend generates them on download):
+//   's' = 150px (table thumbs), 'm' = 400px (tiles + detail modal).
+// Always .jpeg regardless of the original's extension. Callers add an
+// onerror fallback to the full-size original for legacy / missing files.
+function imgSrc(file, size) {
+  if (!file) return '';
+  return `/images/${file.replace(/\.[^.]+$/, '')}_${size}.jpeg`;
+}
+// Inline onerror body: drop to the full original once, then give up.
+function imgFallback(file) {
+  return `this.onerror=null;this.src='/images/${file}'`;
+}
+
 function coverThumb(r) {
-  if (r.cover_file) return `<img class="cover-thumb" src="/images/${r.cover_file}" alt="" loading="lazy">`;
+  if (r.cover_file)
+    return `<img class="cover-thumb" src="${imgSrc(r.cover_file, 's')}" alt="" loading="lazy" onerror="${imgFallback(r.cover_file)}">`;
   return `<div class="cover-placeholder">♪</div>`;
 }
 

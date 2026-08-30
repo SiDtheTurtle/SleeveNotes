@@ -143,3 +143,19 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh SQLi
 | `test_clear_images_returns_ok` | Clear image cache endpoint is reachable and succeeds | `POST /api/admin/clear-images` returns 200 |
 
 ---
+
+### Image derivatives — `layer1/test_images.py`
+
+| Test | Purpose | Expected outcome |
+|------|---------|-----------------|
+| `test_deriv_name_is_always_jpeg` | Derivative naming is a pure string transform | `r123_01.png` → `r123_01_s.jpeg` |
+| `test_is_original_image_excludes_derivatives` | Backfill/manifest never treat `_m`/`_s` files as originals | `_m`/`_s`/non-image paths return `False` |
+| `test_make_derivatives_creates_sized_siblings` | Full cover yields a 400px `_m` and 150px `_s` JPEG | Both files exist, correctly sized, smaller than the original |
+| `test_make_derivatives_handles_non_jpeg_source` | RGBA/PNG source is flattened to RGB JPEG | `_m` opens as mode `RGB` |
+| `test_make_derivatives_is_idempotent` | Re-running does not rewrite existing derivatives | mtime unchanged on second call |
+| `test_backfill_skips_derivatives_and_counts_originals` | Startup/on-demand scan processes only originals | Returns `2` for two originals; makes `_m`/`_s` for each |
+| `test_manifest_lists_only_derivatives` | Manifest endpoint returns derivative filenames | `GET /api/images/manifest` → `["r55_01_m.jpeg", "r55_01_s.jpeg"]` |
+| `test_regenerate_thumbnails_endpoint` | Rebuild endpoint regenerates from originals | `POST /api/admin/regenerate-thumbnails` → `{"processed": 1}`; `_s` file created |
+| `test_download_all_images_generates_derivatives` | Downloading a cover also writes its derivatives | `_m` and `_s` exist alongside `r12345_01.jpeg` |
+
+---
