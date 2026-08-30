@@ -65,6 +65,27 @@ self.addEventListener('sync', e => {
   if (e.tag === 'wishlist-sync') e.waitUntil(flushOfflineQueue());
 });
 
+// Precache pre-sized cover derivatives so all UI images work offline (FR #80).
+// The page sends the manifest on load; we fetch anything not already cached.
+self.addEventListener('message', e => {
+  const d = e.data || {};
+  if (d.type === 'precache-images' && Array.isArray(d.files)) {
+    e.waitUntil(precacheDerivatives(d.files));
+  }
+});
+
+async function precacheDerivatives(files) {
+  const cache = await caches.open(CACHE);
+  await Promise.all(files.map(async name => {
+    const url = `/images/${name}`;
+    if (await cache.match(url)) return;
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) await cache.put(url, resp.clone());
+    } catch { /* skip — retried on next load */ }
+  }));
+}
+
 function openSwDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('sn_offline', 2);

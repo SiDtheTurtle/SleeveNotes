@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi uvicorn[standard] httpx python-multipart
+RUN pip install --no-cache-dir fastapi uvicorn[standard] httpx python-multipart pillow
 
 COPY app.py .
 COPY static/ static/

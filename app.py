@@ -7,7 +7,9 @@ import sqlite3
 import asyncio
 import logging
 import zipfile
+import threading
 import httpx
+from PIL import Image, ImageOps
 from pathlib import Path
 from datetime import datetime
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, UploadFile, File
@@ -279,6 +281,65 @@ def find_cached_image(release_id: str) -> str:
             return matches[0].name
     return ""
 
+# ── Image derivatives ────────────────────────────────────────────────────────
+# Every full-size cover we cache also gets two smaller JPEGs so the UI never
+# CSS-shrinks a multi-hundred-KB original, and the whole set fits in the offline
+# cache. Naming is convention-based: r123_01.jpeg -> r123_01_m.jpeg (medium,
+# 400px — tiles + detail modal) and r123_01_s.jpeg (small, 150px — table thumbs).
+# The lightbox still loads the original. Derivatives are always .jpeg regardless
+# of the source extension so the frontend can build the name without a lookup.
+DERIV_SIZES = {"m": 400, "s": 150}
+_LANCZOS = getattr(Image, "Resampling", Image).LANCZOS
+DERIV_SUFFIXES = tuple(f"_{k}" for k in DERIV_SIZES)  # ("_m", "_s")
+_ORIGINAL_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+def is_original_image(path: Path) -> bool:
+    """True for a cached image file that is not itself a derivative."""
+    return path.suffix.lower() in _ORIGINAL_EXTS and not path.stem.endswith(DERIV_SUFFIXES)
+
+def deriv_name(filename: str, size: str) -> str:
+    """r123_01.jpeg -> r123_01_m.jpeg"""
+    return f"{Path(filename).stem}_{size}.jpeg"
+
+def make_derivatives(original: Path, force: bool = False) -> None:
+    """Generate the _m/_s siblings for one original. Silently ignores failures."""
+    if not original.is_file() or not is_original_image(original):
+        return
+    try:
+        todo = [(s, px) for s, px in DERIV_SIZES.items()
+                if force or not (original.with_name(deriv_name(original.name, s))).exists()]
+        if not todo:
+            return
+        with Image.open(original) as im:
+            im = ImageOps.exif_transpose(im)
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            for size, px in todo:
+                thumb = im.copy()
+                thumb.thumbnail((px, px), _LANCZOS)
+                thumb.save(original.with_name(deriv_name(original.name, size)),
+                           "JPEG", quality=82, optimize=True)
+    except Exception as e:
+        log.warning("derivative generation failed for %s: %s", original.name, e)
+
+def backfill_derivatives(force: bool = False) -> int:
+    """Walk IMAGES_DIR and generate any missing derivatives. Returns originals seen."""
+    n = 0
+    try:
+        for f in sorted(IMAGES_DIR.iterdir()):
+            if is_original_image(f):
+                make_derivatives(f, force=force)
+                n += 1
+    except FileNotFoundError:
+        pass
+    if n:
+        log.info("derivative backfill processed %d originals (force=%s)", n, force)
+    return n
+
+def start_derivative_backfill() -> None:
+    """Kick the one-time backfill scan on a daemon thread at startup."""
+    threading.Thread(target=backfill_derivatives, name="deriv-backfill", daemon=True).start()
+
 async def download_all_images(images_data: list, release_id: str, headers: dict) -> list[dict]:
     """Download all images for a release (capped at 8). Returns list of {filename, seq}."""
     results = []
@@ -298,6 +359,7 @@ async def download_all_images(images_data: list, release_id: str, headers: dict)
                 except Exception:
                     pass
             if dest.exists():
+                await asyncio.to_thread(make_derivatives, dest)
                 results.append({"filename": filename, "seq": i})
     return results
 
@@ -1075,6 +1137,25 @@ def clear_images():
         conn.execute("DELETE FROM images")
     return {"deleted": deleted}
 
+@app.post("/api/admin/regenerate-thumbnails")
+def regenerate_thumbnails():
+    """Rebuild every _m/_s derivative from the originals on disk. Non-destructive."""
+    count = backfill_derivatives(force=True)
+    return {"processed": count}
+
+@app.get("/api/images/manifest")
+def images_manifest():
+    """All derivative filenames on disk. The frontend hands this to the service
+    worker to precache so every UI image (bar the full-size lightbox) works offline."""
+    out = []
+    try:
+        for f in sorted(IMAGES_DIR.iterdir()):
+            if f.is_file() and f.stem.endswith(DERIV_SUFFIXES):
+                out.append(f.name)
+    except FileNotFoundError:
+        pass
+    return out
+
 # ── Routes: Record sub-resources ─────────────────────────────────────────────
 
 @app.get("/api/records/{record_id}/tracklist")
@@ -1449,6 +1530,8 @@ def delete_wishlist(wishlist_id: int):
 
 
 # ── Static ────────────────────────────────────────────────────────────────────
+
+start_derivative_backfill()
 
 app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 
