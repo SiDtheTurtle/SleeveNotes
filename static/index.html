@@ -1565,8 +1565,12 @@
     </div>
     <div class="modal-body" id="wishlist-detail-body"></div>
     <div class="modal-footer" style="justify-content:space-between">
-      <button class="btn btn-danger btn-sm" id="wishlist-detail-delete-btn">Delete</button>
       <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-nav" id="wishlist-detail-prev-btn" title="Previous">&#8249;</button>
+        <button class="btn btn-nav" id="wishlist-detail-next-btn" title="Next">&#8250;</button>
+      </div>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-danger btn-sm" id="wishlist-detail-delete-btn">Delete</button>
         <button class="btn btn-secondary" onclick="closeModal('modal-wishlist-detail')">Close</button>
         <button class="btn btn-primary" id="wishlist-detail-save-btn">Save</button>
       </div>
@@ -3442,10 +3446,24 @@ async function loadWishlist() {
   updateStats();
 }
 
+// Filtered + sorted wishlist in the exact order the current view renders it.
+// Shared by both render fns and the detail-modal prev/next nav so they never drift.
+function sortedWishlistForDisplay() {
+  let items = showFulfilled ? wishlistItems : wishlistItems.filter(w => !w.fulfilled);
+  if (currentView === 'tile') {
+    return [...items].sort((a, b) => cmp(a.artist, b.artist) || cmpN(a.year, b.year));
+  }
+  const wishlistCols = ['artist', 'title', 'year', 'added_at'];
+  return [...items].sort((a, b) => {
+    const col = wishlistCols.includes(sortCol) ? sortCol : 'artist';
+    const v = col === 'added_at' ? cmp(a.added_at, b.added_at) : cmp(a[col], b[col]);
+    return (sortDir === 'desc' && wishlistCols.includes(sortCol)) ? -v : v;
+  });
+}
+
 function renderWishlistTiles() {
   const el = document.getElementById('main-content');
-  let items = showFulfilled ? wishlistItems : wishlistItems.filter(w => !w.fulfilled);
-  items = [...items].sort((a, b) => cmp(a.artist, b.artist) || cmpN(a.year, b.year));
+  const items = sortedWishlistForDisplay();
 
   if (!items.length) {
     el.innerHTML = `<div class="empty">
@@ -3473,15 +3491,7 @@ function renderWishlistTiles() {
 function renderWishlist() {
   if (currentView === 'tile') { renderWishlistTiles(); return; }
   const el = document.getElementById('main-content');
-  let items = showFulfilled ? wishlistItems : wishlistItems.filter(w => !w.fulfilled);
-
-  // Sort: use sortCol if it's a wishlist column, else default to artist asc
-  const wishlistCols = ['artist', 'title', 'year', 'added_at'];
-  items = [...items].sort((a, b) => {
-    const col = wishlistCols.includes(sortCol) ? sortCol : 'artist';
-    const v = col === 'added_at' ? cmp(a.added_at, b.added_at) : cmp(a[col], b[col]);
-    return (sortDir === 'desc' && wishlistCols.includes(sortCol)) ? -v : v;
-  });
+  const items = sortedWishlistForDisplay();
 
   if (!items.length) {
     el.innerHTML = `<div class="empty">
@@ -3667,6 +3677,22 @@ function onShowFulfilledToggle() {
   if (currentSection === 'wishlist') renderWishlist();
 }
 
+// Wire the detail modal's prev/next buttons to walk the current wishlist view.
+// openWishlistDetail routes negative ids to the pending detail, so nav crosses
+// server and pending items transparently.
+function wireWishlistDetailNav(id) {
+  const list = sortedWishlistForDisplay();
+  const i = list.findIndex(w => w.id === id);
+  const prevId = i > 0 ? list[i - 1].id : null;
+  const nextId = (i >= 0 && i < list.length - 1) ? list[i + 1].id : null;
+  const p = document.getElementById('wishlist-detail-prev-btn');
+  const n = document.getElementById('wishlist-detail-next-btn');
+  p.disabled = prevId == null;
+  n.disabled = nextId == null;
+  p.onclick = () => prevId != null && openWishlistDetail(prevId);
+  n.onclick = () => nextId != null && openWishlistDetail(nextId);
+}
+
 function openWishlistDetail(id) {
   if (id < 0) { openPendingWishlistDetail(id); return; }
   const w = wishlistItems.find(x => x.id === id);
@@ -3741,6 +3767,7 @@ function openWishlistDetail(id) {
     }
   };
 
+  wireWishlistDetailNav(id);
   openModal('modal-wishlist-detail');
 }
 
@@ -3784,6 +3811,7 @@ function openPendingWishlistDetail(id) {
     toast('Notes saved', 'success');
   };
 
+  wireWishlistDetailNav(id);
   openModal('modal-wishlist-detail');
 }
 
