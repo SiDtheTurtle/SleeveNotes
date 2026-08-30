@@ -249,10 +249,10 @@ _lastSearchResults    // array — last wishlist search results; used by addToWi
 apiKey            // string — loaded from sessionStorage on auth; injected by apiFetch()
 ```
 
-Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within **both** sections. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. `'table'`/`'tile'` are saved to localStorage; the active section (collection/wishlist) is saved to **sessionStorage** (`sn_section`) so a page refresh keeps your place but a new tab/window opens to collection.
+Two-level nav: top-level **Collection / Wishlist** switch (always visible), with **Table / Tile** as sub-options within **both** sections. `setSection(s)` handles top-level nav; `setView(v)` handles sub-views. Only `'table'`/`'tile'` are saved to localStorage — app always opens to collection.
 
 ### localStorage persistence
-All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers (prefixed `sn_`). `restoreLocalState()` runs on `DOMContentLoaded` before any data fetch. Persisted keys: `view` (table/tile), `showTags`, `groupByArtist`, `showFulfilled`. `showValuations` is DB-backed via the `settings` table, not localStorage. The active section is persisted separately in sessionStorage via `ssGet` / `ssSet` (`sn_section`) — `restoreLocalState()` reads it to restore collection/wishlist across a refresh.
+All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers (prefixed `sn_`). `restoreLocalState()` runs on `DOMContentLoaded` before any data fetch. Persisted keys: `view` (table/tile only — wishlist never persisted as startup view), `showTags`, `groupByArtist`, `showFulfilled`. `showValuations` is DB-backed via the `settings` table, not localStorage.
 
 ### Key functions
 

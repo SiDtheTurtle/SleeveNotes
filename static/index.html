@@ -1635,15 +1635,6 @@ function lsSet(key, val) {
   try { localStorage.setItem('sn_' + key, JSON.stringify(val)); } catch {}
 }
 
-// ── sessionStorage helpers (survive refresh, not tab close) ─────────────────
-function ssGet(key, fallback) {
-  try { const v = sessionStorage.getItem('sn_' + key); return v !== null ? JSON.parse(v) : fallback; }
-  catch { return fallback; }
-}
-function ssSet(key, val) {
-  try { sessionStorage.setItem('sn_' + key, JSON.stringify(val)); } catch {}
-}
-
 // ── Auth ────────────────────────────────────────────────────────────────────
 function showAuthScreen(mode) {
   _authMode = mode;
@@ -1898,11 +1889,9 @@ function restoreLocalState() {
   currentView = lsGet('view', 'table');
   document.getElementById('btn-table').classList.toggle('active', currentView === 'table');
   document.getElementById('btn-tile').classList.toggle('active', currentView === 'tile');
-
-  currentSection = ssGet('section', 'collection') === 'wishlist' ? 'wishlist' : 'collection';
-  document.getElementById('btn-collection').classList.toggle('active', currentSection === 'collection');
-  document.getElementById('btn-wishlist-nav').classList.toggle('active', currentSection === 'wishlist');
-  applyToolbarSwitches(currentSection);
+  document.getElementById('btn-collection').classList.add('active');
+  document.getElementById('btn-wishlist-nav').classList.remove('active');
+  applyToolbarSwitches('collection');
 
   showTags = lsGet('showTags', false);
   document.getElementById('show-tags').checked = showTags;
@@ -2108,7 +2097,6 @@ function setView(v) {
 
 function setSection(section) {
   currentSection = section;
-  ssSet('section', section);
   selectedTileId = null;
   document.getElementById('search').value = '';
   document.getElementById('btn-collection').classList.toggle('active', section === 'collection');
