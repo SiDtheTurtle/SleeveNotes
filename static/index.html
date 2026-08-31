@@ -1176,11 +1176,23 @@
     <div class="modal-body">
       <div id="discogs-section">
         <div class="form-group form-full" style="margin-bottom:1rem">
-          <label class="form-label">Discogs Release ID</label>
-          <input class="form-control" type="text" id="f-discogs-id" placeholder="e.g. r36875179 or 36875179">
-          <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
-            <button class="btn btn-secondary btn-sm" onclick="fetchDiscogs()" id="fetch-btn">Fetch</button>
-            <button class="btn btn-secondary btn-sm hidden" onclick="syncRecordFields(editingId)" id="sync-fields-btn">Sync Custom Fields</button>
+          <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-start">
+            <div id="discogs-id-col" style="flex:1;min-width:200px">
+              <label class="form-label">Discogs Release ID</label>
+              <input class="form-control" type="text" id="f-discogs-id" placeholder="e.g. r36875179 or 36875179">
+              <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+                <button class="btn btn-secondary btn-sm" onclick="fetchDiscogs()" id="fetch-btn">Fetch</button>
+                <button class="btn btn-secondary btn-sm hidden" onclick="syncRecordFields(editingId)" id="sync-fields-btn">Sync Custom Fields</button>
+              </div>
+            </div>
+            <div id="discogs-or-divider" style="align-self:center;color:var(--ink-light);font-size:12px;white-space:nowrap;padding-top:1.5rem">— or —</div>
+            <div id="barcode-col" style="flex:1;min-width:200px">
+              <label class="form-label">Barcode</label>
+              <input class="form-control" type="text" id="f-barcode" placeholder="e.g. 602577603679" onkeydown="if(event.key==='Enter'){event.preventDefault();openBarcodeSearch(id=>{setField('f-discogs-id',id);fetchDiscogs();})}">
+              <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+                <button class="btn btn-secondary btn-sm" id="barcode-search-btn" onclick="openBarcodeSearch(id=>{setField('f-discogs-id',id);fetchDiscogs();})">Search</button>
+              </div>
+            </div>
           </div>
           <div id="discogs-preview" class="hidden" style="margin-top:0.5rem"></div>
         </div>
@@ -1307,6 +1319,26 @@
       <button class="btn btn-secondary" onclick="closeModal('modal-form')">Cancel</button>
       <button class="btn btn-danger btn-sm hidden" id="delete-btn" onclick="deleteRecord()">Delete</button>
       <button class="btn btn-primary" id="save-btn" onclick="saveRecord()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Barcode Search Modal (stacked over #modal-form) ── -->
+<div class="modal-backdrop" id="modal-barcode-search">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title">Select a release</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-barcode-search')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+        <input class="form-control" type="text" id="barcode-search-input" placeholder="Barcode digits…" onkeydown="if(event.key==='Enter')doBarcodeSearch()">
+        <button class="btn btn-primary btn-sm" onclick="doBarcodeSearch()" id="barcode-modal-search-btn">Search</button>
+      </div>
+      <div id="barcode-search-results"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-barcode-search')">Close</button>
     </div>
   </div>
 </div>
@@ -1658,6 +1690,7 @@ let pendingQueue = [];
 let pendingUpdates = [];
 let _serverWishlistItems = [];
 let _lastSearchResults = [];
+let _barcodePickCb = null;
 
 // ── localStorage helpers ────────────────────────────────────────────────────
 function lsGet(key, fallback) {
@@ -2494,6 +2527,9 @@ function openAdd() {
   document.getElementById('fetch-btn').textContent = 'Fetch';
   document.getElementById('delete-btn').classList.add('hidden');
   document.getElementById('sync-fields-btn').classList.add('hidden');
+  document.getElementById('barcode-col').classList.remove('hidden');
+  document.getElementById('discogs-or-divider').classList.remove('hidden');
+  setField('f-barcode', '');
   resetForm();
   openModal('modal-form');
 }
@@ -2508,6 +2544,8 @@ function openEdit(id) {
   document.getElementById('discogs-section').style.display = '';
   document.getElementById('fetch-btn').textContent = 'Sync Metadata';
   document.getElementById('sync-fields-btn').classList.remove('hidden');
+  document.getElementById('barcode-col').classList.add('hidden');
+  document.getElementById('discogs-or-divider').classList.add('hidden');
   document.getElementById('discogs-preview').classList.add('hidden');
   document.getElementById('delete-btn').classList.remove('hidden');
 
@@ -3565,6 +3603,21 @@ function renderWishlist() {
     </div>`;
 }
 
+// Shared search-result row: thumb-or-placeholder + title + mono meta line + right action.
+// Reused by wishlist master search and barcode release search.
+function searchResultRow({ thumb, title, meta, actionHtml }) {
+  return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0;border-bottom:1px solid var(--border)">
+    ${thumb
+      ? `<img src="${esc(thumb)}" style="width:48px;height:48px;object-fit:cover;border-radius:2px;flex-shrink:0">`
+      : `<div style="width:48px;height:48px;background:var(--surface);border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--groove);flex-shrink:0">♪</div>`}
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div>
+      <div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${esc(meta)}</div>
+    </div>
+    ${actionHtml}
+  </div>`;
+}
+
 function openWishlistSearchModal(prefill = '') {
   if (!navigator.onLine) { toast('No internet — wishlist search is unavailable offline', 'error'); return; }
   const input = document.getElementById('wishlist-search-input');
@@ -3613,21 +3666,65 @@ async function doWishlistSearch() {
     }
     results.innerHTML = items.map(item => {
       const existingItem = wishlistItems.find(w => String(w.master_id) === String(item.master_id));
-      return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0;border-bottom:1px solid var(--border)">
-        ${item.thumb
-          ? `<img src="${esc(item.thumb)}" style="width:48px;height:48px;object-fit:cover;border-radius:2px;flex-shrink:0">`
-          : `<div style="width:48px;height:48px;background:var(--surface);border-radius:2px;display:flex;align-items:center;justify-content:center;color:var(--groove);flex-shrink:0">♪</div>`}
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.title)}</div>
-          <div style="font-size:11px;color:var(--ink-light);font-family:var(--font-mono)">${item.year ? item.year + ' · ' : ''}master ${esc(item.master_id)}</div>
-        </div>
-        ${existingItem
-          ? `<span style="font-size:12px;color:var(--ink-light);white-space:nowrap;flex-shrink:0">${existingItem.fulfilled ? 'Fulfilled' : existingItem.pending ? 'Queued' : 'On wishlist'}</span>`
-          : `<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="addToWishlist('${esc(item.master_id)}')">Add</button>`}
-      </div>`;
+      const meta = `${item.year ? item.year + ' · ' : ''}master ${item.master_id}`;
+      const actionHtml = existingItem
+        ? `<span style="font-size:12px;color:var(--ink-light);white-space:nowrap;flex-shrink:0">${existingItem.fulfilled ? 'Fulfilled' : existingItem.pending ? 'Queued' : 'On wishlist'}</span>`
+        : `<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="addToWishlist('${esc(item.master_id)}')">Add</button>`;
+      return searchResultRow({ thumb: item.thumb, title: item.title, meta, actionHtml });
     }).join('');
   } catch {
     results.innerHTML = `<div style="color:var(--red);font-size:13px;padding:0.5rem 0">${serverReachable ? 'Search failed — check your Discogs token in Settings.' : 'Search failed — Discogs may be unreachable.'}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search';
+  }
+}
+
+// Generic, callback-driven release picker. onPick(releaseId) fires on Select.
+// The scanner FR reuses this unchanged.
+function openBarcodeSearch(onPick) {
+  _barcodePickCb = onPick;
+  const input = document.getElementById('barcode-search-input');
+  const pre = (document.getElementById('f-barcode')?.value || '').trim();
+  input.value = pre;
+  document.getElementById('barcode-search-results').innerHTML = '';
+  openModal('modal-barcode-search');
+  input.focus();
+  if (pre) doBarcodeSearch();
+}
+
+function barcodePick(id) {
+  if (_barcodePickCb) _barcodePickCb(id);
+  closeModal('modal-barcode-search');
+}
+
+async function doBarcodeSearch() {
+  const q = document.getElementById('barcode-search-input').value.trim();
+  if (!q) return;
+  const btn = document.getElementById('barcode-modal-search-btn');
+  const results = document.getElementById('barcode-search-results');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  results.innerHTML = '<div style="color:var(--ink-light);font-size:13px;padding:0.5rem 0">Searching…</div>';
+  try {
+    const r = await apiFetch(`/api/discogs/search?barcode=${encodeURIComponent(q)}`);
+    if (!r.ok) throw new Error();
+    const items = await r.json();
+    items.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+    if (!items.length) {
+      results.innerHTML = '<div style="color:var(--ink-light);font-size:13px;padding:0.5rem 0">No releases match that barcode.</div>';
+      return;
+    }
+    results.innerHTML = items.map(item => {
+      const meta = [item.year, item.country, item.catno, item.format].filter(Boolean).join(' · ');
+      const inColl = records.some(rec => String(rec.discogs_id || '').replace(/^r/, '') === String(item.id));
+      const actionHtml = inColl
+        ? `<span style="font-size:12px;color:var(--ink-light);white-space:nowrap;flex-shrink:0">In collection</span>`
+        : `<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="barcodePick('${esc(item.id)}')">Select</button>`;
+      return searchResultRow({ thumb: item.thumb, title: item.title, meta, actionHtml });
+    }).join('');
+  } catch {
+    results.innerHTML = `<div style="color:var(--red);font-size:13px;padding:0.5rem 0">Search failed — check your Discogs token in Settings.</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = 'Search';
