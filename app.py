@@ -909,6 +909,41 @@ async def collection_sync(payload: SyncPayload, background_tasks: BackgroundTask
 
 # ── Routes: Discogs ───────────────────────────────────────────────────────────
 
+@app.get("/api/discogs/search")
+async def search_releases(barcode: str | None = None, q: str | None = None):
+    """Search Discogs releases by barcode and/or free text. At least one required."""
+    if not barcode and not q:
+        raise HTTPException(status_code=400, detail="barcode or q required")
+    params: dict = {"type": "release", "per_page": 25}
+    if barcode:
+        params["barcode"] = barcode
+    if q:
+        params["q"] = q
+    hdrs = get_discogs_headers()
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await discogs_get(
+            client,
+            "https://api.discogs.com/database/search",
+            params=params,
+            headers=hdrs,
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="Discogs search failed")
+    return [
+        {
+            "id": str(r.get("id")),
+            "title": r.get("title", ""),
+            "year": r.get("year"),
+            "country": r.get("country", ""),
+            "label": (r.get("label") or [""])[0],
+            "catno": r.get("catno", ""),
+            "format": ", ".join(r.get("format") or []),
+            "thumb": r.get("thumb", ""),
+        }
+        for r in resp.json().get("results", [])
+    ]
+
+
 @app.get("/api/discogs/{release_id}")
 async def fetch_discogs(release_id: str):
     rid = release_id.lstrip("r")

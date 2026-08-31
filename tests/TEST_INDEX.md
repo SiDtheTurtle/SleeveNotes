@@ -79,6 +79,21 @@ Fast, isolated tests that run against the FastAPI app directly with a fresh SQLi
 
 ---
 
+### Discogs Search — `layer1/test_discogs_search.py`
+
+*`GET /api/discogs/search` — Discogs `/database/search` is mocked.*
+
+| Test | Purpose | Expected outcome |
+|------|---------|-----------------|
+| `test_search_by_barcode` | A barcode query returns shaped release results | `?barcode=` → one row with `id`/`title`/`year`/`country`/`label`/`catno`/`format`/`thumb` in the documented shape |
+| `test_search_by_q` | A free-text query hits the same endpoint | `?q=` → shaped results |
+| `test_search_missing_params_returns_400` | Neither `barcode` nor `q` supplied is rejected | `GET /api/discogs/search` with no params returns 400 |
+| `test_search_propagates_discogs_error_status` | A Discogs error status is forwarded to the caller | Mocked 502 from Discogs → endpoint returns 502 |
+| `test_search_empty_results` | No matches returns an empty list, not an error | Mocked empty `results` → 200 with `[]` |
+| `test_search_result_missing_optional_fields` | Results missing `label`/`format`/`thumb`/`year` don't crash the transform | Absent fields default to `""` / `None` |
+
+---
+
 ### Wishlist — `layer1/test_wishlist.py`
 
 *Discogs master fetch is mocked — no real API calls made.*

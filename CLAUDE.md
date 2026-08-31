@@ -132,6 +132,7 @@ Per-release track data: `discogs_id`, `position`, `title`, `duration`, `type`, `
 | POST | `/api/records` | Create record |
 | PUT | `/api/records/{id}` | Update record |
 | DELETE | `/api/records/{id}` | Soft-delete record |
+| GET | `/api/discogs/search` | Search Discogs releases by `?barcode=` and/or `?q=` (400 if neither); `type=release`, `per_page=25` |
 | GET | `/api/discogs/{release_id}` | Fetch metadata + valuation from Discogs |
 | POST | `/api/records/{id}/refresh` | Re-fetch Discogs data for existing record |
 | GET | `/api/records/{id}/tracklist` | Get cached tracklist |
@@ -248,6 +249,7 @@ pendingQueue      // array — in-memory mirror of IDB wishlist_queue (new items
 pendingUpdates    // array — in-memory mirror of IDB wishlist_updates (edits queued offline)
 _serverWishlistItems  // array — last fetched server wishlist data; pendingUpdates applied on top
 _lastSearchResults    // array — last wishlist search results; used by addToWishlist for metadata
+_barcodePickCb        // fn|null — callback stored by openBarcodeSearch; fired with release id on Select
 apiKey            // string — loaded from sessionStorage on auth; injected by apiFetch()
 ```
 
@@ -288,6 +290,8 @@ All UI state is persisted via `lsGet(key, fallback)` / `lsSet(key, val)` helpers
 | `renderWishlistTiles()` | Build wishlist cover art grid sorted artist → year; pending items show corner Pending badge and ⏳ placeholder if no thumb |
 | `openWishlistSearchModal(prefill)` | Open master release search modal; blocked only when `!navigator.onLine`; shows offline info banner when server unreachable |
 | `doWishlistSearch()` | When server reachable: calls `/api/wishlist/search`. When offline: calls Discogs API directly (unauthenticated, 25 req/min). Stores results in `_lastSearchResults` |
+| `searchResultRow({thumb,title,meta,actionHtml})` | Shared search-result row markup; used by `doWishlistSearch` and `doBarcodeSearch` |
+| `openBarcodeSearch(onPick)` / `doBarcodeSearch()` | Open the barcode release picker (stores `onPick` in `_barcodePickCb`); search `/api/discogs/search?barcode=`. `barcodePick(id)` fires the callback and closes |
 | `addToWishlist(masterId)` | When online: POST to `/api/wishlist`. When offline: saves to IDB `wishlist_queue` via `saveToQueue()`, shows pending in list |
 | `deleteWishlistItem(id)` | DELETE item, reload wishlist |
 | `openWishlistDetail(id)` | Negative id → `openPendingWishlistDetail`. Otherwise: cover, metadata, fulfilled checkbox + notes textarea, Save (queues offline) + Delete (disabled offline) |
@@ -322,7 +326,8 @@ Always visible (no collapse toggle). Single nav row: `[Collection] [Wishlist]` p
 
 ### Modals
 - `modal-detail` — read-only record detail (tile click)
-- `modal-form` — add/edit form with Discogs lookup
+- `modal-form` — add/edit form with Discogs lookup. `#discogs-section` has a two-column "or" row: Release ID + Fetch on the left, Barcode + Search on the right. `openAdd()` shows + clears the barcode column; `openEdit()` hides it (`#barcode-col` + `#discogs-or-divider`) — barcode search is Add-only
+- `modal-barcode-search` — stacked over `modal-form`; generic callback-driven release picker (`openBarcodeSearch(onPick)` → `_barcodePickCb`). Searches `/api/discogs/search`, rows sorted year desc, "In collection" label when the `discogs_id` already exists. Select fires `onPick(releaseId)` and closes. The scanner FR (PR 2) reuses it unchanged
 - `modal-discogs-sync` — diff preview; shared between Discogs collection sync and CSV import. `syncSource` controls labels and available actions. "Discogs →" direction is hidden for CSV imports and for records where only core fields (artist, title, label, cat_no, year, format) differ
 - `modal-settings` — Display settings, Discogs config + field mapping, Data (import/export), Danger Zone. **Save stays open** (reload fields in-place); Close button dismisses.
 - `modal-wishlist-search` — Discogs master release search; results show Add/Queued/On wishlist/Fulfilled per item. Shows slate info banner when server unreachable (searching Discogs directly)

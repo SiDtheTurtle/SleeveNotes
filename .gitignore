@@ -27,3 +27,6 @@ Thumbs.db
 
 # Claude Code local config (contains personal paths/permissions)
 .claude/settings.local.json
+
+# Working specs (local only — not shipped)
+docs/fr-*.md
